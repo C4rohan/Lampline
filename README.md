@@ -5,7 +5,7 @@
   </picture>
 </p>
 
-<h3 align="center">A CX Agent Studio–style voice agent platform of your own.</h3>
+<h3 align="center">Open-source, self-hosted voice agents.</h3>
 
 <p align="center">
   Bring your agents over from <b>Dialogflow CX</b> and <b>CX Agent Studio</b>, or start fresh.<br>
