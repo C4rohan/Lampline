@@ -25,6 +25,18 @@ jobs:
 
 
 
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0                # every commit, not only the newest
+      - name: No keys or tokens in any commit
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/repo" \
+            ghcr.io/gitleaks/gitleaks:v8.28.0@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854 \
+            git /repo --config /repo/.gitleaks.toml --no-banner --redact
+
   cli:
     runs-on: ubuntu-latest
     steps:

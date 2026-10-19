@@ -287,8 +287,9 @@ CI runs on every push and pull request to `dev`, `qa` and `prod`:
 - the web app builds, and the committed build matches its source
 - the Docker image builds, starts as a non-root user, answers health and refuses requests without its key
 - shellcheck, and a check that `COSTS.md` matches the cost model
+- a scan of every commit for keys and tokens (gitleaks)
 
-Issues and PRs welcome (against `dev`; [how dev, qa and prod work](docs/BRANCHES.md)). See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
+Issues and PRs welcome (against `dev`; [how dev, qa and prod work](docs/BRANCHES.md)). See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), the [code of conduct](CODE_OF_CONDUCT.md) and the [changelog](CHANGELOG.md).
 
 ## License
 
