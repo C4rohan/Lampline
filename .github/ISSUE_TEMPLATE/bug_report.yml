@@ -1,0 +1,42 @@
+name: Bug report
+description: Something in Lampline doesn't work as it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please use made-up data only: no real names, phone numbers, patient or customer details, and no API keys.
+        Security problems go to the private form instead: Security → Report a vulnerability.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. scripts/docker-up.sh
+        2. Import the attached sample export
+        3. ...
+  - type: dropdown
+    id: how
+    attributes:
+      label: How you run it
+      options: [Docker (scripts/docker-up.sh), Natively (scripts/engine-up.sh), vk CLI only, Other]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: v0.1.0, or the commit from `git rev-parse --short HEAD`
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: The relevant lines from `scripts/docker-up.sh --logs` or the terminal. Remove anything private first.
+      render: text

@@ -1,0 +1,23 @@
+name: Feature request
+description: Something Lampline should do
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: Check [docs/ROADMAP.md](https://github.com/C4rohan/lampline/blob/dev/docs/ROADMAP.md) first; a thumbs-up on an existing issue helps decide what comes next.
+  - type: textarea
+    id: need
+    attributes:
+      label: What you're trying to do
+      description: The problem or use case, not only the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [Builder, Import or export (Dialogflow CX, CX Agent Studio), Models, Speech, Phone or SIP, Contact centers, Data and knowledge, vk CLI, Deployment, Docs, Other]

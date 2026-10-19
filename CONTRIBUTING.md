@@ -1,6 +1,6 @@
 # Contributing
 
-Open pull requests against `dev`. Changes reach `qa` and then `prod` by pull request; see [docs/BRANCHES.md](docs/BRANCHES.md).
+Open pull requests against `dev`, and follow the [code of conduct](CODE_OF_CONDUCT.md). Changes reach `qa` and then `prod` by pull request; see [docs/BRANCHES.md](docs/BRANCHES.md).
 
 Thanks for helping. The most valuable contributions right now:
 
