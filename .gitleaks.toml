@@ -1,8 +1,12 @@
 # gitleaks: the keys in the tests are fakes made up for the tests (sk-sched-1234567890, csecret-123456, ...),
 # and embed.py holds SHA-256 checksums of model files, not keys.
+# .env.example lists several empty settings on one line (GROQ_API_KEY=  MISTRAL_API_KEY=); the generic
+# rule reads the next setting's name as a value, so names of settings are not secrets.
 [extend]
 useDefault = true
 
 [allowlist]
-description = "Made-up keys in tests; model checksums"
+description = "Made-up keys in tests; model checksums; names of settings"
 paths = ['''(^|/)tests/''', '''engine/src/vpengine/embed\.py$''']
+regexTarget = "secret"
+regexes = ['''^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*_(KEY|TOKEN|SECRET|ID|URL)=?$''']
