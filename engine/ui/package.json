@@ -22,7 +22,7 @@
     "tailwind-merge": "3.7.0"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "4.1.18",
+    "@tailwindcss/vite": "4.3.3",
     "@types/react": "19.1.17",
     "@types/react-dom": "19.1.11",
     "@vitejs/plugin-react": "5.2.0",
