@@ -1,0 +1,93 @@
+vk_format: 1
+name: Nurse Callback
+context_variables:
+  business_name: Riverside Clinic
+setup:
+  purpose: 'Take callback requests for a nurse line with a scripted page: no model calls needed'
+  languages:
+  - en
+  real_data: false
+lint:
+  ignore:
+  - VK132
+nodes:
+- id: start
+  type: startCall
+  position:
+    x: 0
+    y: 0
+  data:
+    name: Greeting
+    greeting: Thanks for calling {{business_name}}. I can set up a call back from our nurse line.
+    prompt:
+      file: prompts/greeting.md
+- id: intake
+  type: agentNode
+  position:
+    x: 0
+    y: 220
+  data:
+    name: Callback details
+    flow: Callback
+    mode: scripted
+    interpret: exact
+    say: Let's get that set up.
+    max_attempts: 3
+    no_match_say: Sorry, I didn't catch that.
+    form:
+    - name: caller_name
+      type: text
+      ask: What's your name?
+    - name: callback_number
+      type: phone
+      ask: What number should the nurse call you back on?
+    - name: best_time
+      type: choice
+      ask: Is morning, afternoon or evening best?
+      choices:
+      - morning
+      - afternoon
+      - evening
+    - name: is_new_patient
+      type: yes_no
+      ask: And are you new to {{business_name}}?
+- id: done
+  type: endCall
+  position:
+    x: -220
+    y: 460
+  data:
+    name: Callback booked
+    mode: scripted
+    say: Thanks, {{caller_name}}. A nurse will call you this {{best_time}}. Goodbye!
+- id: staff
+  type: endCall
+  position:
+    x: 220
+    y: 460
+  data:
+    name: Front desk
+    mode: scripted
+    say: Let me pass you to the front desk.
+edges:
+- id: start-intake
+  source: start
+  target: intake
+  data:
+    label: greeted
+    condition: The caller has been greeted.
+    after_greeting: true
+- id: intake-done
+  source: intake
+  target: done
+  data:
+    label: details complete
+    otherwise: true
+    condition: Otherwise.
+- id: intake-staff
+  source: intake
+  target: staff
+  data:
+    label: not understood
+    true: no_match
+    condition: When the caller's answers can't be understood.

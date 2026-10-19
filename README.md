@@ -1,31 +1,99 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/brand/lampline-logo-dark.png">
-    <img src="docs/brand/lampline-logo-light.png" alt="Lampline" width="300">
+    <img src="docs/brand/lampline-logo-light.png" alt="Lampline" width="280">
   </picture>
 </p>
 
-# Lampline
+<h3 align="center">A CX Agent Studio–style voice agent platform of your own.</h3>
 
-**Run a CX Agent Studio–style voice agent platform on your own machine in one
-command, for about $0.02–0.17 per call instead of $0.50.**
+<p align="center">
+  Build, test and run voice agents on your own machine or servers, in one command,<br>
+  for about $0.02–0.17 a call instead of $0.50.
+</p>
 
-[![ci](https://github.com/C4rohan/lampline/actions/workflows/ci.yml/badge.svg)](https://github.com/C4rohan/lampline/actions/workflows/ci.yml)
-[![license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/C4rohan/lampline)
+<p align="center">
+  <a href="https://github.com/C4rohan/lampline/actions/workflows/ci.yml"><img src="https://github.com/C4rohan/lampline/actions/workflows/ci.yml/badge.svg?branch=dev" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="Apache-2.0"></a>
+  <img src="https://img.shields.io/badge/models-20_providers-f2b84b" alt="20 model providers">
+  <img src="https://img.shields.io/badge/runs-local_%26_on--prem-15212b" alt="Runs local and on-prem">
+  <a href="https://codespaces.new/C4rohan/lampline"><img src="https://github.com/codespaces/badge.svg" alt="Open in GitHub Codespaces" height="20"></a>
+</p>
 
-<!-- demo: add docs/demo.gif (build a flow, place a test call) here -->
+<p align="center">
+  <a href="#quick-start"><b>Quick start</b></a> &nbsp;·&nbsp;
+  <a href="#a-quick-tour">Tour</a> &nbsp;·&nbsp;
+  <a href="#models">Models</a> &nbsp;·&nbsp;
+  <a href="#phone-calls-and-sip">Phone and SIP</a> &nbsp;·&nbsp;
+  <a href="docs/ROADMAP.md">Roadmap</a> &nbsp;·&nbsp;
+  <a href="engine/README.md">Engine docs</a> &nbsp;·&nbsp;
+  <a href="cli/README.md"><code>vk</code> CLI</a>
+</p>
 
-You get a drag-and-drop flow builder, scripted pages mixed with LLM steps, a
-test console (talk to the agent in the browser or replay chat turns), HTTP and
+<br>
+
+<p align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/builder-dark.webp">
+  <img src="docs/images/builder-light.webp" alt="The Lampline builder: a scripted page that collects a callback request, with its form on the right">
+</picture>
+</p>
+
+Lampline gives you a drag-and-drop builder where LLM steps and scripted pages mix
+in one agent, a test console that lights up each step as the call moves, HTTP and
 MCP tools, records and document search of its own, and phone calls over Twilio,
-Telnyx or any SIP trunk through jambonz. It runs on your own machine or servers,
-built on [Pipecat](https://github.com/pipecat-ai/pipecat).
+Telnyx or any SIP trunk through jambonz. Built on
+[Pipecat](https://github.com/pipecat-ai/pipecat).
 
-- **Local first:** one command on a laptop, a GPU box or an on-prem server. No cloud account needed.
-- **Private by default:** no telemetry, bound to localhost, a key on every request, keys never in your agents or the repo.
-- **Any model:** Claude, OpenAI, Gemini, Vertex AI, Azure OpenAI, Bedrock, Groq, Mistral, DeepSeek, Grok, Together, Fireworks, OpenRouter, Cerebras, NVIDIA NIM, Qwen, SambaNova, Nebius, Novita, or Ollama on your own hardware.
-- **Agents as code:** every agent is a folder of YAML and Markdown, reviewed in git and tested with `vk`.
+<table>
+  <tr>
+    <td width="50%" valign="top"><b>Local first</b><br>One command on a laptop, a GPU box or an on-prem server. No cloud account needed.</td>
+    <td width="50%" valign="top"><b>Private by default</b><br>No telemetry, bound to localhost, a key on every request, and keys never in your agents or the repo.</td>
+  </tr>
+  <tr>
+    <td valign="top"><b>Any model</b><br>Claude, OpenAI, Gemini, Vertex AI, Azure OpenAI, Bedrock, Groq, Mistral, DeepSeek, Grok and more, or Ollama on your own hardware.</td>
+    <td valign="top"><b>Agents as code</b><br>Every agent is a folder of YAML and Markdown: reviewed in git, tested with <code>vk</code>, imported from Dialogflow CX.</td>
+  </tr>
+</table>
+
+## A quick tour
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/test-dark.webp">
+  <img src="docs/images/test-light.webp" alt="Test call: a chat with a scripted agent, the step it's on, and the details it collected">
+</picture>
+      <p><b>Test calls.</b> Chat or talk through your microphone. The steps light up as the call moves, and every collected detail shows on the right.</p>
+    </td>
+    <td width="50%" valign="top">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/integrations-dark.webp">
+  <img src="docs/images/integrations-light.webp" alt="Integrations: model providers as tiles, with the one in use highlighted">
+</picture>
+      <p><b>20 model providers.</b> Pick one, paste a key, press Test connection. Speech runs in the cloud or free on your own computer.</p>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/connections-dark.webp">
+  <img src="docs/images/connections-light.webp" alt="Phone numbers and SIP, and contact centers marked coming soon">
+</picture>
+      <p><b>Phone calls and SIP.</b> Twilio, Telnyx, or your own SIP trunk, PBX or SBC through jambonz. Genesys, Avaya, Cisco and more are coming.</p>
+    </td>
+    <td valign="top">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/data-dark.webp">
+  <img src="docs/images/data-light.webp" alt="Data: an appointments collection with sample records">
+</picture>
+      <p><b>Data of its own.</b> Collections agents look up and save during calls, and document search over your FAQs, all on your machine.</p>
+    </td>
+  </tr>
+</table>
+
+<sub>Screenshots use the bundled sample agents and made-up data.</sub>
 
 ## Where it runs
 

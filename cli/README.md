@@ -101,6 +101,7 @@ FAIL  caller asks about Saturday hours  (1 turn(s), 1.9s)  Greeting → Router
 | `appointment-scheduling` | Guided steps: collect details, read back, confirm |
 | `bilingual-front-desk` | English and Spanish front desk that answers in the caller's language |
 | `appointment-finder` | Root agent with an HTTP tool that looks up open times (mock answers until you add a URL) |
+| `nurse-callback` | A scripted page that takes a callback request word for word: exact lines, a form, rule transfers, and no model calls at all |
 
 Each comes with prompts, tests, a fictional business (Riverside Clinic) in
 `context_variables`, and `setup.real_data: false`. Edit the context variables

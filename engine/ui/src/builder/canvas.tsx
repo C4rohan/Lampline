@@ -55,9 +55,9 @@ export const StepCard = memo(function StepCard({ id, data, selected }: NodeProps
           {greeting ? `“${greeting}”` : scripted ? (text(d.say).trim() ? `“${text(d.say).trim()}”` : form.length ? "" : "Nothing to say yet") : text(d.prompt).trim() || "No instructions yet"}
         </p>
         {form.length > 0 && (
-          <ol className="grid gap-0.5 text-[11.5px]">
+          <ol className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-0.5 text-[11.5px]">
             {form.slice(0, 4).map((f, i) => (
-              <li key={i} className="flex gap-1.5"><span className="font-mono text-muted-foreground">{i + 1}.</span><span className="truncate"><span className="font-mono">{f.name}</span>{f.ask ? <span className="text-muted-foreground"> · {f.ask}</span> : null}</span></li>
+              <li key={i} className="flex min-w-0 gap-1.5"><span className="font-mono text-muted-foreground">{i + 1}.</span><span className="min-w-0 truncate"><span className="font-mono">{f.name}</span>{f.ask ? <span className="text-muted-foreground"> · {f.ask}</span> : null}</span></li>
             ))}
             {form.length > 4 && <li className="text-muted-foreground">+{form.length - 4} more</li>}
           </ol>

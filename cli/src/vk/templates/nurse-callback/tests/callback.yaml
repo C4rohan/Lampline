@@ -1,0 +1,11 @@
+name: caller asks for a nurse call back
+turns:
+  - user: Sam Rivera
+  - user: (312) 555-0142
+  - user: Afternoon, please
+  - user: No, I've been before
+expect:
+  reaches: [Greeting, Callback details, Callback booked]
+  not_reaches: [Front desk]
+  says: [a nurse will call you this afternoon]
+  ends: true

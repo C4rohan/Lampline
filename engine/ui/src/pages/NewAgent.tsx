@@ -14,6 +14,7 @@ const TEMPLATE_LABEL: Record<string, string> = {
   "front-desk": "Front desk: root agent routing to appointments, hours, billing or a person",
   "appointment-scheduling": "Appointment scheduling: guided steps that collect and confirm details",
   "appointment-finder": "Appointment finder: looks up open times with an HTTP tool",
+  "nurse-callback": "Nurse callback: a scripted page that takes a callback request, no model needed",
   "bilingual-front-desk": "Bilingual front desk: English and Spanish",
 };
 
