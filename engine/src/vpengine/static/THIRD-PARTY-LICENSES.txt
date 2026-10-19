@@ -143,12 +143,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-@radix-ui/number 1.1.1 (MIT)
-------------------------------------------------------------
-Licence: MIT
-
-
-@radix-ui/primitive 1.1.3 (MIT)
+@radix-ui/number 1.1.3 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -173,7 +168,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-accessible-icon 1.1.7 (MIT)
+@radix-ui/primitive 1.2.0 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -198,7 +193,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-accordion 1.2.12 (MIT)
+@radix-ui/react-accessible-icon 1.2.0 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -223,7 +218,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-alert-dialog 1.1.15 (MIT)
+@radix-ui/react-accordion 1.3.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -248,7 +243,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-arrow 1.1.7 (MIT)
+@radix-ui/react-alert-dialog 1.2.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -273,7 +268,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-aspect-ratio 1.1.7 (MIT)
+@radix-ui/react-arrow 1.1.17 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -298,7 +293,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-avatar 1.1.10 (MIT)
+@radix-ui/react-aspect-ratio 1.2.0 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -323,7 +318,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-checkbox 1.3.3 (MIT)
+@radix-ui/react-avatar 1.3.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -348,7 +343,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-collapsible 1.1.12 (MIT)
+@radix-ui/react-checkbox 1.4.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -373,7 +368,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-collection 1.1.7 (MIT)
+@radix-ui/react-collapsible 1.2.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -398,17 +393,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-compose-refs 1.1.2 (MIT)
-------------------------------------------------------------
-Licence: MIT
-
-
-@radix-ui/react-context 1.1.2 (MIT)
-------------------------------------------------------------
-Licence: MIT
-
-
-@radix-ui/react-context-menu 2.2.16 (MIT)
+@radix-ui/react-collection 1.2.0 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -433,7 +418,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-dialog 1.1.15 (MIT)
+@radix-ui/react-compose-refs 1.1.5 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -458,12 +443,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-direction 1.1.1 (MIT)
-------------------------------------------------------------
-Licence: MIT
-
-
-@radix-ui/react-dismissable-layer 1.1.11 (MIT)
+@radix-ui/react-context 1.3.0 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -488,7 +468,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-dropdown-menu 2.1.16 (MIT)
+@radix-ui/react-context-menu 2.4.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -513,7 +493,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-focus-guards 1.1.3 (MIT)
+@radix-ui/react-dialog 1.3.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -538,7 +518,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-focus-scope 1.1.7 (MIT)
+@radix-ui/react-direction 1.2.0 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -563,7 +543,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-form 0.1.8 (MIT)
+@radix-ui/react-dismissable-layer 1.2.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -588,7 +568,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-hover-card 1.1.15 (MIT)
+@radix-ui/react-dropdown-menu 2.2.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -613,12 +593,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-id 1.1.1 (MIT)
-------------------------------------------------------------
-Licence: MIT
-
-
-@radix-ui/react-label 2.1.7 (MIT)
+@radix-ui/react-focus-guards 1.2.0 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -643,7 +618,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-menu 2.1.16 (MIT)
+@radix-ui/react-focus-scope 1.3.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -668,7 +643,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-menubar 1.1.16 (MIT)
+@radix-ui/react-form 0.3.0 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -693,7 +668,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-navigation-menu 1.2.14 (MIT)
+@radix-ui/react-hover-card 1.2.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -718,7 +693,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-one-time-password-field 0.1.8 (MIT)
+@radix-ui/react-id 1.1.4 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -743,7 +718,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-password-toggle-field 0.1.3 (MIT)
+@radix-ui/react-label 2.1.17 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -768,7 +743,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-popover 1.1.15 (MIT)
+@radix-ui/react-menu 2.2.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -793,7 +768,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-popper 1.2.8 (MIT)
+@radix-ui/react-menubar 1.2.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -818,7 +793,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-portal 1.1.9 (MIT)
+@radix-ui/react-navigation-menu 1.4.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -843,7 +818,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-presence 1.1.5 (MIT)
+@radix-ui/react-one-time-password-field 0.2.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -868,7 +843,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-primitive 2.1.3 (MIT)
+@radix-ui/react-password-toggle-field 0.2.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -893,7 +868,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-progress 1.1.7 (MIT)
+@radix-ui/react-popover 1.3.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -918,7 +893,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-radio-group 1.3.8 (MIT)
+@radix-ui/react-popper 1.4.0 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -943,7 +918,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-roving-focus 1.1.11 (MIT)
+@radix-ui/react-portal 1.2.0 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -968,7 +943,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-scroll-area 1.2.10 (MIT)
+@radix-ui/react-presence 1.1.11 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -993,7 +968,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-select 2.2.6 (MIT)
+@radix-ui/react-primitive 2.2.0 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -1018,7 +993,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-separator 1.1.7 (MIT)
+@radix-ui/react-progress 1.2.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -1043,7 +1018,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-slider 1.3.6 (MIT)
+@radix-ui/react-radio-group 1.5.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -1068,7 +1043,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-slot 1.2.3 (MIT)
+@radix-ui/react-roving-focus 1.2.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -1093,7 +1068,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-switch 1.2.6 (MIT)
+@radix-ui/react-scroll-area 1.4.0 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -1118,7 +1093,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-tabs 1.1.13 (MIT)
+@radix-ui/react-select 2.4.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -1143,7 +1118,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-toast 1.2.15 (MIT)
+@radix-ui/react-separator 1.2.0 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -1168,7 +1143,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-toggle 1.1.10 (MIT)
+@radix-ui/react-slider 1.6.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -1193,7 +1168,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-toggle-group 1.1.11 (MIT)
+@radix-ui/react-slot 1.5.0 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -1218,7 +1193,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-toolbar 1.1.11 (MIT)
+@radix-ui/react-switch 1.4.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -1243,7 +1218,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-tooltip 1.2.8 (MIT)
+@radix-ui/react-tabs 1.2.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -1268,12 +1243,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-use-callback-ref 1.1.1 (MIT)
-------------------------------------------------------------
-Licence: MIT
-
-
-@radix-ui/react-use-controllable-state 1.2.2 (MIT)
+@radix-ui/react-toast 1.3.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -1298,7 +1268,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-use-effect-event 0.0.2 (MIT)
+@radix-ui/react-toggle 1.2.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -1323,12 +1293,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-use-escape-keydown 1.1.1 (MIT)
-------------------------------------------------------------
-Licence: MIT
-
-
-@radix-ui/react-use-is-hydrated 0.1.0 (MIT)
+@radix-ui/react-toggle-group 1.2.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -1353,27 +1318,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/react-use-layout-effect 1.1.1 (MIT)
-------------------------------------------------------------
-Licence: MIT
-
-
-@radix-ui/react-use-previous 1.1.1 (MIT)
-------------------------------------------------------------
-Licence: MIT
-
-
-@radix-ui/react-use-rect 1.1.1 (MIT)
-------------------------------------------------------------
-Licence: MIT
-
-
-@radix-ui/react-use-size 1.1.1 (MIT)
-------------------------------------------------------------
-Licence: MIT
-
-
-@radix-ui/react-visually-hidden 1.2.3 (MIT)
+@radix-ui/react-toolbar 1.2.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -1398,9 +1343,304 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@radix-ui/rect 1.1.1 (MIT)
+@radix-ui/react-tooltip 1.4.1 (MIT)
 ------------------------------------------------------------
-Licence: MIT
+MIT License
+
+Copyright (c) 2022 WorkOS
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+@radix-ui/react-use-callback-ref 1.1.5 (MIT)
+------------------------------------------------------------
+MIT License
+
+Copyright (c) 2022 WorkOS
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+@radix-ui/react-use-controllable-state 1.3.0 (MIT)
+------------------------------------------------------------
+MIT License
+
+Copyright (c) 2022 WorkOS
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+@radix-ui/react-use-effect-event 0.0.5 (MIT)
+------------------------------------------------------------
+MIT License
+
+Copyright (c) 2022 WorkOS
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+@radix-ui/react-use-escape-keydown 1.1.6 (MIT)
+------------------------------------------------------------
+MIT License
+
+Copyright (c) 2022 WorkOS
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+@radix-ui/react-use-is-hydrated 0.1.3 (MIT)
+------------------------------------------------------------
+MIT License
+
+Copyright (c) 2022 WorkOS
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+@radix-ui/react-use-layout-effect 1.1.4 (MIT)
+------------------------------------------------------------
+MIT License
+
+Copyright (c) 2022 WorkOS
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+@radix-ui/react-use-previous 1.1.4 (MIT)
+------------------------------------------------------------
+MIT License
+
+Copyright (c) 2022 WorkOS
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+@radix-ui/react-use-rect 1.1.4 (MIT)
+------------------------------------------------------------
+MIT License
+
+Copyright (c) 2022 WorkOS
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+@radix-ui/react-use-size 1.1.5 (MIT)
+------------------------------------------------------------
+MIT License
+
+Copyright (c) 2022 WorkOS
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+@radix-ui/react-visually-hidden 1.2.13 (MIT)
+------------------------------------------------------------
+MIT License
+
+Copyright (c) 2022 WorkOS
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+@radix-ui/rect 1.1.3 (MIT)
+------------------------------------------------------------
+MIT License
+
+Copyright (c) 2022 WorkOS
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 
 @types/d3-color 3.1.3 (MIT)
@@ -1553,11 +1793,11 @@ MIT License
     SOFTWARE
 
 
-@xyflow/react 12.8.6 (MIT)
+@xyflow/react 12.12.0 (MIT)
 ------------------------------------------------------------
 MIT License
 
-Copyright (c) 2019-2024 webkid GmbH
+Copyright (c) 2019-2025 webkid GmbH
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -1578,11 +1818,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-@xyflow/system 0.0.70 (MIT)
+@xyflow/system 0.0.83 (MIT)
 ------------------------------------------------------------
 MIT License
 
-Copyright (c) 2019-2024 webkid GmbH
+Copyright (c) 2019-2025 webkid GmbH
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -2083,7 +2323,7 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 
-radix-ui 1.4.3 (MIT)
+radix-ui 1.8.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -2108,7 +2348,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-react 19.1.10 (MIT)
+react 19.3.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -2133,7 +2373,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-react-dom 19.1.10 (MIT)
+react-dom 19.3.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
@@ -2213,7 +2453,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-scheduler 0.26.0 (MIT)
+scheduler 0.28.0 (MIT)
 ------------------------------------------------------------
 MIT License
 

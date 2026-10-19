@@ -15,8 +15,14 @@ updates:
     target-branch: dev
     schedule:
       interval: weekly
+  # One pull request a week for all engine UI packages: React and its type
+  # packages have to move together, and every UI update needs the committed
+  # build (engine/src/vpengine/static) rebuilt once before CI passes.
   - package-ecosystem: npm
     directory: /engine/ui
     target-branch: dev
     schedule:
       interval: weekly
+    groups:
+      engine-ui:
+        patterns: ["*"]
