@@ -1,0 +1,8 @@
+# gitleaks: the keys in the tests are fakes made up for the tests (sk-sched-1234567890, csecret-123456, ...),
+# and embed.py holds SHA-256 checksums of model files, not keys.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Made-up keys in tests; model checksums"
+paths = ['''(^|/)tests/''', '''engine/src/vpengine/embed\.py$''']

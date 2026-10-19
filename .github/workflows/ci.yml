@@ -1,0 +1,95 @@
+name: ci
+
+on:
+  push:
+    branches: [dev, qa, prod]
+  pull_request:
+    branches: [dev, qa, prod]
+  workflow_dispatch:
+
+concurrency:                      # a newer push to the same branch cancels the older run
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: shellcheck
+        run: shellcheck -S warning scripts/*.sh
+
+
+
+
+  cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Install vk
+        run: pip install -e "cli[dev]"
+      - name: Unit tests
+        run: pytest -q cli/tests
+
+  engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Install vk and the engine
+        run: pip install -e cli -e "engine[dev]"
+      - name: Engine tests (fake model and speech, real WebRTC handshake)
+        run: pytest -q engine/tests
+
+  engine-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+      - name: Build the engine UI; the committed build must match its source
+        working-directory: engine/ui
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          git diff --exit-code -- ../src/vpengine/static public/THIRD-PARTY-LICENSES.txt
+
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Build the engine image
+        run: docker build -t lampline:ci .
+      - name: It starts, answers health, and wants its key
+        run: |
+          mkdir -p ci-agents ci-data && chmod 777 ci-agents ci-data
+          docker run -d --name vpe -p 127.0.0.1:7860:7860 -e VPE_API_KEY=ci-key \
+            -v "$PWD/ci-agents:/agents" -v "$PWD/ci-data:/data" lampline:ci
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:7860/v1/health && break; sleep 2; done
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:7860/v1/agents)" = 401
+          curl -fsS -H 'X-API-Key: ci-key' http://127.0.0.1:7860/v1/agents | grep -q front-desk
+          curl -fsS -H 'X-API-Key: ci-key' http://127.0.0.1:7860/v1/data | grep -q collections
+          test "$(docker inspect -f '{{.Config.User}}' vpe)" = "10001:10001"
+      - name: Compose file is valid
+        run: VPE_DOCKER_API_KEY=x docker compose config -q
+      - if: failure()
+        run: docker logs vpe || true
+
+  costs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: COSTS.md matches cost_model.py
+        run: |
+          python3 costs/cost_model.py > /tmp/COSTS.md
+          diff -u costs/COSTS.md /tmp/COSTS.md

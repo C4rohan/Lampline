@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vpengine"
+version = "0.1.0"
+description = "Voice agent engine for agent.yaml folders, built on Pipecat"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = [
+    "vpd-vk",                                   # agent folder format (../cli)
+    # Not the [webrtc] extra: it adds OpenCV, which is only for receiving video.
+    "pipecat-ai[anthropic,aws,deepgram,fish,google,kokoro,openai,websocket,silero,whisper]==1.12.0",   # aws and google: Bedrock, Gemini, Vertex AI
+    "aiortc>=1.14,<2",                           # browser calls (audio only)
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "pypdf>=6.0.0,<7",                               # reading PDFs into knowledge bases (BSD-3-Clause, pure Python)
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "httpx>=0.27"]
+
+[project.scripts]
+vpengine = "vpengine.server:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+vpengine = ["static/*", "static/assets/*", "static/fonts/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

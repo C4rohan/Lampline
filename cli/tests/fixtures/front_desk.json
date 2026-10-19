@@ -1,0 +1,34 @@
+{
+  "nodes": [
+    {"id": "1", "type": "startCall", "position": {"x": 0, "y": 0},
+     "data": {"name": "Greeting", "greeting": "Hi {{first_name}}, thanks for calling Riverside Clinic.",
+              "greeting_type": "text",
+              "prompt": "Greet the caller and ask how you can help today.\nKeep it under two sentences."}},
+    {"id": "2", "type": "agentNode", "position": {"x": 300, "y": 0},
+     "data": {"name": "Router", "add_global_prompt": true,
+              "prompt": "Work out why the caller is calling. Do not answer questions yourself; route them."}},
+    {"id": "3", "type": "agentNode", "position": {"x": 600, "y": -150},
+     "data": {"name": "Reschedule", "add_global_prompt": true,
+              "prompt": "Help the caller move an existing appointment to a new day.",
+              "extraction_enabled": true,
+              "extraction_prompt": "Extract the day the caller prefers.",
+              "extraction_variables": [{"name": "preferred_day", "type": "string", "prompt": "Preferred day"}]}},
+    {"id": "4", "type": "agentNode", "position": {"x": 600, "y": 150},
+     "data": {"name": "Billing", "add_global_prompt": true,
+              "prompt": "Answer general billing questions. Never read back account numbers."}},
+    {"id": "5", "type": "endCall", "position": {"x": 900, "y": 0},
+     "data": {"name": "Goodbye", "prompt": "Thank the caller and say goodbye. Confirm {{preferred_day}} if it was set."}},
+    {"id": "g", "type": "globalNode", "position": {"x": 0, "y": 300},
+     "data": {"name": "Persona", "prompt": "You are Ava, a warm and concise front-desk assistant."}}
+  ],
+  "edges": [
+    {"id": "1-2", "source": "1", "target": "2", "data": {"label": "greeted", "condition": "The caller has been greeted."}},
+    {"id": "2-3", "source": "2", "target": "3", "data": {"label": "reschedule", "condition": "The caller wants to move an appointment."}},
+    {"id": "2-4", "source": "2", "target": "4", "data": {"label": "billing", "condition": "The caller has a billing question."}},
+    {"id": "3-2", "source": "3", "target": "2", "data": {"label": "back to router from reschedule", "condition": "The caller has another, different request."}},
+    {"id": "4-2", "source": "4", "target": "2", "data": {"label": "back to router from billing", "condition": "The caller has another, different request."}},
+    {"id": "3-5", "source": "3", "target": "5", "data": {"label": "rescheduled", "condition": "The appointment has been moved and the caller has nothing else."}},
+    {"id": "4-5", "source": "4", "target": "5", "data": {"label": "billing done", "condition": "The billing question is answered and the caller has nothing else."}}
+  ],
+  "viewport": {"x": 0.0, "y": 0.0, "zoom": 1.0}
+}

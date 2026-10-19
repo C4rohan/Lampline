@@ -1,0 +1,137 @@
+vk_format: 1
+name: Appointment Scheduling
+context_variables:
+  business_name: Riverside Clinic
+setup:
+  purpose: take appointment requests step by step for staff to confirm
+  languages:
+  - en
+  structure: guided flow
+  llm: claude
+  real_data: false
+lint:
+  ignore: []
+nodes:
+- id: '1'
+  type: startCall
+  position:
+    x: 0
+    y: 0
+  data:
+    name: Greeting
+    prompt:
+      file: prompts/greeting.md
+    greeting: Hi, you've reached appointment scheduling at {{business_name}}. Are you calling to book
+      a visit?
+    greeting_type: text
+    add_global_prompt: true
+    allow_interrupt: true
+- id: '2'
+  type: agentNode
+  position:
+    x: 0
+    y: 320
+  data:
+    name: Collect details
+    prompt:
+      file: prompts/collect-details.md
+    extraction_enabled: true
+    extraction_prompt:
+      file: prompts/collect-details.extraction.md
+    extraction_variables:
+    - name: caller_name
+      type: string
+      prompt: first and last name
+    - name: is_new_patient
+      type: boolean
+      prompt: true if they have never visited before
+    - name: visit_reason
+      type: string
+      prompt: short reason for the visit
+    - name: preferred_day
+      type: string
+      prompt: preferred day
+    - name: preferred_time
+      type: string
+      prompt: morning, afternoon or a specific time
+    add_global_prompt: true
+    allow_interrupt: true
+- id: '3'
+  type: agentNode
+  position:
+    x: 0
+    y: 660
+  data:
+    name: Confirm
+    prompt:
+      file: prompts/confirm.md
+    add_global_prompt: true
+    allow_interrupt: true
+- id: '4'
+  type: endCall
+  position:
+    x: 0
+    y: 980
+  data:
+    name: Request booked
+    prompt:
+      file: prompts/request-booked.md
+    add_global_prompt: true
+    allow_interrupt: true
+- id: '5'
+  type: endCall
+  position:
+    x: 500
+    y: 320
+  data:
+    name: Not scheduling
+    prompt:
+      file: prompts/not-scheduling.md
+    add_global_prompt: true
+    allow_interrupt: true
+- id: g
+  type: globalNode
+  position:
+    x: 1000
+    y: 0
+  data:
+    name: Persona
+    prompt:
+      file: prompts/persona.md
+edges:
+- id: 1-2
+  source: '1'
+  target: '2'
+  data:
+    label: wants appointment
+    condition: The caller wants to book, move or ask for an appointment.
+- id: 1-5
+  source: '1'
+  target: '5'
+  data:
+    label: other request
+    condition: The caller needs something that isn't an appointment.
+- id: 2-3
+  source: '2'
+  target: '3'
+  data:
+    label: details collected
+    condition: You have the caller's name, whether they're new, the reason, and a preferred day and time
+      of day.
+- id: 3-4
+  source: '3'
+  target: '4'
+  data:
+    label: details confirmed
+    condition: The caller says the details are correct.
+- id: 3-2
+  source: '3'
+  target: '2'
+  data:
+    label: details need changes
+    condition: The caller wants to change something in the request.
+extra:
+  viewport:
+    x: 0
+    y: 0
+    zoom: 0.8

@@ -1,0 +1,7 @@
+name: caller asks about Saturday hours
+turns:
+  - user: What time are you open on Saturday?
+expect:
+  reaches: Hours and location
+  says: noon
+  not_reaches: Appointments

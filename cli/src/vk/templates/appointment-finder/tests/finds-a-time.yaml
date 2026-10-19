@@ -1,0 +1,8 @@
+name: caller asks for a day and hears open times
+turns:
+  - user: Do you have any open times on Tuesday?
+    expect: {calls_tool: find_open_slots, says: "9:30"}
+  - user: Thanks, that's all.
+expect:
+  reaches: [Find a time, Goodbye]
+  ends: true

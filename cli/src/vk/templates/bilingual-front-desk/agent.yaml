@@ -1,0 +1,158 @@
+vk_format: 1
+name: Bilingual Front Desk
+context_variables:
+  business_name: Riverside Clinic
+  business_hours: Monday to Friday, 8 AM to 5 PM, and Saturday 9 AM to noon
+  business_address: 100 Example Street, Suite 2
+setup:
+  purpose: front desk for English and Spanish callers
+  languages:
+  - en
+  - es
+  structure: root agent + sub-agents
+  llm: claude
+  real_data: false
+lint:
+  ignore: []
+nodes:
+- id: '1'
+  type: startCall
+  position:
+    x: 460
+    y: 0
+  data:
+    name: Greeting
+    prompt:
+      file: prompts/greeting.md
+    greeting: Thanks for calling {{business_name}}. Para español, puede hablar en español. How can I help
+      you today?
+    greeting_type: text
+    extraction_enabled: true
+    extraction_prompt:
+      file: prompts/greeting.extraction.md
+    extraction_variables:
+    - name: caller_language
+      type: string
+      prompt: en or es
+    add_global_prompt: true
+    allow_interrupt: true
+- id: '2'
+  type: agentNode
+  position:
+    x: 460
+    y: 300
+  data:
+    name: Router
+    prompt:
+      file: prompts/router.md
+    add_global_prompt: true
+    allow_interrupt: true
+- id: '3'
+  type: agentNode
+  position:
+    x: 0
+    y: 640
+  data:
+    name: Appointments
+    prompt:
+      file: prompts/appointments.md
+    extraction_enabled: true
+    extraction_prompt:
+      file: prompts/appointments.extraction.md
+    extraction_variables:
+    - name: appointment_action
+      type: string
+      prompt: book, move or cancel
+    - name: preferred_day
+      type: string
+      prompt: preferred day
+    - name: preferred_time
+      type: string
+      prompt: preferred time of day
+    add_global_prompt: true
+    allow_interrupt: true
+- id: '4'
+  type: agentNode
+  position:
+    x: 920
+    y: 640
+  data:
+    name: Hours and location
+    prompt:
+      file: prompts/hours-and-location.md
+    add_global_prompt: true
+    allow_interrupt: true
+- id: '5'
+  type: endCall
+  position:
+    x: 460
+    y: 980
+  data:
+    name: Goodbye
+    prompt:
+      file: prompts/goodbye.md
+    add_global_prompt: true
+    allow_interrupt: true
+- id: g
+  type: globalNode
+  position:
+    x: 1420
+    y: 0
+  data:
+    name: Persona
+    prompt:
+      file: prompts/persona.md
+edges:
+- id: 1-2
+  source: '1'
+  target: '2'
+  data:
+    label: caller said why
+    condition: The caller has said what they are calling about, in English or Spanish.
+- id: 2-3
+  source: '2'
+  target: '3'
+  data:
+    label: appointments
+    condition: The caller wants to book, move or cancel an appointment (una cita).
+- id: 2-4
+  source: '2'
+  target: '4'
+  data:
+    label: hours or location
+    condition: The caller asks about hours, the address or directions (horario, dirección).
+- id: 2-5
+  source: '2'
+  target: '5'
+  data:
+    label: nothing else
+    condition: The caller says they don't need anything else.
+- id: 3-5
+  source: '3'
+  target: '5'
+  data:
+    label: appointment request taken
+    condition: The caller confirmed the appointment request and needs nothing else.
+- id: 3-2
+  source: '3'
+  target: '2'
+  data:
+    label: other request after appointment
+    condition: The caller has a different request.
+- id: 4-5
+  source: '4'
+  target: '5'
+  data:
+    label: hours answered
+    condition: The question is answered and the caller needs nothing else.
+- id: 4-2
+  source: '4'
+  target: '2'
+  data:
+    label: other request after hours
+    condition: The caller has a different request.
+extra:
+  viewport:
+    x: 0
+    y: 0
+    zoom: 0.8

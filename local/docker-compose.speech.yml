@@ -1,0 +1,23 @@
+# Free, local speech for the engine (scripts/speech-up.sh):
+#   listening  -> Speaches (faster-whisper, OpenAI-compatible)  http://localhost:8001/v1
+#   speaking   -> Kokoro-FastAPI (Kokoro-82M, Apache-2.0)       http://localhost:8880/v1
+# Both bind to 127.0.0.1 only. Same images as docker-compose.models.yml.
+name: vpe-speech
+
+services:
+  speaches:
+    image: ghcr.io/speaches-ai/speaches:${SPEACHES_TAG:-0.8.3-cpu}
+    volumes:
+      - hf-cache:/home/ubuntu/.cache/huggingface/hub
+    ports:
+      - "127.0.0.1:8001:8000"
+    restart: unless-stopped
+
+  kokoro:
+    image: ghcr.io/remsky/kokoro-fastapi-cpu:${KOKORO_TAG:-v0.9.0}
+    ports:
+      - "127.0.0.1:8880:8880"
+    restart: unless-stopped
+
+volumes:
+  hf-cache:

@@ -1,0 +1,8 @@
+name: Spanish caller books an appointment
+turns:
+  - user: Hola, necesito hacer una cita para el viernes por la mañana.
+    expect: {reaches: Appointments}
+  - user: Sí, es correcto. Es todo, gracias.
+expect:
+  reaches: [Router, Appointments, Goodbye]
+  ends: true

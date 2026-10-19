@@ -1,0 +1,63 @@
+# The voice engine in Docker:  scripts/docker-up.sh   (or: docker compose up -d --build)
+# Then open http://localhost:7860. Your agents are in ./agents, everything else the engine
+# keeps (settings and keys, records, knowledge, models) in ./.vpe-data. Both stay on this computer.
+#
+# The port is published on 127.0.0.1 only. Every request needs the API key (VPE_DOCKER_API_KEY in .env);
+# the page asks for it once, or open the link docker-up.sh prints.
+
+name: lampline
+
+services:
+  engine:
+    build: .
+    image: lampline:local
+    restart: unless-stopped
+    user: "${VPE_UID:-10001}:${VPE_GID:-10001}"
+    ports:
+      - "127.0.0.1:${VPE_DOCKER_PORT:-7860}:7860"
+    environment:
+      VPE_API_KEY: "${VPE_DOCKER_API_KEY:?run scripts/docker-up.sh, or set VPE_DOCKER_API_KEY in .env}"
+      VPE_PUBLISHED_PORT: "${VPE_DOCKER_PORT:-7860}"
+      VPE_PUBLIC_URL: "${VPE_DOCKER_PUBLIC_URL:-}"
+      VPE_MAX_SESSIONS: "${VPE_MAX_SESSIONS:-20}"
+      VPE_LOG_LEVEL: "${VPE_LOG_LEVEL:-warning}"
+      # Optional: keys can also be saved on the Integrations page instead (it lists every provider).
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      AZURE_OPENAI_API_KEY: "${AZURE_OPENAI_API_KEY:-}"
+      AZURE_OPENAI_ENDPOINT: "${AZURE_OPENAI_ENDPOINT:-}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
+      AWS_REGION: "${AWS_REGION:-}"
+      GROQ_API_KEY: "${GROQ_API_KEY:-}"
+      MISTRAL_API_KEY: "${MISTRAL_API_KEY:-}"
+      DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY:-}"
+      XAI_API_KEY: "${XAI_API_KEY:-}"
+      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
+      OLLAMA_BASE_URL: "${OLLAMA_BASE_URL:-http://host.docker.internal:11434/v1}"
+      DEEPGRAM_API_KEY: "${DEEPGRAM_API_KEY:-}"
+      FISH_API_KEY: "${FISH_API_KEY:-}"
+      JAMBONZ_WEBHOOK_SECRET: "${JAMBONZ_WEBHOOK_SECRET:-}"
+      BRAND_NAME: "${BRAND_NAME:-}"
+    volumes:
+      - ./agents:/agents
+      - ./.vpe-data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # Ollama or other servers on this computer
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+
+  # Phone numbers need a public https address. Use a Cloudflare named tunnel:
+  #   CLOUDFLARE_TUNNEL_TOKEN=...  and  VPE_DOCKER_PUBLIC_URL=https://voice.example.org  in .env,
+  #   with the tunnel's public hostname pointing at http://engine:7860, then
+  #   docker compose --profile tunnel up -d
+  tunnel:
+    image: cloudflare/cloudflared:2026.10.1
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: "${CLOUDFLARE_TUNNEL_TOKEN:-}"
+    depends_on: [engine]

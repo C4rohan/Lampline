@@ -1,0 +1,6 @@
+name: Spanish caller asks about Saturday hours
+turns:
+  - user: ¿Cuál es su horario los sábados?
+expect:
+  reaches: Hours and location
+  says: sábado

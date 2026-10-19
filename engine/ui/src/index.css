@@ -1,0 +1,143 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@font-face { font-family: "IBM Plex Sans"; font-weight: 400; font-display: swap; src: url("/fonts/ibm-plex-sans-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 500; font-display: swap; src: url("/fonts/ibm-plex-sans-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 600; font-display: swap; src: url("/fonts/ibm-plex-sans-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 400; font-display: swap; src: url("/fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 500; font-display: swap; src: url("/fonts/ibm-plex-mono-latin-500-normal.woff2") format("woff2"); }
+
+/* Switchboard: cool slate neutrals, ink for primary actions, the amber lamp only for
+   live and selected states. Step kinds keep their own colours everywhere. */
+:root {
+  --background: #f5f7f9;
+  --foreground: #15212b;
+  --card: #ffffff;
+  --card-foreground: #15212b;
+  --popover: #ffffff;
+  --popover-foreground: #15212b;
+  --primary: #1b2a36;
+  --primary-foreground: #f5f7f9;
+  --secondary: #eaeff3;
+  --secondary-foreground: #15212b;
+  --muted: #eef2f5;
+  --muted-foreground: #5b6e7c;
+  --accent: #e9eef2;
+  --accent-foreground: #15212b;
+  --destructive: #c4513f;
+  --border: #dbe3e9;
+  --input: #d3dde4;
+  --ring: #c98a12;
+  --sidebar: #edf1f4;
+  --lamp: #c98a12;
+  --mark-tile: #15212b;
+  --lamp-soft: rgba(201, 138, 18, .12);
+  --ok: #2f8a5c;
+  --warn: #a8720c;
+  --bad: #c4513f;
+  --k-start: #2f8a5c;
+  --k-agent: #2f6fb0;
+  --k-end: #c4513f;
+  --k-global: #7457b0;
+  --k-tool: #b37a0e;
+  --canvas: #eef2f5;
+  --canvas-dot: #c3ced6;
+  --radius: 0.625rem;
+}
+.dark {
+  --background: #10171e;
+  --foreground: #e4ebf0;
+  --card: #17212a;
+  --card-foreground: #e4ebf0;
+  --popover: #1a2530;
+  --popover-foreground: #e4ebf0;
+  --primary: #e4ebf0;
+  --primary-foreground: #10171e;
+  --secondary: #213040;
+  --secondary-foreground: #e4ebf0;
+  --muted: #1c2834;
+  --muted-foreground: #8ea1b0;
+  --accent: #213040;
+  --accent-foreground: #e4ebf0;
+  --destructive: #e07a6a;
+  --border: #263544;
+  --input: #2c3d4d;
+  --ring: #f2b84b;
+  --sidebar: #131c24;
+  --lamp: #f2b84b;
+  --mark-tile: #22313f;
+  --lamp-soft: rgba(242, 184, 75, .12);
+  --ok: #5bbf8a;
+  --warn: #f2b84b;
+  --bad: #e07a6a;
+  --k-start: #5bbf8a;
+  --k-agent: #6aa7e0;
+  --k-end: #e07a6a;
+  --k-global: #a98bd9;
+  --k-tool: #f2b84b;
+  --canvas: #0d141a;
+  --canvas-dot: #2a3946;
+}
+
+@theme inline {
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-lamp: var(--lamp);
+  --color-lamp-soft: var(--lamp-soft);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+  --color-k-start: var(--k-start);
+  --color-k-agent: var(--k-agent);
+  --color-k-end: var(--k-end);
+  --color-k-global: var(--k-global);
+  --color-k-tool: var(--k-tool);
+  --color-canvas: var(--canvas);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * { @apply border-border outline-ring/50; }
+  html, body, #root { height: 100%; }
+  body { @apply bg-background text-foreground font-sans antialiased; font-size: 14px; line-height: 1.5; }
+  code, kbd { @apply font-mono; font-size: .9em; }
+  :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+}
+
+/* React Flow: our colours instead of its defaults. */
+.react-flow { --xy-background-color: var(--canvas); --xy-edge-stroke: var(--muted-foreground); --xy-edge-stroke-selected: var(--lamp);
+  --xy-handle-background-color: var(--card); --xy-controls-button-background-color: var(--card);
+  --xy-controls-button-background-color-hover: var(--muted); --xy-controls-button-color: var(--foreground);
+  --xy-controls-button-border-color: var(--border); --xy-minimap-background-color: var(--card);
+  --xy-minimap-mask-background-color: color-mix(in srgb, var(--background) 70%, transparent);
+  --xy-attribution-background-color: transparent; }
+.react-flow__controls { @apply rounded-md overflow-hidden border shadow-sm; }
+.react-flow__minimap { @apply rounded-md border shadow-sm overflow-hidden; }
+.react-flow__edge-path { stroke-width: 1.6; }
+.react-flow__edge.selected .react-flow__edge-path { stroke-width: 2.4; }
+.react-flow__connection-path { stroke: var(--lamp); stroke-width: 2; stroke-dasharray: 6 5; }
+@media (prefers-reduced-motion: reduce) { * { animation-duration: 0ms !important; transition-duration: 0ms !important; } }

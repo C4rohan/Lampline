@@ -1,0 +1,9 @@
+name: new patient requests a visit
+turns:
+  - user: Yes, I'd like to book a visit.
+    expect: {reaches: Collect details}
+  - user: I'm Jordan Example. I've never been there before, it's for a yearly check-up, and Thursday afternoon works.
+  - user: Yes, that's all correct.
+expect:
+  reaches: [Collect details, Confirm, Request booked]
+  ends: true

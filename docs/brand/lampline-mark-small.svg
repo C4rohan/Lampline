@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32" role="img" aria-label="Lampline">
+  <!-- For 16-32 px (favicons): one arc, heavier strokes. -->
+  <rect width="24" height="24" rx="6" fill="#15212b"/>
+  <path d="M4 15.5H20" stroke="#f2b84b" stroke-width="2.2" stroke-linecap="round"/>
+  <circle cx="12" cy="15.5" r="3.6" fill="#f2b84b"/>
+  <path d="M7.5 9a6.3 6.3 0 0 1 9 0" fill="none" stroke="#f2b84b" stroke-width="2.2" stroke-linecap="round"/>
+</svg>

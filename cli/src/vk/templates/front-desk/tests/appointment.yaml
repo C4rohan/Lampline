@@ -1,0 +1,10 @@
+name: caller moves an appointment
+turns:
+  - user: Hi, I need to move my appointment to next Tuesday.
+    expect: {reaches: Appointments}
+  - user: Morning, please. It's for a check-up.
+  - user: Yes, that's right. That's everything, thanks.
+expect:
+  reaches: [Router, Appointments, Goodbye]
+  not_reaches: [Billing, Transfer to staff]
+  ends: true

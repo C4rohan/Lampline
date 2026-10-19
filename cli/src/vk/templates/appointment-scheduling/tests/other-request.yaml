@@ -1,0 +1,7 @@
+name: non-scheduling callers are redirected
+turns:
+  - user: No, I have a question about my bill.
+expect:
+  reaches: Not scheduling
+  not_reaches: Collect details
+  ends: true

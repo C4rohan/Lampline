@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lampline</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%2315212b'/%3E%3Cpath d='M4 15.5H20' stroke='%23f2b84b' stroke-width='2.2' stroke-linecap='round'/%3E%3Ccircle cx='12' cy='15.5' r='3.6' fill='%23f2b84b'/%3E%3Cpath d='M7.5 9a6.3 6.3 0 0 1 9 0' fill='none' stroke='%23f2b84b' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E">
+<script>
+  // Apply the saved theme before first paint (no flash).
+  try {
+    const t = localStorage.getItem("vpe-theme");
+    const dark = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.classList.toggle("dark", dark);
+  } catch {}
+</script>
+  <script type="module" crossorigin src="/static/assets/index-o7UIDTI1.js"></script>
+  <link rel="modulepreload" crossorigin href="/static/assets/flow-BmVb7NBq.js">
+  <link rel="stylesheet" crossorigin href="/static/assets/index-DZLd8bvg.css">
+</head>
+<body>
+<div id="root"></div>
+<audio id="remote" autoplay></audio>
+</body>
+</html>

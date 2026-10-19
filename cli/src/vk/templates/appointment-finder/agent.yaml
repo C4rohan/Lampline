@@ -1,0 +1,95 @@
+vk_format: 1
+name: Appointment Finder
+context_variables:
+  business_name: Riverside Clinic
+setup:
+  purpose: look up open appointment times with an HTTP tool
+  languages:
+  - en
+  structure: root agent + tool
+  llm: claude
+  real_data: false
+lint:
+  ignore: []
+nodes:
+- id: start
+  type: startCall
+  position:
+    x: 300
+    y: 0
+  data:
+    name: Start
+    greeting: Hi, you've reached {{business_name}} scheduling. What day works for you?
+    greeting_type: text
+    prompt:
+      file: prompts/start.md
+    add_global_prompt: true
+    allow_interrupt: true
+- id: find
+  type: agentNode
+  position:
+    x: 300
+    y: 240
+  data:
+    name: Find a time
+    prompt:
+      file: prompts/find-a-time.md
+    tools:
+    - find_open_slots
+    add_global_prompt: true
+    allow_interrupt: true
+- id: bye
+  type: endCall
+  position:
+    x: 300
+    y: 520
+  data:
+    name: Goodbye
+    prompt:
+      file: prompts/goodbye.md
+    add_global_prompt: true
+- id: persona
+  type: globalNode
+  position:
+    x: 760
+    y: 0
+  data:
+    name: Persona
+    prompt:
+      file: prompts/persona.md
+edges:
+- id: start-find
+  source: start
+  target: find
+  data:
+    label: after greeting
+    condition: Right after the greeting.
+    after_greeting: true
+- id: find-bye
+  source: find
+  target: bye
+  data:
+    label: goodbye
+    condition: The caller has what they need, or says goodbye or thanks.
+tools:
+- name: find_open_slots
+  description: Look up open appointment times on a given day. Call it once you know the day the caller
+    wants.
+  method: GET
+  url: ''
+  headers:
+    Authorization: Bearer {{secrets.SCHEDULING_KEY}}
+  parameters:
+  - name: day
+    type: string
+    required: true
+    description: the day the caller asked for, in their words, like tuesday or next friday
+  say_while_running: One moment while I check.
+  save:
+    first_open_time: slots.0.time
+  timeout_seconds: 8
+  mock:
+    day: '{{day}}'
+    slots:
+    - time: 9:30 AM
+    - time: 2:15 PM

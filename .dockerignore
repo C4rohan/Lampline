@@ -1,0 +1,11 @@
+# Only cli/, engine/ and docker/ go into the image.
+*
+!cli/pyproject.toml
+!cli/README.md
+!cli/src/**
+!engine/pyproject.toml
+!engine/README.md
+!engine/src/**
+!docker/entrypoint.sh
+**/__pycache__
+**/*.egg-info

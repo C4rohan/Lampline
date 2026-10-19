@@ -1,0 +1,9 @@
+name: billing question goes to the billing team
+turns:
+  - user: I have a question about the balance on my bill.
+    expect: {reaches: Billing}
+  - user: Can I talk to someone in billing about it?
+expect:
+  reaches: [Billing, Transfer to staff]
+  not_says: [card number, social security]
+  ends: true

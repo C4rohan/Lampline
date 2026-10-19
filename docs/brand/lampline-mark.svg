@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="512" height="512" role="img" aria-label="Lampline">
+  <!-- A switchboard lamp lit on its line: a call has come in. -->
+  <rect width="24" height="24" rx="6" fill="#15212b"/>
+  <path d="M4 15.5H20" stroke="#f2b84b" stroke-width="1.8" stroke-linecap="round"/>
+  <circle cx="12" cy="15.5" r="3.2" fill="#f2b84b"/>
+  <path d="M8.2 9.6a5.4 5.4 0 0 1 7.6 0M6 7.2a8.6 8.6 0 0 1 12 0" fill="none" stroke="#f2b84b" stroke-width="1.6" stroke-linecap="round"/>
+</svg>

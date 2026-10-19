@@ -1,0 +1,16 @@
+{
+  "name": "lampline",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/python:1": { "version": "3.12" },
+    "ghcr.io/devcontainers/features/node:1": { "version": "22" }
+  },
+  "hostRequirements": { "cpus": 4, "memory": "8gb" },
+  "forwardPorts": [7860],
+  "portsAttributes": {
+    "7860": { "label": "Lampline", "onAutoForward": "openBrowser" }
+  },
+  "postCreateCommand": "chmod +x scripts/*.sh",
+  "postStartCommand": "echo 'Run scripts/docker-up.sh to start Lampline on port 7860.'"
+}

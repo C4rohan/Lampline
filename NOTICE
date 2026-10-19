@@ -1,0 +1,36 @@
+Lampline
+Copyright 2026 Rohan Salvi
+
+The engine in engine/ (vpengine) is this project's own code and uses Pipecat
+(https://github.com/pipecat-ai/pipecat, BSD-2-Clause, Copyright (c) Daily) as a
+library, installed from PyPI and not redistributed here. Model providers
+(Anthropic, OpenAI, Google, Azure, AWS, Groq, Mistral and others) are reached
+through Pipecat's services for them and their own client libraries, installed
+from PyPI. SIP calls go through jambonz (https://jambonz.org, MIT), which you
+run separately; this project only speaks its webhook and websocket protocol.
+
+The engine's web app bundles the IBM Plex Sans and IBM Plex Mono fonts (Copyright 2019 IBM Corp.,
+SIL Open Font License 1.1, see engine/src/vpengine/static/fonts/OFL.txt).
+The web app's built JavaScript bundles open-source libraries (React, React
+Flow, Radix UI, lucide, sonner, dagre, Tailwind CSS and their dependencies;
+MIT, ISC, BSD and Apache-2.0 licences). Their licence texts ship beside the app
+in engine/src/vpengine/static/THIRD-PARTY-LICENSES.txt, generated at build time.
+
+Kokoro speech on this computer comes from pipecat-ai's "kokoro" extra, which
+installs kokoro-onnx and, through it, phonemizer and espeak-ng (GPL-3.0). They
+are installed from PyPI on your machine and not redistributed here; if you ship
+a package or container image that includes them, follow their licence terms.
+
+The engine reads PDFs with pypdf (BSD-3-Clause), installed from PyPI. For
+knowledge search it can download sentence-transformers/all-MiniLM-L6-v2
+(Apache-2.0) from Hugging Face at run time; the model is not redistributed here.
+
+--------------------------------------------------------------------------------
+
+Importers (cli/src/vk/importers)
+
+The Dialogflow CX and CX Agent Studio importers read the export formats that
+Google documents publicly (Dialogflow CX "JSON package" and CX Agent Studio
+app export). They contain no code from Google. The test exports are synthetic,
+made-up businesses. Dialogflow and CX Agent Studio are names of Google
+products; this project is not affiliated with or endorsed by Google.

@@ -1,0 +1,31 @@
+.env
+.env.*
+!.env.example
+vendor/
+
+# Python build output
+build/
+dist/
+*.egg-info/
+__pycache__/
+.pytest_cache/
+.cache/
+.venv-engine/
+
+# Engine UI dependencies (the built app is committed under engine/src/vpengine/static)
+engine/ui/node_modules/
+
+# Your own agents (engine-up.sh and docker-up.sh create agents/ on first run); keep them in a repo of their own
+/agents/
+# What the engine keeps when it runs in Docker (settings with keys, records, knowledge, models)
+/.vpe-data/
+
+# Data the engine keeps (if VPE_DATA_DIR points inside the repo), downloads, tool caches and OS clutter
+*.sqlite3
+*.sqlite3-*
+*.bundle
+.ruff_cache/
+.DS_Store
+.vscode/
+.idea/
+node_modules/

@@ -1,0 +1,203 @@
+vk_format: 1
+name: Front Desk
+context_variables:
+  business_name: Riverside Clinic
+  business_hours: Monday to Friday, 8 AM to 5 PM, and Saturday 9 AM to noon
+  business_address: 100 Example Street, Suite 2
+setup:
+  purpose: answer the main line and route callers to appointments, hours, billing or staff
+  languages:
+  - en
+  structure: root agent + sub-agents
+  llm: claude
+  real_data: false
+lint:
+  ignore: []
+nodes:
+- id: '1'
+  type: startCall
+  position:
+    x: 460
+    y: 0
+  data:
+    name: Greeting
+    prompt:
+      file: prompts/greeting.md
+    greeting: Thanks for calling {{business_name}}, this is Ava. How can I help you today?
+    greeting_type: text
+    add_global_prompt: true
+    allow_interrupt: true
+- id: '2'
+  type: agentNode
+  position:
+    x: 460
+    y: 300
+  data:
+    name: Router
+    prompt:
+      file: prompts/router.md
+    add_global_prompt: true
+    allow_interrupt: true
+- id: '3'
+  type: agentNode
+  position:
+    x: 0
+    y: 640
+  data:
+    name: Appointments
+    prompt:
+      file: prompts/appointments.md
+    extraction_enabled: true
+    extraction_prompt:
+      file: prompts/appointments.extraction.md
+    extraction_variables:
+    - name: appointment_action
+      type: string
+      prompt: book, move or cancel
+    - name: preferred_day
+      type: string
+      prompt: the day the caller wants, as they said it
+    - name: preferred_time
+      type: string
+      prompt: morning, afternoon or a specific time
+    add_global_prompt: true
+    allow_interrupt: true
+- id: '4'
+  type: agentNode
+  position:
+    x: 460
+    y: 640
+  data:
+    name: Hours and location
+    prompt:
+      file: prompts/hours-and-location.md
+    add_global_prompt: true
+    allow_interrupt: true
+- id: '5'
+  type: agentNode
+  position:
+    x: 920
+    y: 640
+  data:
+    name: Billing
+    prompt:
+      file: prompts/billing.md
+    add_global_prompt: true
+    allow_interrupt: true
+- id: '6'
+  type: endCall
+  position:
+    x: 1380
+    y: 1000
+  data:
+    name: Transfer to staff
+    prompt:
+      file: prompts/transfer-to-staff.md
+    add_global_prompt: true
+    allow_interrupt: true
+- id: '7'
+  type: endCall
+  position:
+    x: 230
+    y: 1000
+  data:
+    name: Goodbye
+    prompt:
+      file: prompts/goodbye.md
+    add_global_prompt: true
+    allow_interrupt: true
+- id: g
+  type: globalNode
+  position:
+    x: 1880
+    y: 0
+  data:
+    name: Persona
+    prompt:
+      file: prompts/persona.md
+edges:
+- id: 1-2
+  source: '1'
+  target: '2'
+  data:
+    label: caller said why
+    condition: The caller has said what they are calling about.
+- id: 2-3
+  source: '2'
+  target: '3'
+  data:
+    label: appointments
+    condition: The caller wants to book, move or cancel an appointment.
+- id: 2-4
+  source: '2'
+  target: '4'
+  data:
+    label: hours or location
+    condition: The caller asks about opening hours, the address or directions.
+- id: 2-5
+  source: '2'
+  target: '5'
+  data:
+    label: billing
+    condition: The caller has a question about a bill, a payment or insurance billing.
+- id: 2-6
+  source: '2'
+  target: '6'
+  data:
+    label: wants a person
+    condition: The caller asks for a person, a nurse or a specific staff member, or the request is something
+      you can't handle.
+    transition_speech: Of course, one moment.
+- id: 2-7
+  source: '2'
+  target: '7'
+  data:
+    label: nothing else
+    condition: The caller says they don't need anything else.
+- id: 3-7
+  source: '3'
+  target: '7'
+  data:
+    label: appointment request taken
+    condition: The caller confirmed the appointment request and needs nothing else.
+- id: 3-2
+  source: '3'
+  target: '2'
+  data:
+    label: other request after appointment
+    condition: The caller has a different request that isn't about this appointment.
+- id: 4-7
+  source: '4'
+  target: '7'
+  data:
+    label: hours answered
+    condition: The caller's question about hours or location is answered and they need nothing else.
+- id: 4-2
+  source: '4'
+  target: '2'
+  data:
+    label: other request after hours
+    condition: The caller has a different request.
+- id: 5-6
+  source: '5'
+  target: '6'
+  data:
+    label: billing team
+    condition: The caller asks to speak with the billing team, or says yes when you offer to connect them.
+- id: 5-7
+  source: '5'
+  target: '7'
+  data:
+    label: billing answered
+    condition: The billing question is answered and the caller needs nothing else.
+- id: 5-2
+  source: '5'
+  target: '2'
+  data:
+    label: other request after billing
+    condition: The caller has a different request.
+extra:
+  viewport:
+    x: 0
+    y: 0
+    zoom: 0.8
