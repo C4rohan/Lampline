@@ -1,4 +1,4 @@
-import { ArrowUpRight, AudioLines, BrainCircuit, Cloud, Ear, Phone, Server, Workflow } from "lucide-react";
+import { ArrowUpRight, AudioLines, BrainCircuit, Cloud, Ear, FileInput, Phone, Server, Workflow } from "lucide-react";
 import { api, LLM_LABEL, STT_LABEL, TTS_LABEL, type AgentSummary } from "@/lib/api";
 import { useApp, useLoad } from "@/lib/app";
 import { Page } from "@/components/shell";
@@ -36,6 +36,11 @@ export function Overview() {
         <h2 className="text-xl font-semibold tracking-tight">Describe a voice agent, and we'll build it</h2>
         <p className="mb-4 mt-1 max-w-[65ch] text-sm text-muted-foreground">Say what callers need and what the agent should do. You get a ready-to-test agent with a root agent, sub-agents, transfers and tools, which you can change in the builder.</p>
         <DescribeBox />
+        <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-4">
+          <FileInput className="size-4 text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">Coming from <span className="font-medium text-foreground">Dialogflow CX</span> or <span className="font-medium text-foreground">CX Agent Studio</span>? Bring your agent over: flows, pages, playbooks and tools.</span>
+          <NewAgentButton variant="outline" tab="import"><FileInput />Import an agent</NewAgentButton>
+        </div>
       </section>
       {c && (
         <div className="grid gap-4 md:grid-cols-3">

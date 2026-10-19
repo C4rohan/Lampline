@@ -37,11 +37,11 @@ export const StepCard = memo(function StepCard({ id, data, selected }: NodeProps
         <div className="pointer-events-none absolute -inset-1 rounded-[14px] border-2 border-dashed border-[var(--k)] bg-[color-mix(in_srgb,var(--k)_6%,transparent)]" />
       )}
       <div className="flex items-center gap-2 rounded-t-xl border-b bg-[color-mix(in_srgb,var(--k)_8%,transparent)] px-3 py-2">
-        <span className="grid size-6 place-items-center rounded-md bg-[var(--k)] text-white dark:text-[#10171e]"><Icon className="size-3.5" /></span>
-        <span className="text-xs font-semibold text-[var(--k)]">{data.kind}</span>
-        {scripted && <span className="inline-flex items-center gap-1 rounded-full border border-[color-mix(in_srgb,var(--k)_40%,transparent)] px-1.5 text-[10.5px] font-semibold text-[var(--k)]" title="Scripted: exact lines, form fields and rules">
+        <span className="grid size-6 shrink-0 place-items-center rounded-md bg-[var(--k)] text-white dark:text-[#10171e]"><Icon className="size-3.5" /></span>
+        <span className="shrink-0 whitespace-nowrap text-xs font-semibold text-[var(--k)]">{data.kind}</span>
+        {scripted && <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[color-mix(in_srgb,var(--k)_40%,transparent)] px-1.5 text-[10.5px] font-semibold text-[var(--k)]" title="Scripted: exact lines, form fields and rules">
           <ListChecks className="size-3" />Scripted</span>}
-        {flow && <span className="truncate text-[10.5px] font-medium text-[var(--f)]" title={`Flow: ${flow}`}>{flow}</span>}
+        {flow && <span className="min-w-0 truncate text-[10.5px] font-medium text-[var(--f)]" title={`Flow: ${flow}`}>{flow}</span>}
         {(data.errors > 0 || data.warnings > 0) && (
           <span title={data.problems} className={cn("ml-auto inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-semibold",
             data.errors ? "bg-bad text-white" : "bg-warn text-[#1b1406]")}>
