@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use Lampline in a project, product, paper or talk, please cite it as below and credit Rohan Salvi."
+title: "Lampline: open-source, self-hosted voice agents"
+abstract: >-
+  A self-hosted voice agent platform that imports and exports Dialogflow CX and
+  CX Agent Studio agents, mixes LLM steps with scripted pages in one agent,
+  works with 20 model providers or fully local models, and takes phone calls
+  through Twilio, Telnyx or SIP via jambonz. Built on Pipecat.
+type: software
+authors:
+  - family-names: Salvi
+    given-names: Rohan
+repository-code: "https://github.com/C4rohan/lampline"
+license: Apache-2.0
+version: 0.1.0
+date-released: 2026-10-19
+keywords:
+  - voice agents
+  - conversational AI
+  - Dialogflow CX
+  - CX Agent Studio
+  - Pipecat
+  - self-hosted

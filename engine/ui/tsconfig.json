@@ -12,8 +12,7 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "noEmit": true,
-    "baseUrl": ".",
-    "paths": { "@/*": ["src/*"] },
+    "paths": { "@/*": ["./src/*"] },
     "types": ["vite/client"]
   },
   "include": ["src"]
