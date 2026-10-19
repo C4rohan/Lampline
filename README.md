@@ -23,14 +23,14 @@
 </p>
 
 <p align="center">
-  <a href="#quick-start"><b>Quick start</b></a> &nbsp;·&nbsp;
-  <a href="#bring-your-dialogflow-cx-and-cx-agent-studio-agents">Import from Google</a> &nbsp;·&nbsp;
-  <a href="#a-quick-tour">Tour</a> &nbsp;·&nbsp;
-  <a href="#models">Models</a> &nbsp;·&nbsp;
-  <a href="#phone-calls-and-sip">Phone and SIP</a> &nbsp;·&nbsp;
-  <a href="docs/ROADMAP.md">Roadmap</a> &nbsp;·&nbsp;
-  <a href="engine/README.md">Engine docs</a> &nbsp;·&nbsp;
-  <a href="cli/README.md"><code>vk</code> CLI</a>
+  <a href="#-quick-start"><b>🚀 Quick start</b></a> &nbsp;·&nbsp;
+  <a href="#-bring-your-dialogflow-cx-and-cx-agent-studio-agents">🔁 Import from Google</a> &nbsp;·&nbsp;
+  <a href="#-a-quick-tour">👀 Tour</a> &nbsp;·&nbsp;
+  <a href="#-models">🧠 Models</a> &nbsp;·&nbsp;
+  <a href="#-phone-calls-and-sip">📞 Phone and SIP</a> &nbsp;·&nbsp;
+  <a href="docs/ROADMAP.md">🗺️ Roadmap</a> &nbsp;·&nbsp;
+  <a href="engine/README.md">📘 Engine docs</a> &nbsp;·&nbsp;
+  <a href="cli/README.md">🧩 <code>vk</code> CLI</a>
 </p>
 
 <br>
@@ -51,16 +51,16 @@ Telnyx or any SIP trunk through jambonz. Built on
 
 <table>
   <tr>
-    <td width="50%" valign="top"><b>Local first</b><br>One command on a laptop, a GPU box or an on-prem server. No cloud account needed.</td>
-    <td width="50%" valign="top"><b>Private by default</b><br>No telemetry, bound to localhost, a key on every request, and keys never in your agents or the repo.</td>
+    <td width="50%" valign="top"><b>🏠 Local first</b><br>One command on a laptop, a GPU box or an on-prem server. No cloud account needed.</td>
+    <td width="50%" valign="top"><b>🔒 Private by default</b><br>No telemetry, bound to localhost, a key on every request, and keys never in your agents or the repo.</td>
   </tr>
   <tr>
-    <td valign="top"><b>Any model</b><br>Claude, OpenAI, Gemini, Vertex AI, Azure OpenAI, Bedrock, Groq, Mistral, DeepSeek, Grok and more, or Ollama on your own hardware.</td>
-    <td valign="top"><b>Agents as code</b><br>Every agent is a folder of YAML and Markdown: reviewed in git, tested with <code>vk</code>, exported back to Google's tools whenever you like.</td>
+    <td valign="top"><b>🧠 Any model</b><br>Claude, OpenAI, Gemini, Vertex AI, Azure OpenAI, Bedrock, Groq, Mistral, DeepSeek, Grok and more, or Ollama on your own hardware.</td>
+    <td valign="top"><b>🧩 Agents as code</b><br>Every agent is a folder of YAML and Markdown: reviewed in git, tested with <code>vk</code>, exported back to Google's tools whenever you like.</td>
   </tr>
 </table>
 
-## Bring your Dialogflow CX and CX Agent Studio agents
+## 🔁 Bring your Dialogflow CX and CX Agent Studio agents
 
 Export an agent from Google's console, drop the .zip on **New agent → Import**, and
 it opens in the builder: flows, pages, forms, routes, playbooks and tools carried
@@ -75,14 +75,14 @@ CX Agent Studio app.
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/import-done-dark.webp">
   <img src="docs/images/import-done-light.webp" alt="Importing a Dialogflow CX export: what came over, and what to review">
 </picture>
-      <p><b>Import.</b> A Dialogflow CX package or a CX Agent Studio app (JSON or YAML). The conversion runs on your computer and never runs code from the export.</p>
+      <p><b>📥 Import.</b> A Dialogflow CX package or a CX Agent Studio app (JSON or YAML). The conversion runs on your computer and never runs code from the export.</p>
     </td>
     <td width="50%" valign="top">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/import-builder-dark.webp">
   <img src="docs/images/import-builder-light.webp" alt="The imported agent in the builder: flows, scripted pages and a playbook">
 </picture>
-      <p><b>Ready to edit.</b> Pages become scripted pages, playbooks become LLM steps, flows group them, and webhooks and OpenAPI tools become tools.</p>
+      <p><b>✏️ Ready to edit.</b> Pages become scripted pages, playbooks become LLM steps, flows group them, and webhooks and OpenAPI tools become tools.</p>
     </td>
   </tr>
 </table>
@@ -105,7 +105,7 @@ From the terminal: `vk import auto export.zip` and `vk export dfcx|ces agents/<n
 The full mapping, both ways, and what doesn't carry over yet:
 [cli/README.md](cli/README.md#import).
 
-## A quick tour
+## 👀 A quick tour
 
 <table>
   <tr>
@@ -114,14 +114,14 @@ The full mapping, both ways, and what doesn't carry over yet:
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/test-dark.webp">
   <img src="docs/images/test-light.webp" alt="Test call: a chat with a scripted agent, the step it's on, and the details it collected">
 </picture>
-      <p><b>Test calls.</b> Chat or talk through your microphone. The steps light up as the call moves, and every collected detail shows on the right.</p>
+      <p><b>🧪 Test calls.</b> Chat or talk through your microphone. The steps light up as the call moves, and every collected detail shows on the right.</p>
     </td>
     <td width="50%" valign="top">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/integrations-dark.webp">
   <img src="docs/images/integrations-light.webp" alt="Integrations: model providers as tiles, with the one in use highlighted">
 </picture>
-      <p><b>20 model providers.</b> Pick one, paste a key, press Test connection. Speech runs in the cloud or free on your own computer.</p>
+      <p><b>🧠 20 model providers.</b> Pick one, paste a key, press Test connection. Speech runs in the cloud or free on your own computer.</p>
     </td>
   </tr>
   <tr>
@@ -130,28 +130,28 @@ The full mapping, both ways, and what doesn't carry over yet:
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/connections-dark.webp">
   <img src="docs/images/connections-light.webp" alt="Phone numbers and SIP, and contact centers marked coming soon">
 </picture>
-      <p><b>Phone calls and SIP.</b> Twilio, Telnyx, or your own SIP trunk, PBX or SBC through jambonz. Genesys, Avaya, Cisco and more are coming.</p>
+      <p><b>📞 Phone calls and SIP.</b> Twilio, Telnyx, or your own SIP trunk, PBX or SBC through jambonz. Genesys, Avaya, Cisco and more are coming.</p>
     </td>
     <td valign="top">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/data-dark.webp">
   <img src="docs/images/data-light.webp" alt="Data: an appointments collection with sample records">
 </picture>
-      <p><b>Data of its own.</b> Collections agents look up and save during calls, and document search over your FAQs, all on your machine.</p>
+      <p><b>🗄️ Data of its own.</b> Collections agents look up and save during calls, and document search over your FAQs, all on your machine.</p>
     </td>
   </tr>
 </table>
 
 <sub>Screenshots use the bundled sample agents and made-up data.</sub>
 
-## Where it runs
+## 🏠 Where it runs
 
 | | Status | |
 |---|---|---|
-| **Local and on-prem** | Available | One Docker container, or the engine natively, on any machine you control |
-| **Google Cloud** | Coming soon | A one-command deployment to your own Google Cloud project |
+| **Local and on-prem** | ✅ Available | One Docker container, or the engine natively, on any machine you control |
+| **Google Cloud** | 🔜 Coming soon | A one-command deployment to your own Google Cloud project |
 
-## Quick start
+## 🚀 Quick start
 
 Needs Docker with Compose v2 (Docker Desktop is fine).
 
@@ -174,7 +174,7 @@ Prefer no Docker? `scripts/engine-up.sh` runs the engine natively (Python 3.11+)
 at http://localhost:7860, which also lets browser calls reach it directly.
 Free, private speech: Integrations → Whisper and Kokoro → **Download models**.
 
-## Models
+## 🧠 Models
 
 Pick one on the Integrations page; each starts on a sensible default model you
 can change, and **Test connection** checks the key.
@@ -190,7 +190,7 @@ can change, and **Test connection** checks the key.
 | Groq, Mistral, DeepSeek, Grok (xAI), Together AI, Fireworks AI, OpenRouter, Cerebras, NVIDIA NIM, Qwen, SambaNova, Nebius, Novita AI | each provider's API key |
 | Ollama | none: open models on this computer or your own server |
 
-## Phone calls and SIP
+## 📞 Phone calls and SIP
 
 | | |
 |---|---|
@@ -201,7 +201,7 @@ can change, and **Test connection** checks the key.
 The Phone numbers page has the webhook to copy and the steps for each.
 Details: [engine/README.md](engine/README.md#phone-calls-twilio-telnyx-or-sip).
 
-### Contact centers (coming soon)
+### 🏢 Contact centers (coming soon)
 
 Genesys Cloud, Avaya, Cisco Webex Contact Center, Cisco UCCE and PCCE, Amazon
 Connect, NICE CXone, Five9 and Twilio Flex show on the Integrations page as
@@ -209,7 +209,7 @@ coming soon. Until each lands, most of them can already send calls to your
 agents over a SIP trunk through jambonz. The plan for each:
 [docs/ROADMAP.md](docs/ROADMAP.md#contact-centers-coming-soon).
 
-## How it works
+## ⚙️ How it works
 
 ```mermaid
 flowchart LR
@@ -226,7 +226,7 @@ flowchart LR
 The engine reads the agent folders on every call, so a change is live on the
 next call. Settings and keys live in a `chmod 600` file outside the repo.
 
-## What a voice-agent call actually costs
+## 💰 What a voice-agent call actually costs
 
 Monthly totals for 4-minute calls at list prices (October 2026). Staff time is
 not included. Reproduce or change any assumption with `python3 costs/cost_model.py`.
@@ -241,12 +241,12 @@ not included. Reproduce or change any assumption with `python3 costs/cost_model.
 | GKE production + self-hosted models on L4 GPUs, 3-yr CUD (coming soon) | $1,054 | $1,675 | $3,888 |
 
 What the numbers say:
-- **Hosting is the small part.** Model APIs are almost the whole bill, so the model choice matters far more than local vs. cloud.
-- **Self-hosted models are where the big savings are,** but they rest on two assumptions nobody has published good data for: concurrent calls per GPU, and whether an 8B open model is good enough for your flows. [Help measure them](CONTRIBUTING.md).
+- 📉 **Hosting is the small part.** Model APIs are almost the whole bill, so the model choice matters far more than local vs. cloud.
+- 🖥️ **Self-hosted models are where the big savings are,** but they rest on two assumptions nobody has published good data for: concurrent calls per GPU, and whether an 8B open model is good enough for your flows. [Help measure them](CONTRIBUTING.md).
 
 Every row, per-call figures and assumptions: [costs/COSTS.md](costs/COSTS.md).
 
-## Agents as code (`vk`)
+## 🧩 Agents as code (`vk`)
 
 Build and change agents from a terminal or an AI coding agent as well as the
 builder. Each agent is a folder: `agent.yaml` for the graph and one Markdown
@@ -264,7 +264,7 @@ vk skills install --target claude   # builder + reviewer skills for Claude Code
 Details in [cli/README.md](cli/README.md). The engine itself, its builder,
 tools, data and knowledge: [engine/README.md](engine/README.md).
 
-## Roadmap
+## 🗺️ Roadmap
 
 - [x] The engine on Pipecat: builder, text chat, browser calls, phone calls ([engine/README.md](engine/README.md))
 - [x] Agents as code: `vk` lint, conversation tests, templates, coding-agent skills ([cli/README.md](cli/README.md))
@@ -279,7 +279,7 @@ tools, data and knowledge: [engine/README.md](engine/README.md).
 
 The full list: [docs/ROADMAP.md](docs/ROADMAP.md).
 
-## Tested
+## ✅ Tested
 
 CI runs on every push and pull request to `dev`, `qa` and `prod`:
 - the `vk` CLI test suite
@@ -291,7 +291,7 @@ CI runs on every push and pull request to `dev`, `qa` and `prod`:
 
 Issues and PRs welcome (against `dev`; [how dev, qa and prod work](docs/BRANCHES.md)). See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), the [code of conduct](CODE_OF_CONDUCT.md) and the [changelog](CHANGELOG.md).
 
-## License
+## 📄 License
 
 Apache-2.0. The engine uses Pipecat (BSD-2-Clause), installed from PyPI;
 other credits are in [NOTICE](NOTICE). Not affiliated with Google or any

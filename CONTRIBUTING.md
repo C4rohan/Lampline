@@ -28,3 +28,12 @@ python3 costs/cost_model.py > costs/COSTS.md   # commit the regenerated file if 
 ```
 
 Price changes need a source link in the PR description.
+
+## Dependency updates
+
+Dependabot opens one pull request a week for the engine UI's packages. Its
+`engine-ui` check fails until the committed build is rebuilt, because
+Dependabot can't run the build. Check out its branch, run
+`(cd engine/ui && npm ci && npm run build)`, commit
+`engine/src/vpengine/static` and `engine/ui/public/THIRD-PARTY-LICENSES.txt`,
+and push to the same branch.
