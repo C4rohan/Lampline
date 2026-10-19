@@ -13,7 +13,13 @@ export default defineConfig({
     outDir: "../src/vpengine/static",
     emptyOutDir: true,
     chunkSizeWarningLimit: 900,
-    rollupOptions: { output: { manualChunks: { flow: ["@xyflow/react", "@dagrejs/dagre"] } } },
+    rollupOptions: {
+      output: {
+        // The builder's canvas libraries load only on the builder page.
+        manualChunks: (id: string) =>
+          /node_modules\/(@xyflow|@dagrejs)\//.test(id) ? "flow" : undefined,
+      },
+    },
   },
   server: { proxy: { "/v1": "http://127.0.0.1:7860" } },
 });
