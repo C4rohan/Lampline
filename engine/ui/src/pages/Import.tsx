@@ -47,7 +47,7 @@ export function ImportBox({ onDone }: { onDone?: () => void }) {
   }
 
   if (done) {
-    const counts = Object.entries(done.import.counts).filter(([, v]) => v).map(([k, v]) => `${v} ${k}`).join(" · ");
+    const counts = Object.entries(done.import.counts).filter(([, v]) => v).map(([k, v]) => `${v} ${v === 1 ? k.replace(/s$/, "") : k}`).join(" · ");
     return (
       <div className="grid gap-3" data-testid="import-result">
         <div className="flex items-start gap-2.5">

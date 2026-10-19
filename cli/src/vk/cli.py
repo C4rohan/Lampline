@@ -132,6 +132,11 @@ def cmd_templates_install(args) -> int:
     return 0
 
 
+def _counts(counts: dict) -> str:
+    """{"flows": 2, "playbooks": 1} -> "2 flows, 1 playbook"."""
+    return ", ".join(f"{v} {k[:-1] if v == 1 and k.endswith('s') else k}" for k, v in counts.items() if v)
+
+
 def cmd_import(args) -> int:
     from . import importers
     from .lint import lint as run_lint
@@ -153,7 +158,7 @@ def cmd_import(args) -> int:
         return 1
     agentfs.write(agent, dest)
     (dest / "import-report.md").write_text(report.markdown(agent.name), encoding="utf-8")
-    counts = ", ".join(f"{v} {k}" for k, v in report.counts.items() if v)
+    counts = _counts(report.counts)
     _out(f"imported {agent.name!r} from {report.source} into {dest}/ ({counts})")
     findings = run_lint(agent, dest)
     errors = sum(1 for f in findings if f.severity == "error")
@@ -200,7 +205,7 @@ def cmd_export(args) -> int:
             path.write_text(text, encoding="utf-8")
     else:
         out.write_bytes(data)
-    _out(f"exported {agent.name!r} for {report.target} to {out} ({', '.join(f'{v} {k}' for k, v in report.counts.items() if v)})")
+    _out(f"exported {agent.name!r} for {report.target} to {out} ({_counts(report.counts)})")
     for n in report.notes:
         _out(f"  - {n}")
     _out("import it there: " + ("Agent settings → Restore (JSON package), then Validate" if args.target == "dfcx"

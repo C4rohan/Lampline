@@ -8,13 +8,15 @@
 <h3 align="center">A CX Agent Studio–style voice agent platform of your own.</h3>
 
 <p align="center">
-  Build, test and run voice agents on your own machine or servers, in one command,<br>
+  Bring your agents over from <b>Dialogflow CX</b> and <b>CX Agent Studio</b>, or start fresh.<br>
+  Build, test and run them on your own machine or servers, in one command,<br>
   for about $0.02–0.17 a call instead of $0.50.
 </p>
 
 <p align="center">
   <a href="https://github.com/C4rohan/lampline/actions/workflows/ci.yml"><img src="https://github.com/C4rohan/lampline/actions/workflows/ci.yml/badge.svg?branch=dev" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="Apache-2.0"></a>
+  <img src="https://img.shields.io/badge/imports-Dialogflow_CX_%C2%B7_CX_Agent_Studio-2f6fb0" alt="Imports Dialogflow CX and CX Agent Studio">
   <img src="https://img.shields.io/badge/models-20_providers-f2b84b" alt="20 model providers">
   <img src="https://img.shields.io/badge/runs-local_%26_on--prem-15212b" alt="Runs local and on-prem">
   <a href="https://codespaces.new/C4rohan/lampline"><img src="https://github.com/codespaces/badge.svg" alt="Open in GitHub Codespaces" height="20"></a>
@@ -22,6 +24,7 @@
 
 <p align="center">
   <a href="#quick-start"><b>Quick start</b></a> &nbsp;·&nbsp;
+  <a href="#bring-your-dialogflow-cx-and-cx-agent-studio-agents">Import from Google</a> &nbsp;·&nbsp;
   <a href="#a-quick-tour">Tour</a> &nbsp;·&nbsp;
   <a href="#models">Models</a> &nbsp;·&nbsp;
   <a href="#phone-calls-and-sip">Phone and SIP</a> &nbsp;·&nbsp;
@@ -39,8 +42,9 @@
 </picture>
 </p>
 
-Lampline gives you a drag-and-drop builder where LLM steps and scripted pages mix
-in one agent, a test console that lights up each step as the call moves, HTTP and
+Lampline imports your Dialogflow CX and CX Agent Studio agents, flows, pages,
+playbooks, forms and tools included, and runs them on hardware you control. It gives
+you a drag-and-drop builder where LLM steps and scripted pages mix in one agent, a test console that lights up each step as the call moves, HTTP and
 MCP tools, records and document search of its own, and phone calls over Twilio,
 Telnyx or any SIP trunk through jambonz. Built on
 [Pipecat](https://github.com/pipecat-ai/pipecat).
@@ -52,9 +56,54 @@ Telnyx or any SIP trunk through jambonz. Built on
   </tr>
   <tr>
     <td valign="top"><b>Any model</b><br>Claude, OpenAI, Gemini, Vertex AI, Azure OpenAI, Bedrock, Groq, Mistral, DeepSeek, Grok and more, or Ollama on your own hardware.</td>
-    <td valign="top"><b>Agents as code</b><br>Every agent is a folder of YAML and Markdown: reviewed in git, tested with <code>vk</code>, imported from Dialogflow CX.</td>
+    <td valign="top"><b>Agents as code</b><br>Every agent is a folder of YAML and Markdown: reviewed in git, tested with <code>vk</code>, exported back to Google's tools whenever you like.</td>
   </tr>
 </table>
+
+## Bring your Dialogflow CX and CX Agent Studio agents
+
+Export an agent from Google's console, drop the .zip on **New agent → Import**, and
+it opens in the builder: flows, pages, forms, routes, playbooks and tools carried
+over, with a report of anything to check before it takes calls. It works the
+other way too: **Export** writes any agent back as a Dialogflow CX package or a
+CX Agent Studio app.
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/import-done-dark.webp">
+  <img src="docs/images/import-done-light.webp" alt="Importing a Dialogflow CX export: what came over, and what to review">
+</picture>
+      <p><b>Import.</b> A Dialogflow CX package or a CX Agent Studio app (JSON or YAML). The conversion runs on your computer and never runs code from the export.</p>
+    </td>
+    <td width="50%" valign="top">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/import-builder-dark.webp">
+  <img src="docs/images/import-builder-light.webp" alt="The imported agent in the builder: flows, scripted pages and a playbook">
+</picture>
+      <p><b>Ready to edit.</b> Pages become scripted pages, playbooks become LLM steps, flows group them, and webhooks and OpenAPI tools become tools.</p>
+    </td>
+  </tr>
+</table>
+
+| From Dialogflow CX | Becomes |
+|---|---|
+| Flows and pages | Flows of [scripted pages](engine/README.md#scripted-pages-and-flows): entry messages said word for word |
+| Form parameters, entity types | Form fields with their types, choices and synonyms, patterns and keypad input |
+| Intent and condition routes, no-match handlers | Transfers the model decides, rules, and "no match" transfers |
+| Playbooks | LLM steps with their goal, guidelines and steps |
+| Webhooks, OpenAPI tools, data store tools | Tools (webhooks answer with a mock until connected) and local knowledge search |
+
+| From CX Agent Studio | Becomes |
+|---|---|
+| Root agent and child agents | A root agent with sub-agents and transfers both ways |
+| Global instruction, variables | Global instructions and context variables |
+| OpenAPI toolsets, Python tools, data stores | HTTP tools, tools with example answers, and local knowledge search |
+
+From the terminal: `vk import auto export.zip` and `vk export dfcx|ces agents/<name>`.
+The full mapping, both ways, and what doesn't carry over yet:
+[cli/README.md](cli/README.md#import).
 
 ## A quick tour
 
