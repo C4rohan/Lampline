@@ -5,7 +5,7 @@
   </picture>
 </p>
 
-<h3 align="center">A CX Agent Studio–style voice agent platform of your own.</h3>
+<h3 align="center">Open-source, self-hosted voice agents.</h3>
 
 <p align="center">
   Bring your agents over from <b>Dialogflow CX</b> and <b>CX Agent Studio</b>, or start fresh.<br>
@@ -290,6 +290,26 @@ CI runs on every push and pull request to `dev`, `qa` and `prod`:
 - a scan of every commit for keys and tokens (gitleaks)
 
 Issues and PRs welcome (against `dev`; [how dev, qa and prod work](docs/BRANCHES.md)). See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), the [code of conduct](CODE_OF_CONDUCT.md) and the [changelog](CHANGELOG.md).
+
+## 🙌 Credit and citation
+
+Lampline is created and maintained by **Rohan Salvi**. If you use it in a
+project, product, paper or talk, please credit "Lampline by Rohan Salvi" and
+link this repository. GitHub's **Cite this repository** button (from
+[CITATION.cff](CITATION.cff)) gives APA and BibTeX:
+
+```bibtex
+@software{salvi_lampline_2026,
+  author  = {Salvi, Rohan},
+  title   = {Lampline: open-source, self-hosted voice agents},
+  year    = {2026},
+  version = {0.1.0},
+  url     = {https://github.com/C4rohan/lampline}
+}
+```
+
+If you redistribute Lampline or build on it, the Apache-2.0 licence requires
+you to keep the [NOTICE](NOTICE) file, which carries this attribution.
 
 ## 📄 License
 

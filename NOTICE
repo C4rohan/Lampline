@@ -1,5 +1,11 @@
 Lampline
 Copyright 2026 Rohan Salvi
+https://github.com/C4rohan/lampline
+
+Created and maintained by Rohan Salvi. Under the Apache License 2.0
+(section 4(d)), anyone who redistributes Lampline or a work derived from it
+must keep this NOTICE file, or its attribution notices, with what they
+distribute.
 
 The engine in engine/ (vpengine) is this project's own code and uses Pipecat
 (https://github.com/pipecat-ai/pipecat, BSD-2-Clause, Copyright (c) Daily) as a
