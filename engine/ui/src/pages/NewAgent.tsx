@@ -18,7 +18,9 @@ const TEMPLATE_LABEL: Record<string, string> = {
   "bilingual-front-desk": "Bilingual front desk: English and Spanish",
 };
 
-export function NewAgentButton({ variant = "default" }: { variant?: "default" | "outline" }) {
+export function NewAgentButton({ variant = "default", tab = "describe", children }: {
+  variant?: "default" | "outline" | "ghost"; tab?: "describe" | "template" | "import"; children?: React.ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [template, setTemplate] = useState("");
@@ -28,13 +30,13 @@ export function NewAgentButton({ variant = "default" }: { variant?: "default" | 
   useEffect(() => { if (open) api<{ templates: string[] }>("GET", "/v1/templates").then((r) => setTemplates(r.templates)).catch(() => {}); }, [open]);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild><Button variant={variant}><Plus />New agent</Button></DialogTrigger>
+      <DialogTrigger asChild><Button variant={variant}>{children ?? <><Plus />New agent</>}</Button></DialogTrigger>
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>New agent</DialogTitle>
           <DialogDescription>Describe it, start from a template, or bring one over from Dialogflow CX or CX Agent Studio.</DialogDescription>
         </DialogHeader>
-        <Tabs defaultValue="describe" className="grid gap-4">
+        <Tabs defaultValue={tab} className="grid gap-4">
           <TabsList className="w-full">
             <TabsTrigger value="describe"><Sparkles />Describe it</TabsTrigger>
             <TabsTrigger value="template"><LayoutTemplate />Template or blank</TabsTrigger>

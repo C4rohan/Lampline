@@ -151,7 +151,7 @@ your computer, reads only the export, and never runs code from it.
 
 Not carried over yet, and listed in the report: other event handlers
 (no-input, custom events), webhooks on routes, conditional responses,
-generators, data stores and search tools, callbacks, guardrails, examples and
+generators, callbacks, guardrails, examples and
 evaluations, and languages other than the default. Values webhooks set
 (`$session.params.x` that no form collects) become context variables, blank or
 null, for you to fill in. Tools need their real address and secrets
