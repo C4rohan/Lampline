@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vpd-vk"
-version = "0.1.0"
+version = "0.2.0"
 description = "vk: build, check and test Lampline voice agents from the terminal, CI, or a coding agent"
 readme = "README.md"
 license = "Apache-2.0"

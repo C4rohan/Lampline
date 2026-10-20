@@ -307,7 +307,7 @@ link this repository. GitHub's **Cite this repository** button (from
   author  = {Salvi, Rohan},
   title   = {Lampline: open-source, self-hosted voice agents},
   year    = {2026},
-  version = {0.1.0},
+  version = {0.2.0},
   url     = {https://github.com/C4rohan/lampline}
 }
 ```
