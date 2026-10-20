@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AudioWaveform, BookOpen, Ear, KeyRound, Server, Tag, Braces, Mail, ShieldCheck, Workflow } from "lucide-react";
+import { AudioWaveform, BookOpen, Ear, Feather, History, KeyRound, Mic, Moon, Server, Tag, Timer, Braces, Mail, ShieldCheck, Workflow } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +12,10 @@ const MONO: Record<string, Mono> = {
   deepgram: { text: "Dg", hue: "#1f7a6d" },
   fish: { text: "Fi", hue: "#2f6fb0" },
   whisper: { icon: Ear, hue: "#2f8a5c" },
+  moonshine: { icon: Moon, hue: "#3b5fa8" },
+  parakeet: { icon: Feather, hue: "#5b8a3a" },
+  s2s: { icon: AudioWaveform, hue: "#a8451c" },
+  qwen3: { icon: Mic, hue: "#6a4bb0" },
   "whisper-server": { icon: Server, hue: "#55707f" },
   kokoro: { icon: AudioWaveform, hue: "#7457b0" },
   "kokoro-server": { icon: Server, hue: "#55707f" },
@@ -26,6 +30,8 @@ const MONO: Record<string, Mono> = {
   mcp: { icon: Workflow, hue: "#6b4fa8" },
   automation: { icon: ShieldCheck, hue: "#a8720c" },
   knowledge: { icon: BookOpen, hue: "#3f7a5a" },
+  history: { icon: History, hue: "#5a6b8c" },
+  turns: { icon: Timer, hue: "#2f6fb0" },
   // more model providers
   vertex: { text: "Vx", hue: "#3b6fd8" }, azure: { text: "Az", hue: "#2f6fb0" }, bedrock: { text: "Br", hue: "#b06a1f" },
   groq: { text: "Gq", hue: "#b4583a" }, mistral: { text: "Mi", hue: "#c2621d" }, deepseek: { text: "Ds", hue: "#3d5fb8" },

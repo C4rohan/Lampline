@@ -423,3 +423,22 @@ def test_an_export_never_decides_where_secrets_go(tmp_path):
     files["tools/Bike API/schema.yaml"] = BIKE_API.replace("https://api.harborbikes.example/v1", "https://{{secrets.HOST}}/v1")
     agent, report = convert(write_tree(tmp_path / "b", files), "dfcx")
     assert "secrets." not in json.dumps(agent.tools) and any("template in the host" in n or "secrets" in n for n in report.notes)
+
+
+def test_dfcx_live_agent_transfer_page(tmp_path):
+    """A page that transfers on entry becomes an End call step that hands the caller over."""
+    import io as _io, json as _json, zipfile as _zip
+    buf = _io.BytesIO()
+    with _zip.ZipFile(buf, "w") as z:
+        z.writestr("agent.json", _json.dumps({"displayName": "Desk", "defaultLanguageCode": "en", "timeZone": "America/New_York"}))
+        z.writestr("flows/Default Start Flow/Default Start Flow.json", _json.dumps({
+            "displayName": "Default Start Flow",
+            "transitionRoutes": [{"intent": "Default Welcome Intent", "targetPage": "Operator",
+                                  "triggerFulfillment": {"messages": [{"text": {"text": ["Hello."]}}]}}]}))
+        z.writestr("flows/Default Start Flow/pages/Operator.json", _json.dumps({
+            "displayName": "Operator",
+            "entryFulfillment": {"messages": [{"text": {"text": ["Connecting you now."]}},
+                                              {"telephonyTransferCall": {"phoneNumber": "+1 (555) 123-0000"}}]}}))
+    b, report = convert(buf.getvalue())
+    op = next(n for n in b.definition["nodes"] if n["data"]["name"] == "Operator")
+    assert op["type"] == "endCall" and op["data"]["transfer_to"] == "+15551230000" and op["data"]["say"] == "Connecting you now."

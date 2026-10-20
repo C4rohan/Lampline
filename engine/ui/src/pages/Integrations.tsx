@@ -56,6 +56,7 @@ const CONTACT_CENTERS: { key: string; name: string; tag: string; blurb: string; 
     how: "Planned: Twilio numbers already work; this adds transfer into Flex TaskRouter queues with the call's details." },
 ];
 
+type Moon = { installed: boolean; ready: boolean; state: string; message?: string; progress?: number | null; size_mb: number; model: string };
 type Builtin = { installed: boolean; state: string; message?: string; progress?: number | null; size_mb: number; whisper_ready: boolean; kokoro_ready: boolean; whisper_model: string };
 type LocalSpeech = { available: boolean; docker: boolean; state: string; message?: string; seconds?: number; servers: { whisper: boolean; kokoro: boolean }; log?: string[] };
 
@@ -89,6 +90,61 @@ function BuiltinPanel({ onReady }: { onReady: () => void }) {
                 try { setData(await api<Builtin>("POST", "/v1/builtin-speech/download")); } catch (e) { setData({ ...st, state: "error", message: (e as Error).message }); }
                 kick();
               }}>Download models (about {st.size_mb} MB, once)</Button>}
+        </span>
+      </div>
+      {busy && st.progress != null && <div className="h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full bg-lamp transition-[width]" style={{ width: `${Math.round(st.progress * 100)}%` }} /></div>}
+      {(busy || st.state === "error") && st.message && <p className={cn("text-[13px]", st.state === "error" ? "text-bad" : "text-muted-foreground")}>{st.message}</p>}
+    </Panel>
+  );
+}
+
+function ParakeetPanel({ onReady }: { onReady: () => void }) {
+  const { data: st, setData, kick } = usePoll<Moon>("/v1/parakeet", (s) => s.state === "downloading");
+  const [was, setWas] = useState("");
+  useEffect(() => { if (st) { if (was === "downloading" && st.state !== "downloading") onReady(); setWas(st.state); } }, [st]); // eslint-disable-line
+  const lead = "Free and private: runs inside the engine. Transcribes each turn when the caller stops, in about a third of a second on a small CPU.";
+  if (!st) return <Panel lead={lead}><span className="text-sm text-muted-foreground">Checking…</span></Panel>;
+  const busy = st.state === "downloading";
+  return (
+    <Panel lead={lead}>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+        <span className="inline-flex items-center gap-2 text-sm"><Lamp on={st.ready} warn={busy} />Parakeet ({st.model.replace("parakeet-tdt-0.6b-", "")})
+          <span className="text-muted-foreground">{st.ready ? "ready" : busy ? "downloading" : "not downloaded"}</span></span>
+        <span className="ml-auto">
+          {!st.installed ? <span className="text-sm text-bad">onnx-asr isn't installed in this engine.</span>
+            : busy ? <Button size="sm" variant="outline" disabled>Downloading…</Button>
+            : st.ready ? <Badge variant="ok">Ready</Badge>
+            : <Button size="sm" variant="lamp" onClick={async () => {
+                try { setData(await api<Moon>("POST", "/v1/parakeet/download")); } catch (e) { setData({ ...st, state: "error", message: (e as Error).message }); }
+                kick();
+              }}>Download model (about {st.size_mb} MB, once)</Button>}
+        </span>
+      </div>
+      {(busy || st.state === "error") && st.message && <p className={cn("text-[13px]", st.state === "error" ? "text-bad" : "text-muted-foreground")}>{st.message}</p>}
+    </Panel>
+  );
+}
+
+function MoonshinePanel({ onReady }: { onReady: () => void }) {
+  const { data: st, setData, kick } = usePoll<Moon>("/v1/moonshine", (s) => s.state === "downloading");
+  const [was, setWas] = useState("");
+  useEffect(() => { if (st) { if (was === "downloading" && st.state !== "downloading") onReady(); setWas(st.state); } }, [st]); // eslint-disable-line
+  const lead = "Free and private: runs inside the engine and transcribes while the caller talks, so replies start sooner. English only.";
+  if (!st) return <Panel lead={lead}><span className="text-sm text-muted-foreground">Checking…</span></Panel>;
+  const busy = st.state === "downloading";
+  return (
+    <Panel lead={lead}>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+        <span className="inline-flex items-center gap-2 text-sm"><Lamp on={st.ready} warn={busy} />Moonshine ({st.model.replace("-streaming", "")})
+          <span className="text-muted-foreground">{st.ready ? "ready" : busy ? "downloading" : "not downloaded"}</span></span>
+        <span className="ml-auto">
+          {!st.installed ? <span className="text-sm text-bad">Not available on this computer: it needs Linux or an Apple-silicon Mac on macOS 15.</span>
+            : busy ? <Button size="sm" variant="outline" disabled>Downloading…</Button>
+            : st.ready ? <Badge variant="ok">Ready</Badge>
+            : <Button size="sm" variant="lamp" onClick={async () => {
+                try { setData(await api<Moon>("POST", "/v1/moonshine/download")); } catch (e) { setData({ ...st, state: "error", message: (e as Error).message }); }
+                kick();
+              }}>Download model (about {st.size_mb} MB, once)</Button>}
         </span>
       </div>
       {busy && st.progress != null && <div className="h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full bg-lamp transition-[width]" style={{ width: `${Math.round(st.progress * 100)}%` }} /></div>}
@@ -204,7 +260,7 @@ const SECTIONS: { id: Category; title: string; lead: string; chooser?: "llm" | "
   { id: "messaging", title: "Messaging and email", lead: "Let people chat with your agents, and let agents send messages." },
   { id: "apps", title: "Apps and tool servers", lead: "Calendars, mail and MCP servers your agents' tools can use." },
   { id: "automation", title: "Automation", lead: "Outbound calls and messages from triggers, with limits." },
-  { id: "more", title: "Tools and workspace", lead: "Keys your agents' tools send, knowledge search, and how this app is named." },
+  { id: "more", title: "Tools and workspace", lead: "Keys your agents' tools send, call history, knowledge search, and how this app is named." },
 ];
 const MODEL_TILES = 6;
 const USE_LABEL = { llm: "Use for the model", stt: "Use for listening", tts: "Use for speaking" };
@@ -285,6 +341,8 @@ function Tile({ p, inUse, ready, onOpen }: { p: Provider; inUse: boolean; ready:
 export function Integrations() {
   const { data: settings, error, setData, reload } = useLoad(() => api<Settings>("GET", "/v1/settings"));
   const { data: builtin } = useLoad(() => api<{ whisper_ready: boolean; kokoro_ready: boolean }>("GET", "/v1/builtin-speech").catch(() => null));
+  const { data: moon } = useLoad(() => api<Moon>("GET", "/v1/moonshine").catch(() => null));
+  const { data: para } = useLoad(() => api<Moon>("GET", "/v1/parakeet").catch(() => null));
   const { data: secrets } = useLoad(() => api<{ secrets: unknown[] }>("GET", "/v1/secrets").catch(() => ({ secrets: [] })));
   const { refresh, health } = useApp();
   const [open, setOpen] = useState<string | null>(null);
@@ -316,6 +374,25 @@ export function Integrations() {
       { key: "stt-whisper", icon: "whisper", name: "Whisper", tag: "On this computer · free", category: "listening", chooser: "stt", value: "whisper", check: "whisper",
         blurb: "Runs inside the engine. Private, no account, downloads once.", configured: !!builtin?.whisper_ready,
         groups: [node(<BuiltinPanel onReady={afterDownload} />), f("local_whisper_model", { labels: WHISPER_SIZES, hint: "Save after changing it, then download." })] },
+      { key: "stt-moonshine", icon: "moonshine", name: "Moonshine", tag: "On this computer · free · streaming", category: "listening", chooser: "stt", value: "moonshine", check: "moonshine",
+        blurb: "Transcribes while the caller talks, so the agent answers sooner. English.", configured: !!moon?.ready,
+        groups: [node(<MoonshinePanel onReady={afterDownload} />),
+          f("moonshine_model", { labels: { "small-streaming": "Small: more accurate (140 MB)", "tiny-streaming": "Tiny: fastest, lightest on the CPU (46 MB)" },
+            hint: "Save after changing it, then download. Each call uses about half a CPU core while the caller talks (tiny: a third)." })] },
+      { key: "s2s", icon: "s2s", name: "Speech to speech", tag: "Experimental", category: "listening",
+        label: fl.voice_mode?.value === "speech-to-speech" ? "On" : "Off", configured: fl.voice_mode?.value === "speech-to-speech",
+        blurb: "One model that listens and talks: no wait for a transcript or a voice, and it hears how things are said. OpenAI Realtime, or any server that speaks its protocol.",
+        groups: [f("voice_mode", { labels: { chain: "Off: speech to text, the model, then a voice (works with every agent)", "speech-to-speech": "On, for voice calls (experimental)" } }),
+          node(<p className="text-[12.5px] text-muted-foreground">Steps, transfers and tools work as before. Agents with scripted pages keep the normal chain, and lines the agent must say word for word are spoken by the model, so the wording can differ slightly. Collecting details still uses your text model.</p>),
+          f("realtime_url", { placeholder: "wss://api.openai.com/v1/realtime", hint: "OpenAI's server, or your own one that speaks the Realtime protocol." }),
+          row({ field: "realtime_model", opts: { placeholder: "gpt-realtime" } }, { field: "realtime_voice", opts: { placeholder: "marin", hint: "For OpenAI: marin, cedar, alloy, …" } }),
+          row({ field: "realtime_key", opts: { hint: "Leave empty to use your OpenAI key." } },
+              { field: "realtime_turns", opts: { labels: { semantic: "The model judges when the caller is done", pause: "A fixed pause (Turn taking setting)" } } })] },
+      { key: "stt-parakeet", icon: "parakeet", name: "Parakeet", tag: "On this computer · free · most accurate", category: "listening", chooser: "stt", value: "parakeet", check: "parakeet",
+        blurb: "NVIDIA's Parakeet TDT: the most accurate open model here, and faster than Whisper on a CPU.", configured: !!para?.ready,
+        groups: [node(<ParakeetPanel onReady={afterDownload} />),
+          f("parakeet_model", { labels: { "parakeet-tdt-0.6b-v2": "v2: English (661 MB)", "parakeet-tdt-0.6b-v3": "v3: 25 European languages, detected per turn (670 MB)" },
+            hint: "Save after changing it, then download." })] },
       { key: "stt-deepgram", icon: "deepgram", name: "Deepgram", tag: "Cloud", category: "listening", chooser: "stt", value: "deepgram", check: "deepgram",
         blurb: "Fast streaming speech to text. New accounts get free credit.", configured: set("deepgram_key"),
         groups: [f("deepgram_key", { hint: "New Deepgram accounts get free credit. The same key works for speaking." }), f("stt_model")] },
@@ -326,6 +403,14 @@ export function Integrations() {
       { key: "stt-whisper-server", icon: "whisper-server", name: "Whisper server", tag: "Advanced · Docker", category: "listening", chooser: "stt", value: "whisper-server", check: "whisper-server",
         blurb: "Whisper in a separate container, or any compatible server.", configured: false,
         groups: [node(<LocalSpeechPanel lead="Runs Whisper in Docker. Most people want Whisper on this computer instead." />), row({ field: "whisper_url" }, { field: "whisper_model" })] },
+      { key: "turns", icon: "turns", name: "Turn taking", category: "listening", configured: true,
+        tag: fl.turn_detection?.value === "pause" ? "Fixed pause" : "Smart turn", label: fl.turn_detection?.value === "pause" ? "Fixed pause" : "Smart turn",
+        blurb: "How a call decides the caller has finished speaking, so the agent answers without cutting them off.",
+        groups: [f("turn_detection", { labels: { smart: "Smart turn: listens to how the caller sounds, on this computer (recommended)", pause: "Fixed pause: answers after a set silence" } }),
+          f("turn_pause", { placeholder: fl.turn_detection?.value === "pause" ? "0.8" : "3",
+            hint: fl.turn_detection?.value === "pause"
+              ? "The silence that ends the caller's turn. Shorter replies faster but may cut people off."
+              : "The longest the agent waits when the caller pauses mid-thought, before answering anyway." })] },
       { key: "tts-kokoro", icon: "kokoro", name: "Kokoro", tag: "On this computer · free", category: "speaking", chooser: "tts", value: "kokoro", check: "kokoro",
         blurb: "Natural voices that run inside the engine. Private and free.", configured: !!builtin?.kokoro_ready,
         groups: [node(<BuiltinPanel onReady={afterDownload} />), f("kokoro_voice", { hint: "For example af_heart, af_bella, am_adam or bf_emma." })] },
@@ -348,6 +433,13 @@ export function Integrations() {
       { key: "tts-kokoro-server", icon: "kokoro-server", name: "Kokoro server", tag: "Advanced · Docker", category: "speaking", chooser: "tts", value: "kokoro-server", check: "kokoro-server",
         blurb: "Kokoro in a separate container, or any compatible server.", configured: false,
         groups: [node(<LocalSpeechPanel lead="Runs Kokoro in Docker. Most people want Kokoro on this computer instead." />), row({ field: "kokoro_url" }, { field: "kokoro_voice", opts: { hint: "For example af_heart, af_bella or am_adam." } })] },
+      { key: "tts-qwen3", icon: "qwen3", name: "Qwen3-TTS", tag: "Your GPU server · natural voices", category: "speaking", chooser: "tts", value: "qwen3-tts", check: "qwen3-tts",
+        blurb: "Qwen's open voices, more natural than Kokoro, served by vLLM-Omni on a machine with an NVIDIA GPU.", configured: false,
+        groups: [node(<p className="text-[12.5px] text-muted-foreground">On the GPU machine: <code className="font-mono">vllm serve Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice --omni --port 8091 --trust-remote-code</code>. On a CPU it runs slower than real time, so it isn't offered on this computer.</p>),
+          f("qwen3_tts_url", { placeholder: "http://gpu-box:8091/v1" }),
+          row({ field: "qwen3_tts_voice", opts: { hint: "vivian, serena, ryan, aiden, dylan, eric, ono_anna, sohee or uncle_fu." } },
+              { field: "qwen3_tts_language", opts: { placeholder: "Auto", hint: "Auto, or English, Spanish, Chinese, …" } }),
+          f("qwen3_tts_model", { placeholder: "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice", hint: "The 1.7B model sounds a little better and needs more GPU." })] },
       { key: "twilio", icon: "twilio", name: "Twilio", tag: "Phone numbers", category: "phone", configured: set("twilio_auth_token"),
         blurb: "Answer calls to a Twilio number. Checks every webhook against your auth token.",
         groups: [f("twilio_auth_token", { hint: "Twilio Console → Account info → Auth token." }), node(<PhoneLink />),
@@ -359,7 +451,15 @@ export function Integrations() {
           { details: "Outbound calls (triggers)", items: [row({ field: "telnyx_texml_app_id" }, { field: "telnyx_from_number", opts: { placeholder: "+15551234567" } })] }] },
       { key: "jambonz", icon: "jambonz", name: "jambonz", tag: "SIP trunks, phone systems, SBCs", category: "phone", configured: set("jambonz_webhook_secret"),
         blurb: "Answer calls from any SIP trunk, PBX or session border controller through jambonz, open source and self-hostable.",
-        groups: [f("jambonz_webhook_secret", { hint: "In jambonz: Account → Webhook secret. Used to check that calls really come from your jambonz." }), node(<PhoneLink />)] },
+        groups: [f("jambonz_webhook_secret", { hint: "In jambonz: Account → Webhook secret. Used to check that calls really come from your jambonz." }),
+          f("jambonz_sample_rate", { labels: { "8000": "Phone audio, 8 kHz (works with every trunk)", "16000": "HD voice, 16 kHz (G.722, Opus or wideband SIP)" },
+            hint: "HD voice is clearer for listening. Use it when your trunk or phone system carries wideband audio; otherwise it only costs bandwidth." }),
+          node(<PhoneLink />),
+          { details: "Outbound calls (triggers)", items: [
+            f("jambonz_api_url", { placeholder: "https://api.jambonz.cloud", hint: "jambonz.cloud, or your own jambonz's API server." }),
+            row({ field: "jambonz_account_sid" }, { field: "jambonz_application_sid", opts: { hint: "The application whose calling webhook points here." } }),
+            row({ field: "jambonz_api_key", opts: { hint: "Account → API keys." } }, { field: "jambonz_from_number", opts: { placeholder: "+15551234567" } }),
+            node(<p className="text-[12.5px] text-muted-foreground">Calls go out through your carrier in jambonz. They need the engine's public address and Outbound turned on under Automation.</p>)] }] },
       ...CONTACT_CENTERS.map<Provider>((c) => ({ key: c.key, icon: c.key, name: c.name, tag: c.tag, category: "contact", blurb: c.blurb,
         configured: false, footer: false, label: "Coming soon",
         body: <Notice><Info className="mt-0.5 size-4 shrink-0" /><span>{c.how} {c.key === "twilio-flex"
@@ -405,6 +505,14 @@ export function Integrations() {
           row({ field: "quiet_hours", opts: { placeholder: "21:00-08:00", hint: "No outbound calls or messages between these times." } }, { field: "outbound_daily_cap", opts: { placeholder: "50", hint: "Per agent, per day." } }),
           f("timezone", { placeholder: "this computer's", hint: "Used for schedules, quiet hours and calendars. Like America/New_York." }),
           node(<AutomationActivity />)] },
+      { key: "history", icon: "history", name: "Call history", category: "more",
+        tag: fl.call_history?.value === "off" ? "Off" : `${fl.call_history_days?.value || "30"} days`,
+        configured: true, label: fl.call_history?.value === "off" ? "Off" : fl.call_recordings?.value === "on" ? "Transcripts and recordings" : "Transcripts",
+        blurb: "Finished calls and chats on the Calls page: transcript, collected details and how each ended. Kept on this computer only.",
+        groups: [f("call_history", { labels: { on: "On", off: "Off: keep nothing" } }),
+          row({ field: "call_history_days", opts: { placeholder: "30", hint: "Older calls (and their recordings) are deleted." } },
+              { field: "call_recordings", opts: { labels: { off: "Off", on: "On: stereo WAV, caller left, agent right" }, hint: "Voice calls only. Tell callers if you record them; the rules depend on where they are." } }),
+          node(<p className="text-[12.5px] text-muted-foreground">Use synthetic test data. Real callers' personal or health details belong only on a machine set up to protect them.</p>)] },
       { key: "knowledge", icon: "knowledge", name: "Knowledge search", category: "more",
         tag: fl.embeddings?.value === "off" ? "Keywords only" : fl.embeddings?.value === "ollama" ? "Ollama embeddings" : "On this computer",
         configured: true, label: fl.embeddings?.value === "off" ? "Keywords only" : "Keywords and meaning",
@@ -418,7 +526,7 @@ export function Integrations() {
       { key: "workspace", icon: "workspace", name: "Workspace", tag: health?.brand || "", category: "more", configured: true,
         blurb: "The name shown across this app.", groups: [f("brand_name")] },
     ];
-  }, [settings, builtin, secrets, voicePick, health?.brand]); // eslint-disable-line
+  }, [settings, builtin, moon, secrets, voicePick, health?.brand]); // eslint-disable-line
 
   if (error) return <Page title="Integrations"><p className="text-sm text-bad">{error}</p></Page>;
   if (!settings) return <Page title="Integrations"><p className="text-sm text-muted-foreground">Loading…</p></Page>;

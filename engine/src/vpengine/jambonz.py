@@ -9,7 +9,9 @@ jambonz application points its "calling webhook" here:
     token -> the agent talks over that websocket (linear 16-bit PCM both ways) -> when
     the agent reaches an end step we send `disconnect` and the call hangs up.
 
-Only inbound calls for now; jambonz's REST API can place outbound calls later.
+Outbound calls go through jambonz's REST API (POST /v1/Accounts/{sid}/Calls) with
+the jambonz application, so the same calling webhook answers them; the call's
+`tag` says which agent and context to use, and comes back as `customerData`.
 """
 
 from __future__ import annotations
@@ -34,9 +36,27 @@ from pipecat.frames.frames import (
 from pipecat.processors.frame_processor import FrameProcessorSetup
 from pipecat.serializers.base_serializer import FrameSerializer
 
+TAG_AGENT = "lampline_agent"
+TAG_CONTEXT = "lampline_ctx"
 TOLERANCE = 300                      # seconds, the same as jambonz's own SDK
 SAMPLE_RATE = 8000                   # phone audio; jambonz resamples whatever the trunk uses
+RATES = (8000, 16000)                # 16000: HD voice (G.722, Opus or wideband SIP), clearer for listening
 SUBPROTOCOLS = ("audio.jambonz.org", "audio.drachtio.org")
+
+
+def outbound_call(application_sid: str, from_number: str, to: str, agent: str, ctx: str) -> dict:
+    """The REST API body that places a call to `to` through the jambonz application (its webhooks
+    answer it, as for inbound calls) and runs it with this engine's agent."""
+    return {"application_sid": application_sid, "from": from_number, "to": {"type": "phone", "number": to},
+            "tag": {TAG_AGENT: agent, TAG_CONTEXT: ctx}}
+
+
+def outbound_tag(call: dict) -> tuple[str, str]:
+    """(agent, context token) from a call we placed, or ("", "")."""
+    data = call.get("customerData") or call.get("customer_data") or {}
+    if not isinstance(data, dict):
+        return "", ""
+    return str(data.get(TAG_AGENT) or ""), str(data.get(TAG_CONTEXT) or "")
 
 
 def valid_signature(secret: str, header: str, body: bytes, *, now: float | None = None) -> bool:
@@ -70,12 +90,13 @@ def valid_signature(secret: str, header: str, body: bytes, *, now: float | None 
     return False
 
 
-def listen_verbs(stream_url: str, token: str, action_url: str) -> list[dict[str, Any]]:
+def listen_verbs(stream_url: str, token: str, action_url: str, sample_rate: int = SAMPLE_RATE) -> list[dict[str, Any]]:
     """Stream the call to us (both ways, as raw PCM) and hang up when the stream ends."""
+    rate = sample_rate if sample_rate in RATES else SAMPLE_RATE
     return [
         {"verb": "listen", "url": f"{stream_url}?t={token}", "actionHook": action_url,
-         "sampleRate": SAMPLE_RATE, "mixType": "mono", "passDtmf": True,
-         "bidirectionalAudio": {"enabled": True, "streaming": True, "sampleRate": SAMPLE_RATE},
+         "sampleRate": rate, "mixType": "mono", "passDtmf": True,
+         "bidirectionalAudio": {"enabled": True, "streaming": True, "sampleRate": rate},
          "metadata": {"t": token}},
         {"verb": "hangup"},
     ]

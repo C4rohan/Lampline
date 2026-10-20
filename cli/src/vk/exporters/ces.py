@@ -179,6 +179,9 @@ def build(agent: Agent) -> tuple[dict[str, str], Report]:
 
     for n in (x for x in plan.steps.values() if x.type in ("trigger", "webhook", "qa")):
         report.note(f"{n.type} {n.name}: not part of a CX Agent Studio app; set it up there separately.")
+    for n in (x for x in plan.steps.values() if x.type == "endCall" and x.data.get("transfer_to")):
+        report.note(f"step {n.name}: hands the caller to {n.data['transfer_to']}; in CX Agent Studio, set up that "
+                    "transfer on your telephony integration (the agent's end_session ends the conversation).")
     if any(str(v.get("pre_call_fetch_url") or "") for v in [plan.start.data]):
         report.note("Start fetched data before the call; recreate that with a before-agent callback or a tool.")
     report.counts.update({"agents": len(steps), "toolsets": len(set(toolset_of.values())), "python tools": len(stubs),

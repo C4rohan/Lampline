@@ -27,6 +27,18 @@ installs kokoro-onnx and, through it, phonemizer and espeak-ng (GPL-3.0). They
 are installed from PyPI on your machine and not redistributed here; if you ship
 a package or container image that includes them, follow their licence terms.
 
+Moonshine speech to text (https://github.com/moonshine-ai/moonshine, MIT,
+Copyright (c) 2025 Moonshine AI) is installed from PyPI as the optional
+"moonshine" extra (moonshine-voice), and its English models download from
+Moonshine's model hub at run time; neither is redistributed here.
+
+Parakeet speech to text runs through onnx-asr (https://github.com/istupakov/onnx-asr,
+MIT), installed from PyPI. Its models are NVIDIA's Parakeet TDT 0.6B v2 and v3
+(https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2, CC-BY-4.0, Copyright NVIDIA)
+in istupakov's ONNX exports, downloaded from Hugging Face at run time and not
+redistributed here. Qwen3-TTS runs on a server you set up; nothing of it is
+included here.
+
 The engine reads PDFs with pypdf (BSD-3-Clause), installed from PyPI. For
 knowledge search it can download sentence-transformers/all-MiniLM-L6-v2
 (Apache-2.0) from Hugging Face at run time; the model is not redistributed here.

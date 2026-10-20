@@ -268,3 +268,33 @@ def test_nothing_from_the_agent_becomes_code_or_escapes_the_folder(tmp_path):
         zip_bytes({"a/../../x": "y"})
     with pytest.raises(ExportError):
         safe_rel("/etc/passwd")
+
+
+def test_dfcx_transfers_to_a_person():
+    a = template("front-desk")
+    staff = next(n for n in a.definition["nodes"] if n["data"]["name"] == "Transfer to staff")
+    staff["data"].update({"transfer_to": "+15551230000", "transfer_details": ["caller_name"]})
+    files, report = build(a, "dfcx")
+    flow = json.loads(files["flows/Transfer to staff/Transfer to staff.json"])
+    msgs = flow["transitionRoutes"][0]["triggerFulfillment"]["messages"]
+    assert {"telephonyTransferCall": {"phoneNumber": "+15551230000"}} in msgs
+    assert any("${FLOW:Transfer to staff}" in json.dumps(json.loads(v)) for k, v in files.items() if k.startswith("playbooks/"))
+    assert any("SIP headers" in n for n in report.notes)
+    b, _ = convert(export(a, "dfcx")[0])
+    back = next(n for n in b.definition["nodes"] if n["data"]["name"] == "Transfer to staff")
+    assert back["type"] == "endCall" and back["data"]["transfer_to"] == "+15551230000"
+    assert [f.message for f in lint(b) if f.severity == "error"] == []
+
+
+def test_dfcx_scripted_transfer_round_trip():
+    a = scripted_agent()
+    person = next(n for n in a.definition["nodes"] if n["id"] == "person")
+    person["data"]["transfer_to"] = "sip:desk@pbx.example.test"
+    files, _ = build(a, "dfcx")
+    page = json.loads(files["flows/Booking/pages/Intake.json"])
+    msgs = [m for r in page["transitionRoutes"] for m in (r.get("triggerFulfillment") or {}).get("messages", [])]
+    assert {"telephonyTransferCall": {"sipUri": "sip:desk@pbx.example.test"}} in msgs
+    b, _ = convert(export(a, "dfcx")[0])
+    ends = [n for n in b.definition["nodes"] if n["type"] == "endCall" and n["data"].get("transfer_to")]
+    assert [n["data"]["transfer_to"] for n in ends] == ["sip:desk@pbx.example.test"]
+    assert [f.message for f in lint(b) if f.severity == "error"] == []

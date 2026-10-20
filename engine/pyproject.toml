@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vpengine"
-version = "0.1.0"
+version = "0.2.0"
 description = "Voice agent engine for agent.yaml folders, built on Pipecat"
 readme = "README.md"
 license = "Apache-2.0"
@@ -17,10 +17,15 @@ dependencies = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
     "pypdf>=6.0.0,<7",                               # reading PDFs into knowledge bases (BSD-3-Clause, pure Python)
+    "onnx-asr==0.12.0",                              # Parakeet speech to text on this computer (MIT; uses the onnxruntime Kokoro already needs)
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-asyncio>=0.23", "httpx>=0.27"]
+# Moonshine streaming speech to text (MIT). Pinned: we read its model manifest. Its wheels cover Linux
+# (recent glibc) and Apple-silicon Macs on macOS 15+, so it's optional: the install scripts try it and
+# carry on without it, and the Integrations page says when it isn't available.
+moonshine = ["moonshine-voice==0.1.5"]
 
 [project.scripts]
 vpengine = "vpengine.server:main"

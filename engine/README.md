@@ -278,8 +278,9 @@ Integrations → Automation. Then they're kept out of quiet hours (default
 21:00 to 08:00), to a daily limit per agent (default 50), and to one contact
 per person per agent every 10 minutes; only contacts that went out count.
 Every attempt is logged (recipients masked) under Automation → Recent
-activity. Outbound calls need Twilio (account SID, auth token and a number) or
-Telnyx (API key, TeXML application and a number) and the public address.
+activity. Outbound calls need Twilio (account SID, auth token and a number),
+Telnyx (API key, TeXML application and a number) or jambonz (API key, account
+and application SIDs and a number), and the public address.
 WhatsApp only allows approved templates more than 24 hours after a person last
 wrote, so reminders outside that window need a template on Meta's side.
 
@@ -367,6 +368,7 @@ how well an agent follows its steps still depends on the model.
 | Deepgram | `DEEPGRAM_API_KEY`; new accounts get free credit |
 | Fish Audio | `FISH_API_KEY` (the same key as speaking); each caller utterance goes to Fish's speech-to-text (`transcribe-1`, $0.36 per audio hour on Fish's price list) |
 | Whisper on this computer (free) | runs inside the engine (faster-whisper, int8 on the CPU); no Docker, no key |
+| Moonshine on this computer (free, streaming) | runs inside the engine and transcribes while the caller talks, so the text is ready moments after they stop; English; Linux or an Apple-silicon Mac on macOS 15 ([details](#moonshine-streaming-speech-to-text)) |
 | Whisper server (advanced) | any OpenAI-style transcription server, e.g. Speaches in Docker |
 
 | Speaking | |
@@ -470,14 +472,21 @@ one container, built from the `Dockerfile` at the top of the repo:
 | `VPE_LLM_MODEL` | the provider's default | |
 | `VPE_LLM_BASE_URL`, `OPENAI_API_KEY` | | for `VPE_LLM=openai` (a local server needs only the URL) |
 | `VPE_LLM_TEMPERATURE` | provider default | |
-| `VPE_STT` / `VPE_TTS` | `deepgram` / `deepgram` | `whisper`, `whisper-server`; `fish`, `kokoro`, `kokoro-server` |
+| `VPE_STT` / `VPE_TTS` | `deepgram` / `deepgram` | `whisper`, `moonshine`, `parakeet`, `whisper-server`; `fish`, `kokoro`, `kokoro-server`, `qwen3-tts` |
 | `VPE_LOCAL_WHISPER_MODEL` | `base.en` | built-in Whisper: `tiny.en`, `base.en`, `small.en`, `distil-small.en` |
+| `VPE_MOONSHINE_MODEL` | `small-streaming` | `tiny-streaming` for the fastest replies and the lightest CPU load |
+| `VPE_VOICE_MODE` | `chain` | `speech-to-speech`: one model listens and talks (experimental) |
+| `VPE_REALTIME_URL`, `VPE_REALTIME_MODEL`, `VPE_REALTIME_VOICE`, `VPE_REALTIME_API_KEY`, `VPE_REALTIME_TURNS` | `wss://api.openai.com/v1/realtime`, `gpt-realtime`, `marin`, the OpenAI key, `semantic` | the speech-to-speech server |
+| `VPE_PARAKEET_MODEL` | `parakeet-tdt-0.6b-v2` | `parakeet-tdt-0.6b-v3` for 25 European languages |
+| `VPE_JAMBONZ_SAMPLE_RATE` | `8000` | `16000` for HD voice on SIP calls through jambonz |
+| `VPE_TURN_DETECTION` / `VPE_TURN_PAUSE` | `smart` / `3` (`0.8` with `pause`) | how a call decides the caller has finished: [Turn taking](#turn-taking-and-response-time) |
 | `VPE_MODEL_CACHE` | `~/.cache/vpengine` | where built-in models download |
 | `DEEPGRAM_API_KEY` | | voice calls; text chat works without it |
 | `VPE_STT_MODEL` / `VPE_TTS_VOICE` | `nova-3-general` / `aura-2-helena-en` | Deepgram |
 | `VPE_WHISPER_URL` / `VPE_WHISPER_MODEL` | `http://localhost:8001/v1` / `Systran/faster-whisper-small` | Whisper server |
 | `FISH_API_KEY`, `VPE_FISH_VOICE`, `VPE_FISH_MODEL` | model `s2.1-pro-free` | voice ID from fish.audio; empty uses their default |
 | `VPE_KOKORO_URL` / `VPE_KOKORO_VOICE` | `http://localhost:8880/v1` / `af_heart` | the voice is used by built-in Kokoro too |
+| `VPE_QWEN3_TTS_URL`, `VPE_QWEN3_TTS_VOICE`, `VPE_QWEN3_TTS_LANGUAGE`, `VPE_QWEN3_TTS_MODEL` | `http://localhost:8091/v1`, `vivian`, `Auto`, `Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice` | a vLLM-Omni server |
 | `VPE_API_KEY` | | require `X-API-Key` on `/v1/*` (Twilio's routes use their own checks); required to listen beyond 127.0.0.1 or with `VPE_PUBLIC_URL` |
 | `VPE_PUBLIC_URL` | | the https address Twilio, Telnyx or jambonz reach the engine at (`--tunnel` sets it) |
 | `TWILIO_AUTH_TOKEN` | | checks Twilio's webhook signatures and hangs up finished calls |
@@ -488,8 +497,13 @@ one container, built from the `Dockerfile` at the top of the repo:
 | `VPE_ICE_SERVERS` | none | comma-separated STUN/TURN URLs, only needed when the browser isn't on the same machine or network |
 | `BRAND_NAME` | Lampline | the workspace name |
 | `VPE_SETTINGS_FILE` | `~/.config/vpengine/settings.json` | where Integrations saves |
+| `VPE_REMOTE_EDITING` | off | `on` lets keys save agents, data and knowledge through an HTTPS proxy ([docs/HTTPS.md](../docs/HTTPS.md)) |
+| `VPE_CALL_HISTORY` | `on` | keep finished calls on the Calls page |
+| `VPE_CALL_HISTORY_DAYS` | 30 | then they're deleted, recordings included |
+| `VPE_CALL_RECORDINGS` | `off` | `on` saves voice calls as stereo WAV |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_FROM_NUMBER` | | outbound calls through Twilio |
 | `TELNYX_TEXML_APP_ID`, `TELNYX_FROM_NUMBER` | | outbound calls through Telnyx |
+| `JAMBONZ_API_URL`, `JAMBONZ_ACCOUNT_SID`, `JAMBONZ_API_KEY`, `JAMBONZ_APPLICATION_SID`, `JAMBONZ_FROM_NUMBER` | `https://api.jambonz.cloud` | outbound calls over SIP through jambonz |
 | `TELEGRAM_BOT_TOKEN` | | Telegram |
 | `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN` | | WhatsApp Cloud API |
 | `VPE_EMAIL_PROVIDER` | `smtp` | or `gmail` |
@@ -548,11 +562,202 @@ from your own carrier or PBX reach an agent without Twilio or Telnyx.
 5. Call the number.
 
 The engine checks the `Jambonz-Signature` on every webhook and answers with a
-`listen` verb: the call's audio streams to `/v1/jambonz/stream` as 8 kHz
-linear PCM in both directions, with keypad presses passed through and a
+`listen` verb: the call's audio streams to `/v1/jambonz/stream` as linear PCM
+in both directions (8 kHz phone audio, or 16 kHz HD voice when you choose it
+on the jambonz tile or set `VPE_JAMBONZ_SAMPLE_RATE=16000`; HD voice helps
+listening when your trunk carries G.722, Opus or wideband SIP), with keypad presses passed through and a
 one-time token in the stream's address. When the caller talks over the agent
 the engine sends `killAudio`; when the agent ends the call it sends
-`disconnect` and jambonz hangs up. Inbound calls only for now.
+`disconnect` and jambonz hangs up, or dials the person the step transfers to.
+
+Outbound calls (schedules and the API trigger) go out the same way, through
+your own carrier: on the jambonz tile, under "Outbound calls", add the API
+address (`https://api.jambonz.cloud` or your own jambonz), the account SID, an
+API key (Account → API keys), the application's SID and the number calls come
+from. The engine asks jambonz's REST API to place the call through that
+application, and tags it with the agent and the call's details; when the
+person answers, the application's calling webhook runs the agent as it does
+for inbound calls. Outbound has the same limits as Twilio and Telnyx: turned
+on under Automation, quiet hours, a daily cap, one contact per person every 10
+minutes.
+
+### Transfer to a person
+
+An End call step can hand the caller to a person instead of hanging up. In the
+builder, open the step and fill in **Transfer to a person**: a phone number
+(`+15551234567`) or a SIP address on your phone system or contact center
+(`sip:desk@pbx.example.com`); `{{variables}}` work, so a lookup can pick the
+desk. The agent says its line, then the carrier connects the caller.
+
+The person picking up gets what the agent collected. On a SIP address the
+details travel as SIP headers: `X-Lampline-Session` (the session ID, to look
+the call up afterwards) and `X-Lampline-<name>` for each detail, ASCII and at
+most 200 characters each. Choose which details to send, or leave the list
+empty to send everything this call collected. For Avaya and Cisco, the step
+can also send User-to-User data (`transfer_uui`, hex encoded as RFC 7433
+describes), which their screen pops read. A phone number on the public
+network can't carry headers; the details stay in the call's `transfer` event,
+and after-call triggers can send them on (`{{transferred_to}}`, `{{details}}`,
+`{{session_id}}`).
+
+| Carrier | How the transfer happens |
+| --- | --- |
+| Twilio | The stream's TwiML ends with a redirect to `/v1/twilio/after`, which answers `<Dial>` with the number or SIP address |
+| Telnyx | Call Control's transfer command (needs the API key on the Phone numbers page) |
+| jambonz | The `listen` verb's action hook (`/v1/jambonz/done`) answers with a `dial` verb |
+
+In text and browser calls, the Test call page shows where the caller would
+have gone and what would have been sent. `vk lint` checks the address
+(VK134). Dialogflow CX imports and exports map it to a live agent transfer
+(`telephonyTransferCall`).
+
+### Moonshine: streaming speech to text
+
+[Moonshine](https://github.com/moonshine-ai/moonshine) (MIT) streams: it
+transcribes 20 ms at a time while the caller talks, and when voice detection
+hears them stop it finishes the line at once. Whisper waits for the whole turn
+and then transcribes it, so the caller waits for all of it.
+
+Measured on a 2-CPU cloud machine, real-time audio, from the end of speech to
+the final text (lower is better):
+
+| | After the caller stops | CPU while they talk |
+|---|---|---|
+| Whisper `base.en` (the Whisper default) | 0.66 s | |
+| Whisper `tiny.en` | 0.35 s | |
+| Moonshine small (the default) | 0.30 s | about half a core |
+| Moonshine tiny | 0.17 s | about a third of a core |
+
+All four transcribed the test sentences word for word, at 16 kHz and on 8 kHz
+phone audio. Laptops and desktops are faster than this machine across the
+board. The cost is CPU while the caller talks, so a small machine takes fewer
+calls at once than with Whisper.
+
+Choose it in Integrations → Listening → **Moonshine**, pick small or tiny, and
+press **Download model** (140 or 46 MB, once, into `VPE_MODEL_CACHE`). It is
+English only here: some of Moonshine's other languages use a non-commercial
+licence. It installs with the engine on Linux and on Apple-silicon Macs with
+macOS 15 or later (`pip install -e "engine[moonshine]"`; `scripts/engine-up.sh`
+and the Docker image include it); elsewhere the tile says it isn't available.
+
+### Parakeet: the most accurate speech to text on this computer
+
+[Parakeet TDT 0.6B](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) is
+NVIDIA's open speech recognition model (CC-BY-4.0), at the top of open English
+leaderboards. It runs inside the engine through
+[onnx-asr](https://github.com/istupakov/onnx-asr) (MIT) with int8 ONNX
+exports, and transcribes each turn when the caller stops, like Whisper.
+
+Same machine and clips as the Moonshine table, from the end of a 2 to 5 second
+turn to the final text:
+
+| | After the caller stops | Words |
+|---|---|---|
+| Whisper `base.en` | 0.69 to 0.86 s | all right |
+| Whisper `tiny.en` | about 0.39 s | all right |
+| Parakeet v2 (the default) | 0.25 to 0.45 s | all right, numbers as digits |
+
+The same results on 8 kHz phone audio. Parakeet uses no CPU while the caller
+talks (Moonshine does), but its download is bigger.
+
+Choose it in Integrations → Listening → **Parakeet**, pick v2 (English) or v3
+(25 European languages, detected per turn), and press **Download model**
+(about 660 MB, once, into `VPE_MODEL_CACHE`).
+
+### Qwen3-TTS: natural voices from your GPU server
+
+[Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) sounds more natural than
+Kokoro, but on a CPU it runs slower than real time, so it's offered as a
+server: run it with [vLLM-Omni](https://docs.vllm.ai/projects/vllm-omni/) on
+a machine with an NVIDIA GPU,
+
+```bash
+vllm serve Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice --omni --port 8091 --trust-remote-code
+```
+
+then choose Integrations → Speaking → **Qwen3-TTS** and set its address
+(`VPE_QWEN3_TTS_URL`, like `http://gpu-box:8091/v1`), voice (`vivian`,
+`serena`, `ryan`, `aiden`, ...) and language (`Auto`). The engine asks the
+server to stream raw audio as it's generated, so the agent starts speaking
+before the whole sentence is ready.
+
+### Speech to speech (experimental)
+
+A normal call is a chain: speech to text, the text model, then a voice. A
+speech-to-speech model listens and answers with audio itself, so there's no
+wait for a transcript or a voice, and it hears how things are said.
+
+Turn it on in Integrations → Listening → **Speech to speech**
+(`VPE_VOICE_MODE=speech-to-speech`). Voice calls then run on any server that
+speaks the OpenAI Realtime protocol: OpenAI's `gpt-realtime` (your OpenAI key,
+or `VPE_REALTIME_API_KEY`), or one you host (`VPE_REALTIME_URL`, like
+`ws://gpu-box:8000/v1/realtime`). Steps, transfers and tools work as before:
+each step's instructions and tools go to the model as the call moves on.
+
+What's different, so it's off by default:
+
+- Lines the agent must say word for word (Start's greeting, "say while
+  running" lines) are spoken by the model, so the wording can differ slightly.
+- Agents with scripted pages keep the normal chain; the call page says so.
+- Collecting details still uses your text model, so keep its key set.
+- Calls cost what the realtime model costs, per minute of audio.
+
+Text chats always use the text model.
+
+## Users and roles
+
+The owner key (`VPE_API_KEY`) can do everything. To share the engine, sign in
+with it and open **Team** to make a key per person, with a role:
+
+| Role | Can |
+| --- | --- |
+| admin | everything: settings, integrations, keys, deleting call history |
+| builder | agents, data, knowledge, tests and triggers; not settings or keys |
+| viewer | read everything and run test calls and chats; change nothing |
+
+Keys start with `lpk_` and are shown once; only a SHA-256 fingerprint is kept
+(`keys.json` next to the settings file, mode 600). Revoking one takes effect
+at once. `GET /v1/me` says who a key is. By default, changes still have to
+come from this computer; behind an HTTPS proxy, `VPE_REMOTE_EDITING=on` lets
+keys save agents, data and knowledge through it, as their role allows.
+Settings, secrets, downloads, sign-ins and running triggers always stay
+local. See [docs/HTTPS.md](../docs/HTTPS.md) for Caddy and nginx setups.
+
+## Call history
+
+Every finished call and chat is kept on the Calls page: when, which agent,
+who it was with, how long, how it ended (or who it was transferred to), the
+details it collected, the steps it went through, tool calls, response times
+and the transcript. Search by number, detail or anything said; filter by
+channel; delete a call when you're done with it.
+
+It's a SQLite file next to records and knowledge (`VPE_DATA_DIR`, by default
+`~/.local/share/vpengine/calls.sqlite3`), never sent anywhere. Calls older than
+30 days are deleted (`VPE_CALL_HISTORY_DAYS`); `VPE_CALL_HISTORY=off` keeps
+nothing. Recordings are off by default: with `VPE_CALL_RECORDINGS=on`, voice
+calls are also saved as stereo WAV (caller left, agent right, 16 kHz) in
+`recordings/`, and play on the Calls page. Tell callers if you record them;
+the rules depend on where they are. Use synthetic test data unless the
+machine is set up to protect real callers' details.
+
+The API: `GET /v1/calls` (`agent`, `channel`, `q`, `before`, `limit`),
+`GET /v1/calls/{id}`, `GET /v1/calls/{id}/recording`, `DELETE /v1/calls/{id}`.
+
+## Turn taking and response time
+
+On a voice call the agent has to decide when the caller has finished. By
+default it uses Pipecat's **smart-turn** model, which runs on this computer and
+listens to how the caller sounds (a trailing "and…" means more is coming), not
+just to silence. It answers once the caller is done, or after the pause limit
+(3 seconds) if they trail off. On lines where that doesn't suit, Integrations →
+**Turn taking** switches to a fixed pause (0.8 seconds unless you change it).
+
+The Test call page shows a **Response time** card. On a call it is how long
+the caller waited after their last word for the agent's first sound, plus where
+the time went: the turn decision, listening (time to the final transcript), the
+model (time to its first words) and speaking (time to the first audio). In a
+chat it is the model's time to its first words. The same numbers arrive as
+`turn_metrics` events on `/v1/sessions/{id}/events`, so you can log them.
 
 ## Test agents on it
 
@@ -590,6 +795,12 @@ The folder runs as it is on disk: nothing to save or deploy first.
 | POST | `/v1/chat/sessions/{id}/end` | |
 | GET | `/v1/sessions/{id}` | steps visited, current step, collected values, events |
 | GET | `/v1/sessions/{id}/events` | the same events live (server-sent events) |
+| GET | `/v1/me` | who this key is, and its role |
+| GET, POST, DELETE | `/v1/keys`, `/v1/keys/{id}` | named keys with roles (admin) |
+| GET | `/v1/calls` | call history: `agent`, `channel`, `q`, `before`, `limit` |
+| GET | `/v1/calls/{id}` | one call: transcript, events, collected details |
+| GET | `/v1/calls/{id}/recording` | its recording (WAV), when recordings are on |
+| DELETE | `/v1/calls/{id}` | delete a call and its recording |
 | POST / PATCH | `/v1/calls/webrtc/offer` | browser call signalling |
 | POST | `/v1/twilio/voice?agent=<folder>` | Twilio's incoming-call webhook (signed) |
 | WebSocket | `/v1/twilio/stream` | Twilio media stream (one-time token) |
@@ -606,7 +817,7 @@ Events: `node_transition`, `bot_speech`, `user_speech`, `tool_call_started`,
 ## Develop
 
 ```bash
-python3.12 -m venv .venv-engine && .venv-engine/bin/pip install -e cli -e "engine[dev]"
+python3.12 -m venv .venv-engine && .venv-engine/bin/pip install -e cli -e "engine[dev,moonshine]"
 .venv-engine/bin/pytest -q engine/tests
 ```
 

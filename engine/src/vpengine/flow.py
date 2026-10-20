@@ -47,6 +47,7 @@ class Host(Protocol):
     async def announce(self, text: str) -> None: ...   # spoken, but not added to the model's context
     async def queue(self, frames: list) -> None: ...
     async def end(self, reason: str) -> None: ...
+    async def transfer(self, transfer) -> None: ...      # hand the caller to a person before the call ends
     def emit(self, event: dict) -> None: ...
 
 
@@ -113,6 +114,7 @@ class FlowController:
         self._ending = False
         self._final_started = False
         self.runner = tools or ToolRunner(mock=True)
+        self.extract_llm = None                     # a text model for extraction when self.llm only talks (speech to speech)
         self.step_tools: list[Tool] = []
         self.running_tools = 0
         self.page: PageState | None = None          # the scripted page being filled in
@@ -459,7 +461,7 @@ class FlowController:
         schema = {"type": "object", "additionalProperties": False, "required": ["route", "value"], "properties": {
             "route": {"type": "string", "enum": list(options) + ["none"]}, "value": {"type": ["string", "null"]}}}
         try:
-            out = parse_json_object(await asyncio.wait_for(self.llm.run_inference(
+            out = parse_json_object(await asyncio.wait_for((self.extract_llm or self.llm).run_inference(
                 LLMContext(messages=[{"role": "user", "content": text}]), max_tokens=200,
                 system_instruction="\n".join(lines), response_schema=schema), INTERPRET_TIMEOUT)) or {}
         except Exception as exc:  # noqa: BLE001 - fall back to the built-in parsers
@@ -536,7 +538,7 @@ class FlowController:
         started = time.monotonic()
         try:
             text = await asyncio.wait_for(
-                self.llm.run_inference(ctx, max_tokens=400, system_instruction=instruction,
+                (self.extract_llm or self.llm).run_inference(ctx, max_tokens=400, system_instruction=instruction,
                                        response_schema=extraction_schema(variables)),
                 EXTRACTION_TIMEOUT)
         except Exception as exc:  # noqa: BLE001 - extraction never blocks the call
@@ -567,11 +569,31 @@ class FlowController:
         if not self.awaiting_response and not self.running_tools:
             await self.check_rules()
 
+    def collected(self) -> list[str]:
+        """What this call gathered: everything but the agent's own unchanged constants."""
+        constants = self.graph.context
+        return [k for k, v in self.variables.items() if k not in constants or constants[k] != v]
+
     async def finish(self, reason: str) -> None:
         if self.ended:
             return
         self.ended = True
+        transfer = None
+        if reason == "end step reached" and self.current is not None:
+            from .transfer import build
+            try:
+                transfer = build(self.current, self.variables, getattr(self.host, "id", ""), render, self.collected())
+            except ValueError as exc:
+                self.host.emit({"type": "execution_error", "message": f"{exc}. Hanging up instead."})
+        if transfer is not None:
+            self.host.emit({"type": "transfer", "node_name": self.current.name, **transfer.event()})
+            try:
+                await self.host.transfer(transfer)
+            except Exception as exc:  # noqa: BLE001 - a failed hand-off still ends the call cleanly
+                self.host.emit({"type": "execution_error", "message": f"transfer to {transfer.to} failed: {exc}"})
+            reason = f"transferred to {transfer.to}"
         self.host.emit({"type": "call_ended", "reason": reason,
                         "node_name": self.current.name if self.current else None,
-                        "variables": dict(self.variables)})
+                        "variables": dict(self.variables),
+                        **({"transfer": transfer.event()} if transfer is not None else {})})
         await self.host.end(reason)

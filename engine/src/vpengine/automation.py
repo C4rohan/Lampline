@@ -35,6 +35,7 @@ from vk import agentfs
 from vk import triggers as spec
 from vk.tools import TEMPLATE
 
+from . import jambonz
 from .connectors import ConnectorError, Incoming, normalize_email, normalize_phone
 from .graph import render
 from .services import make_llm
@@ -46,6 +47,16 @@ if TYPE_CHECKING:
 log = logging.getLogger("vpengine.automation")
 
 IDLE_MINUTES = 30            # a message conversation ends after this long without a reply
+def _error_text(r: httpx.Response) -> str:
+    """A carrier's error message, short; never the whole body."""
+    try:
+        body = r.json()
+    except ValueError:
+        return ""
+    msg = body.get("msg") or body.get("message") or body.get("error") if isinstance(body, dict) else ""
+    return str(msg or "")[:150]
+
+
 RECIPIENT_GAP = 600          # seconds between outbound contacts to the same person from one agent
 LOG_SIZE = 300
 
@@ -343,6 +354,7 @@ class Automations:
         values = {**variables, "transcript": transcript[:20000], "details": details, "agent": session.graph.name,
                   "channel": meta.get("channel", "web"), "contact": meta.get("contact", ""),
                   "ended_reason": ended.get("reason", ""), "session_id": session.id,
+                  "transferred_to": (ended.get("transfer") or {}).get("to", ""),
                   "duration_seconds": int(time.time() - session.created),
                   "steps": ", ".join(session.graph.steps[i].name for i in session.flow.visited if i in session.graph.steps)}
         values["summary"] = await self._summary(session, transcript) if need_summary else ""
@@ -534,7 +546,16 @@ class Automations:
                 if r.status_code >= 400:
                     raise ValueError(f"Telnyx refused the call ({r.status_code})")
                 return "Telnyx call started"
-        raise ValueError("outbound calls need Twilio (account SID, auth token, number) or Telnyx (API key, TeXML app, number)")
+            if c.jambonz_outbound_ready:
+                r = await http.post(f"{c.jambonz_api_url.rstrip('/')}/v1/Accounts/{c.jambonz_account_sid}/Calls",
+                                    headers={"Authorization": f"Bearer {c.jambonz_api_key}"},
+                                    json=jambonz.outbound_call(c.jambonz_application_sid, c.jambonz_from_number, number,
+                                                               slug, token))
+                if r.status_code >= 400:
+                    raise ValueError(f"jambonz refused the call ({r.status_code}): {_error_text(r)}")
+                return f"jambonz call {(r.json() if r.content else {}).get('sid', '')}".strip()
+        raise ValueError("outbound calls need Twilio (account SID, auth token, number), Telnyx (API key, TeXML app, number) "
+                         "or jambonz (API key, account and application SIDs, number)")
 
     def take_context(self, token: str) -> dict:
         ctx, expiry = self.contexts.pop(token or "", ({}, 0))

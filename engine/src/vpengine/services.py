@@ -11,6 +11,7 @@ from or written to agent folders.
                       (LLM_PROVIDERS below; each runs through Pipecat's own service for it)
     Listening (STT):  deepgram | fish (Fish Audio) | whisper (built in, free) | whisper-server (an OpenAI-style server)
     Speaking (TTS):   deepgram | fish (Fish Audio) | kokoro (built in, free) | kokoro-server (Kokoro-FastAPI)
+                      | qwen3-tts (Qwen3-TTS served by vLLM-Omni, on a GPU)
 """
 
 from __future__ import annotations
@@ -41,7 +42,7 @@ class FieldSpec:
 FISH_TTS_MODELS = ("s2.1-pro-free", "s2.1-pro", "s2-pro", "drama-3", "s1")
 
 # Numeric settings: (minimum, maximum). Empty means the provider's default.
-RANGES = {"fish_speed": (0.5, 2.0), "fish_volume": (-20.0, 20.0), "fish_temperature": (0.0, 1.0),
+RANGES = {"turn_pause": (0.2, 6.0), "fish_speed": (0.5, 2.0), "fish_volume": (-20.0, 20.0), "fish_temperature": (0.0, 1.0),
           "fish_top_p": (0.0, 1.0)}
 
 
@@ -158,13 +159,23 @@ SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("novita_key", "NOVITA_API_KEY", "Novita AI API key", secret=True),
     FieldSpec("ollama_url", "OLLAMA_BASE_URL", "Ollama address"),
     FieldSpec("temperature", "VPE_LLM_TEMPERATURE", "Temperature"),
-    FieldSpec("stt", "VPE_STT", "Speech to text", choices=("deepgram", "fish", "whisper", "whisper-server")),
+    FieldSpec("stt", "VPE_STT", "Speech to text", choices=("deepgram", "fish", "whisper", "moonshine", "parakeet", "whisper-server")),
     FieldSpec("deepgram_key", "DEEPGRAM_API_KEY", "Deepgram API key", secret=True),
     FieldSpec("stt_model", "VPE_STT_MODEL", "Deepgram model"),
     FieldSpec("whisper_url", "VPE_WHISPER_URL", "Whisper server URL"),
     FieldSpec("whisper_model", "VPE_WHISPER_MODEL", "Whisper server model"),
+    FieldSpec("moonshine_model", "VPE_MOONSHINE_MODEL", "Moonshine model", choices=("small-streaming", "tiny-streaming")),
+    FieldSpec("parakeet_model", "VPE_PARAKEET_MODEL", "Parakeet model", choices=("parakeet-tdt-0.6b-v2", "parakeet-tdt-0.6b-v3")),
     FieldSpec("local_whisper_model", "VPE_LOCAL_WHISPER_MODEL", "Whisper model", choices=("tiny.en", "base.en", "small.en", "distil-small.en")),
-    FieldSpec("tts", "VPE_TTS", "Text to speech", choices=("deepgram", "fish", "kokoro", "kokoro-server")),
+    FieldSpec("voice_mode", "VPE_VOICE_MODE", "How calls talk", choices=("chain", "speech-to-speech")),
+    FieldSpec("realtime_url", "VPE_REALTIME_URL", "Realtime server"),
+    FieldSpec("realtime_model", "VPE_REALTIME_MODEL", "Speech-to-speech model"),
+    FieldSpec("realtime_voice", "VPE_REALTIME_VOICE", "Voice"),
+    FieldSpec("realtime_key", "VPE_REALTIME_API_KEY", "API key for the realtime server", secret=True),
+    FieldSpec("realtime_turns", "VPE_REALTIME_TURNS", "Turn taking", choices=("semantic", "pause")),
+    FieldSpec("turn_detection", "VPE_TURN_DETECTION", "How the agent knows the caller has finished", choices=("smart", "pause")),
+    FieldSpec("turn_pause", "VPE_TURN_PAUSE", "Pause in seconds"),
+    FieldSpec("tts", "VPE_TTS", "Text to speech", choices=("deepgram", "fish", "kokoro", "kokoro-server", "qwen3-tts")),
     FieldSpec("tts_voice", "VPE_TTS_VOICE", "Deepgram voice"),
     FieldSpec("fish_key", "FISH_API_KEY", "Fish Audio API key", secret=True),
     FieldSpec("fish_voice", "VPE_FISH_VOICE", "Fish Audio voice ID"),
@@ -180,6 +191,10 @@ SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("fish_stt_language", "VPE_FISH_STT_LANGUAGE", "Caller language"),
     FieldSpec("kokoro_url", "VPE_KOKORO_URL", "Kokoro server URL"),
     FieldSpec("kokoro_voice", "VPE_KOKORO_VOICE", "Kokoro voice"),
+    FieldSpec("qwen3_tts_url", "VPE_QWEN3_TTS_URL", "Qwen3-TTS server URL"),
+    FieldSpec("qwen3_tts_model", "VPE_QWEN3_TTS_MODEL", "Qwen3-TTS model"),
+    FieldSpec("qwen3_tts_voice", "VPE_QWEN3_TTS_VOICE", "Qwen3-TTS voice"),
+    FieldSpec("qwen3_tts_language", "VPE_QWEN3_TTS_LANGUAGE", "Qwen3-TTS language"),
     FieldSpec("twilio_auth_token", "TWILIO_AUTH_TOKEN", "Twilio auth token", secret=True),
     FieldSpec("telnyx_api_key", "TELNYX_API_KEY", "Telnyx API key", secret=True),
     FieldSpec("telnyx_public_key", "TELNYX_PUBLIC_KEY", "Telnyx public key"),
@@ -188,6 +203,12 @@ SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("telnyx_texml_app_id", "TELNYX_TEXML_APP_ID", "Telnyx TeXML application ID"),
     FieldSpec("telnyx_from_number", "TELNYX_FROM_NUMBER", "Telnyx number for outbound calls"),
     FieldSpec("jambonz_webhook_secret", "JAMBONZ_WEBHOOK_SECRET", "jambonz webhook secret", secret=True),
+    FieldSpec("jambonz_sample_rate", "VPE_JAMBONZ_SAMPLE_RATE", "Call audio", choices=("8000", "16000")),
+    FieldSpec("jambonz_api_url", "JAMBONZ_API_URL", "jambonz API address"),
+    FieldSpec("jambonz_account_sid", "JAMBONZ_ACCOUNT_SID", "jambonz account SID"),
+    FieldSpec("jambonz_api_key", "JAMBONZ_API_KEY", "jambonz API key", secret=True),
+    FieldSpec("jambonz_application_sid", "JAMBONZ_APPLICATION_SID", "jambonz application SID"),
+    FieldSpec("jambonz_from_number", "JAMBONZ_FROM_NUMBER", "Number calls come from"),
     # messaging and email
     FieldSpec("telegram_bot_token", "TELEGRAM_BOT_TOKEN", "Telegram bot token", secret=True),
     FieldSpec("whatsapp_token", "WHATSAPP_ACCESS_TOKEN", "WhatsApp access token", secret=True),
@@ -213,6 +234,10 @@ SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("outbound", "VPE_OUTBOUND", "Outbound calls and messages", choices=("off", "on")),
     FieldSpec("quiet_hours", "VPE_QUIET_HOURS", "Quiet hours (no outbound)"),
     FieldSpec("outbound_daily_cap", "VPE_OUTBOUND_DAILY_CAP", "Outbound limit per agent per day"),
+    # call history
+    FieldSpec("call_history", "VPE_CALL_HISTORY", "Keep call history", choices=("on", "off")),
+    FieldSpec("call_history_days", "VPE_CALL_HISTORY_DAYS", "Keep calls for (days)"),
+    FieldSpec("call_recordings", "VPE_CALL_RECORDINGS", "Record voice calls", choices=("off", "on")),
     # knowledge search
     FieldSpec("embeddings", "VPE_EMBEDDINGS", "Embeddings for knowledge search", choices=("local", "ollama", "off")),
     FieldSpec("embeddings_url", "VPE_EMBEDDINGS_URL", "Embeddings server (OpenAI-compatible)"),
@@ -259,6 +284,16 @@ class Config:
     whisper_url: str = "http://localhost:8001/v1"
     whisper_model: str = "Systran/faster-whisper-small"
     local_whisper_model: str = "base.en"
+    moonshine_model: str = "small-streaming"
+    parakeet_model: str = "parakeet-tdt-0.6b-v2"   # v3: 25 European languages
+    voice_mode: str = "chain"           # speech-to-speech: one model listens and talks (experimental; realtime.py)
+    realtime_url: str = "wss://api.openai.com/v1/realtime"   # or any server that speaks the OpenAI Realtime protocol
+    realtime_model: str = "gpt-realtime"
+    realtime_voice: str = "marin"
+    realtime_key: str = ""              # empty: the OpenAI key, for OpenAI's own server
+    realtime_turns: str = "semantic"    # semantic: the model judges when the caller is done; pause: a fixed silence
+    turn_detection: str = "smart"
+    turn_pause: str = ""          # smart: longest pause before answering anyway (3s); pause: silence that ends a turn (0.8s)
     tts: str = "deepgram"
     tts_voice: str = "aura-2-helena-en"
     fish_key: str = ""
@@ -275,6 +310,10 @@ class Config:
     fish_stt_language: str = "en"
     kokoro_url: str = "http://localhost:8880/v1"
     kokoro_voice: str = "af_heart"
+    qwen3_tts_url: str = "http://localhost:8091/v1"     # vLLM-Omni serving Qwen3-TTS (a GPU machine)
+    qwen3_tts_model: str = "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
+    qwen3_tts_voice: str = "vivian"
+    qwen3_tts_language: str = "Auto"
     twilio_auth_token: str = ""
     telnyx_api_key: str = ""
     telnyx_public_key: str = ""
@@ -283,6 +322,12 @@ class Config:
     telnyx_texml_app_id: str = ""
     telnyx_from_number: str = ""
     jambonz_webhook_secret: str = ""
+    jambonz_sample_rate: str = "8000"   # 16000: HD voice, when the trunk or phone system carries wideband audio
+    jambonz_api_url: str = "https://api.jambonz.cloud"   # or your own jambonz's API server
+    jambonz_account_sid: str = ""
+    jambonz_api_key: str = ""
+    jambonz_application_sid: str = ""
+    jambonz_from_number: str = ""
     telegram_bot_token: str = ""
     whatsapp_token: str = ""
     whatsapp_phone_number_id: str = ""
@@ -305,6 +350,9 @@ class Config:
     outbound: str = "off"
     quiet_hours: str = "21:00-08:00"
     outbound_daily_cap: str = "50"
+    call_history: str = "on"          # transcripts, collected details and outcomes, on this computer
+    call_history_days: str = "30"
+    call_recordings: str = "off"      # stereo WAV of voice calls (caller left, agent right)
     embeddings: str = "local"
     embeddings_url: str = "http://localhost:11434/v1"
     embeddings_model: str = "nomic-embed-text"
@@ -344,14 +392,19 @@ class Config:
                                                             r"(,(mon|tue|wed|thu|fri|sat|sun)(-(mon|tue|wed|thu|fri|sat|sun))?)*",
                                                             values["calendar_days"].lower()):
             raise ConfigError("Open days must look like mon-fri or mon-fri,sat")
-        for name, label, hi in (("smtp_port", "SMTP port", 65535), ("outbound_daily_cap", "Outbound limit", 10000)):
+        for name, label, hi in (("smtp_port", "SMTP port", 65535), ("outbound_daily_cap", "Outbound limit", 10000),
+                                ("call_history_days", "Keep calls for", 3650)):
             if values.get(name) and (not values[name].isdigit() or not 1 <= int(values[name]) <= hi):
                 raise ConfigError(f"{label} must be a whole number from 1 to {hi}")
         for name, example in (("embeddings_url", "http://localhost:11434/v1"), ("ollama_url", "http://localhost:11434/v1"),
+                              ("qwen3_tts_url", "http://gpu-box:8091/v1"),
                               ("azure_endpoint", "https://my-resource.openai.azure.com"),
+                              ("jambonz_api_url", "https://api.jambonz.cloud"),
                               ("base_url", "https://api.openai.com/v1")):
             if values.get(name) and not re.match(r"^https?://[^\s/]+", values[name]):
                 raise ConfigError(f"{SPEC_BY_NAME[name].label} must be an http(s) address, like {example}")
+        if values.get("realtime_url") and not re.match(r"^wss?://[^\s/]+", values["realtime_url"]):
+            raise ConfigError("the realtime server must be a ws(s) address, like wss://api.openai.com/v1/realtime")
         if values.get("vertex_credentials"):
             import json as _json
             try:
@@ -416,6 +469,12 @@ class Config:
         if self.stt == "whisper":
             from .builtin_speech import whisper_ready
             return whisper_ready(self.local_whisper_model)
+        if self.stt == "moonshine":
+            from . import moonshine_stt
+            return moonshine_stt.ready(self.moonshine_model)
+        if self.stt == "parakeet":
+            from . import parakeet_stt
+            return parakeet_stt.ready(self.parakeet_model)
         return bool(self.whisper_url)
 
     @property
@@ -430,29 +489,41 @@ class Config:
         return bool(self.kokoro_url)
 
     @property
+    def realtime_api_key(self) -> str:
+        return self.realtime_key or (self.openai_key if "api.openai.com" in self.realtime_url else "")
+
+    @property
     def voice_ready(self) -> bool:
         return self.stt_ready and self.tts_ready
 
     def describe(self) -> dict:
         """Safe to show: no keys."""
         voice = {"deepgram": self.tts_voice, "fish": f"{self.fish_model}, {self.fish_voice or 'default voice'}, {'live' if self.fish_connection == 'live' else 'HTTP'}", "kokoro": self.kokoro_voice,
-                 "kokoro-server": self.kokoro_voice}
+                 "kokoro-server": self.kokoro_voice, "qwen3-tts": f"{self.qwen3_tts_voice} ({self.qwen3_tts_model})"}
         return {"llm": self.llm, "llm_label": LLM_BY_NAME[self.llm].label, "model": self.model,
                 "base_url": self.base_url or None,
                 "llm_ready": self.llm_ready, "voice_ready": self.voice_ready,
+                "turn_detection": self.turn_detection,
                 "stt": self.stt, "stt_ready": self.stt_ready, "tts": self.tts, "tts_ready": self.tts_ready,
                 "stt_model": {"deepgram": self.stt_model, "whisper": self.local_whisper_model,
-                              "fish": self.fish_stt_model}.get(self.stt, self.whisper_model),
+                              "fish": self.fish_stt_model, "moonshine": self.moonshine_model,
+                              "parakeet": self.parakeet_model}.get(self.stt, self.whisper_model),
                 "tts_voice": voice[self.tts], "twilio_ready": bool(self.twilio_auth_token),
                 "telnyx_ready": bool(self.telnyx_public_key),
                 "jambonz_ready": bool(self.jambonz_webhook_secret),
                 "phone_ready": bool(self.twilio_auth_token or self.telnyx_public_key or self.jambonz_webhook_secret),
                 "outbound_call_ready": bool(self.twilio_auth_token and self.twilio_account_sid and self.twilio_from_number)
-                or bool(self.telnyx_api_key and self.telnyx_texml_app_id and self.telnyx_from_number),
+                or bool(self.telnyx_api_key and self.telnyx_texml_app_id and self.telnyx_from_number)
+                or self.jambonz_outbound_ready,
                 "telegram_ready": bool(self.telegram_bot_token),
                 "whatsapp_ready": bool(self.whatsapp_token and self.whatsapp_phone_number_id),
                 "email_ready": self.email_ready, "google_ready": self.google_ready,
                 "outbound": self.outbound}
+
+    @property
+    def jambonz_outbound_ready(self) -> bool:
+        return bool(self.jambonz_webhook_secret and self.jambonz_api_url and self.jambonz_account_sid
+                    and self.jambonz_api_key and self.jambonz_application_sid and self.jambonz_from_number)
 
     @property
     def google_ready(self) -> bool:
@@ -550,6 +621,26 @@ def make_llm(cfg: Config) -> LLMService:
 
 # -- listening -----------------------------------------------------------------
 
+def make_turn_strategies(cfg: Config):
+    """How a voice call decides the caller has finished speaking.
+
+    smart: Pipecat's smart-turn model listens to how the caller sounds, and
+    answers once they have finished, or after the pause limit at most.
+    pause: answer after a fixed silence, for lines where the model struggles.
+    """
+    from pipecat.turns.user_stop import SpeechTimeoutUserTurnStopStrategy, TurnAnalyzerUserTurnStopStrategy
+    from pipecat.turns.user_turn_strategies import UserTurnStrategies
+
+    pause = float(cfg.turn_pause) if cfg.turn_pause else None
+    if cfg.turn_detection == "pause":
+        return UserTurnStrategies(stop=[SpeechTimeoutUserTurnStopStrategy(user_speech_timeout=pause or 0.8)])
+    from pipecat.audio.turn.smart_turn.base_smart_turn import SmartTurnParams
+    from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
+
+    analyzer = LocalSmartTurnAnalyzerV3(params=SmartTurnParams(stop_secs=pause or 3.0))
+    return UserTurnStrategies(stop=[TurnAnalyzerUserTurnStopStrategy(turn_analyzer=analyzer)])
+
+
 def make_stt(cfg: Config):
     if cfg.stt == "fish":
         if not cfg.fish_key:
@@ -561,6 +652,20 @@ def make_stt(cfg: Config):
         if not whisper_ready(cfg.local_whisper_model):
             raise ConfigError("the built-in Whisper model isn't downloaded yet: Integrations → Download models")
         return make_builtin_stt(cfg.local_whisper_model)
+    if cfg.stt == "moonshine":
+        from . import moonshine_stt
+        if not moonshine_stt.installed():
+            raise ConfigError("Moonshine isn't installed on this computer (it needs Linux or an Apple-silicon Mac)")
+        if not moonshine_stt.ready(cfg.moonshine_model):
+            raise ConfigError("the Moonshine model isn't downloaded yet: Integrations → Moonshine → Download")
+        return moonshine_stt.MoonshineSTTService(model=cfg.moonshine_model)
+    if cfg.stt == "parakeet":
+        from . import parakeet_stt
+        if not parakeet_stt.installed():
+            raise ConfigError("onnx-asr isn't installed (pip install onnx-asr)")
+        if not parakeet_stt.ready(cfg.parakeet_model):
+            raise ConfigError("the Parakeet model isn't downloaded yet: Integrations → Parakeet → Download")
+        return parakeet_stt.ParakeetSTTService(model=cfg.parakeet_model)
     if cfg.stt == "whisper-server":
         if not cfg.whisper_url:
             raise ConfigError("no Whisper server URL")
@@ -613,6 +718,13 @@ def make_tts(cfg: Config, sample_rate: int | None = None):
         if not cfg.kokoro_url:
             raise ConfigError("no Kokoro server URL")
         return SpeechEndpointTTSService(base_url=cfg.kokoro_url, voice=cfg.kokoro_voice, model="kokoro")
+    if cfg.tts == "qwen3-tts":
+        if not cfg.qwen3_tts_url:
+            raise ConfigError("no Qwen3-TTS server URL")
+        # vLLM-Omni streams raw PCM as it's generated when asked to (stream + stream_format "audio").
+        return SpeechEndpointTTSService(base_url=cfg.qwen3_tts_url, voice=cfg.qwen3_tts_voice, model=cfg.qwen3_tts_model,
+                                        extra={"stream": True, "stream_format": "audio",
+                                               "language": cfg.qwen3_tts_language or "Auto"})
     if not cfg.deepgram_key:
         raise ConfigError("voice calls need a Deepgram API key, or Fish Audio / Kokoro for speaking")
     from pipecat.services.deepgram.tts import DeepgramTTSService
@@ -631,7 +743,7 @@ class SpeechEndpointTTSService(TTSService):
 
     RATE = 24000
 
-    def __init__(self, *, base_url: str, voice: str, model: str = "kokoro", **kwargs):
+    def __init__(self, *, base_url: str, voice: str, model: str = "kokoro", extra: dict | None = None, **kwargs):
         from pipecat.services.settings import TTSSettings
 
         super().__init__(sample_rate=self.RATE, push_start_frame=True, push_stop_frames=True,
@@ -639,6 +751,7 @@ class SpeechEndpointTTSService(TTSService):
         self._url = base_url.rstrip("/") + "/audio/speech"
         self._voice = voice
         self._model = model
+        self._extra = dict(extra or {})          # server-specific request fields (Qwen3-TTS streaming, language)
         self._http = None
 
     def can_generate_metrics(self) -> bool:
@@ -663,7 +776,7 @@ class SpeechEndpointTTSService(TTSService):
 
         if self._http is None:
             self._http = httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0))
-        body = {"model": self._model, "input": text, "voice": self._voice, "response_format": "pcm"}
+        body = {"model": self._model, "input": text, "voice": self._voice, "response_format": "pcm", **self._extra}
         try:
             async with self._http.stream("POST", self._url, json=body) as r:
                 if r.status_code != 200:

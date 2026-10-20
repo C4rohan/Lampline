@@ -29,6 +29,9 @@ TEMPLATE_VAR = re.compile(r"\{\{\s*([^|\s}]+)(?:\s*\|\s*([^:}]+)(?::([^}]+))?)?\
 SYSTEM_VARIABLES = {"campaign_id", "provider", "source_uuid"}
 CLOCK_VARIABLES = {"current_date", "current_time", "current_weekday", "current_hour"}
 FLOW_TYPES = {"startCall", "agentNode", "endCall"}
+CALL_VARIABLES = {"caller_phone"}          # set by the engine on every phone call
+TRANSFER_PHONE = re.compile(r"^\+[1-9]\d{6,14}$")
+TRANSFER_SIP = re.compile(r"^sips?:[^\s@<>\"]+@[A-Za-z0-9.\-\[\]:]+(;[^\s<>\"]*)?$")
 DETACHED_TYPES = {"globalNode", "trigger", "webhook", "qa"}  # never connected by edges
 DEFAULT_PROMPT_BUDGET = 8000  # characters (~2,000 tokens)
 
@@ -347,6 +350,33 @@ def lint(agent: Agent, folder: str | Path | None = None) -> list[Finding]:
                           and n not in SYSTEM_VARIABLES):
             add(Finding("VK116", "warning", f"uses {{{{{var}}}}}, which is not a parameter or a known variable",
                         f"tool {tool.get('name')}"))
+
+    # --- VK134 transfers to a person ------------------------------------------------
+    for node in nodes:
+        data = node.get("data") or {}
+        to = data.get("transfer_to")
+        where = _node_label(node)
+        if to in (None, ""):
+            if data.get("transfer_details") or data.get("transfer_uui"):
+                add(Finding("VK134", "warning", "transfer details are set but transfer_to is empty, so nothing is transferred", where))
+            continue
+        if node.get("type") != "endCall":
+            add(Finding("VK134", "error", "only End Call steps can transfer the caller to a person", where))
+            continue
+        if not isinstance(to, str) or (not template_variables(to) and not (TRANSFER_PHONE.match(to) or TRANSFER_SIP.match(to))):
+            add(Finding("VK134", "error", "transfer_to must be a phone number like +15551234567 or a SIP address like "
+                                          "sip:desk@pbx.example.com", where))
+            continue
+        for var in sorted(template_variables(to) - provided - SYSTEM_VARIABLES):
+            add(Finding("VK134", "warning", f"transfer_to uses {{{{{var}}}}} but nothing provides it", where))
+        details = data.get("transfer_details")
+        if details is not None and not (isinstance(details, list) and all(isinstance(d, str) for d in details)):
+            add(Finding("VK134", "error", "transfer_details must be a list of variable names", where))
+        elif details:
+            for var in sorted(set(details) - provided - CALL_VARIABLES):
+                add(Finding("VK134", "warning", f"transfer_details sends {var}, but nothing provides it", where))
+        if data.get("transfer_uui") and not str(to).startswith(("sip:", "sips:")):
+            add(Finding("VK134", "warning", "User-to-User data only travels to a SIP address, not a phone number", where))
 
     # --- VK120-122 triggers ---------------------------------------------------------
     from . import triggers as triggerspec

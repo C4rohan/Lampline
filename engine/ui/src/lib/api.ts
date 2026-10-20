@@ -54,8 +54,15 @@ export async function api<T = any>(method: string, path: string, body?: unknown)
 
 /** Fallback names; the engine reports the label of the provider in use (config.llm_label). */
 export const LLM_LABEL: Record<string, string> = { anthropic: "Claude (Anthropic)", openai: "OpenAI-compatible" };
-export const STT_LABEL: Record<string, string> = { deepgram: "Deepgram", fish: "Fish Audio", whisper: "Whisper on this computer (free)", "whisper-server": "Whisper server (advanced)" };
-export const TTS_LABEL: Record<string, string> = { deepgram: "Deepgram", fish: "Fish Audio", kokoro: "Kokoro on this computer (free)", "kokoro-server": "Kokoro server (advanced)" };
+export const STT_LABEL: Record<string, string> = { deepgram: "Deepgram", fish: "Fish Audio", whisper: "Whisper on this computer (free)", moonshine: "Moonshine on this computer (free, streaming)", parakeet: "Parakeet on this computer (free)", "whisper-server": "Whisper server (advanced)" };
+export const TTS_LABEL: Record<string, string> = { deepgram: "Deepgram", fish: "Fish Audio", kokoro: "Kokoro on this computer (free)", "kokoro-server": "Kokoro server (advanced)", "qwen3-tts": "Qwen3-TTS (your GPU server)" };
+
+/** A file from the engine as an object URL (for <audio>); the caller revokes it. */
+export async function blobUrl(path: string): Promise<string> {
+  const r = await fetch(path, { headers: key ? { "X-API-Key": key } : {} });
+  if (!r.ok) throw new ApiError(`${r.status} ${r.statusText}`, r.status);
+  return URL.createObjectURL(await r.blob());
+}
 
 /** Download a file from the engine (sends the API key, which a plain link can't). */
 export async function download(path: string, fallbackName: string): Promise<string | null> {

@@ -13,6 +13,12 @@ Endpoints (all JSON; /v1/* need X-API-Key when VPE_API_KEY is set):
     GET    /v1/sessions/{id}/events          live events (server-sent events)
     POST   /v1/calls/webrtc/offer            {agent, sdp, type, context}
     PATCH  /v1/calls/webrtc/offer            {pc_id, candidates}
+    GET    /v1/me                            who this key is, and its role
+    GET    /v1/keys, POST /v1/keys {name, role}, DELETE /v1/keys/{id}   named keys (admin)
+    GET    /v1/calls                         call history (agent, channel, q, before, limit)
+    GET    /v1/calls/{id}                    one call: transcript, events, collected details
+    GET    /v1/calls/{id}/recording          its recording (WAV), when recordings are on
+    DELETE /v1/calls/{id}
 
 Agents' HTTP tools run for real on calls; chat and browser test calls can ask for
 each tool's mock response instead (mock_tools). See README.md for the full list.
@@ -37,7 +43,7 @@ from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -47,19 +53,24 @@ from . import __version__
 from . import graph as graph_module
 from .automation import Automations
 from .embed import Download as EmbedDownload, Embedder, MINILM
+from . import keys as keys_module
+from .history import CallHistory
 from .library import KINDS, Library, LibraryError
 from .connectors import ConnectorError, Connectors
 from .graph import Graph
 from .services import Config, ConfigError, make_llm
+from . import realtime
 from .session import Session, TextSession, VoiceSession
 from . import builder, generate
+from . import moonshine_stt, parakeet_stt
+from .transfer import PendingTransfers
 from .builtin_speech import Downloads, warm
 from .fish import list_voices
 from .local_speech import LocalSpeech
 from .settings import SettingsStore, check, local_speech_problem, public_view
 from .tools import Tool, ToolError, ToolRunner, env_secrets
 from . import jambonz, telnyx
-from .twilio import StreamTokens, reject_twiml, stream_twiml, valid_signature
+from .twilio import StreamTokens, hangup_twiml, reject_twiml, stream_twiml, valid_signature
 
 log = logging.getLogger("vpengine.server")
 
@@ -115,7 +126,7 @@ class Engine:
     def __init__(self, agents_dir: Path, cfg: Config, *, api_key: str = "", max_sessions: int = 20,
                  llm_factory=None, speech_factory=None, public_url: str = "", twilio_auth_token: str = "",
                  twilio_hang_up: bool = True, store: "SettingsStore | None" = None, listen_host: str = "",
-                 data_dir: Path | None = None, container: bool = False):
+                 data_dir: Path | None = None, container: bool = False, remote_editing: bool = False):
         self.agents_dir = agents_dir
         self.public_url = public_url.rstrip("/")        # https address Twilio reaches us at (a tunnel)
         self._twilio_override = twilio_auth_token     # tests; otherwise from settings
@@ -124,22 +135,31 @@ class Engine:
         # In a container the published port is the only way in, and every request already needs the API key,
         # so "this computer" means: holds the key and didn't come through a tunnel or proxy.
         self.container = container
+        # VPE_REMOTE_EDITING=on: keys may change agents, data and knowledge from elsewhere (HTTPS proxy), as
+        # their role allows. Settings, secrets, downloads and anything that contacts people stay on this computer.
+        self.remote_editing = bool(remote_editing and api_key)
         self.local_speech = LocalSpeech(agents_dir)
         self.downloads = Downloads()
+        self.moonshine = moonshine_stt.Downloads()
+        self.parakeet = parakeet_stt.Downloads()
         self.twilio_hang_up = twilio_hang_up            # end the phone call via Twilio's API on an end step
         self.stream_tokens = StreamTokens()
+        self.transfers = PendingTransfers()      # calls handed to a person, until the carrier asks what's next
         self.cfg = cfg
         self.api_key = api_key
         self.max_sessions = max_sessions
         self._message_starts: list[float] = []
         self.llm_factory = llm_factory          # tests inject fakes
         self.speech_factory = speech_factory    # () -> (stt, tts)
+        self.realtime_factory = None            # tests: () -> a fake speech-to-speech LLM service
         self.tool_transport = None              # tests: an httpx transport for tool calls
         self.sessions: dict[str, Session] = {}
         self.locks: dict[str, asyncio.Lock] = {}
         self._webrtc = None
         self.connectors = Connectors(cfg, save=self._save_settings)
         self.library = Library(data_dir, self._embedder(cfg))          # records and knowledge, opened on first use
+        self.history = CallHistory(self.library.folder)                 # finished calls, next to records
+        self.keys = keys_module.KeyStore(store.path.parent / "keys.json" if store else None)   # named keys and roles
         self.connectors.library = self.library
         self.embed_download = EmbedDownload()
         graph_module.ZONE = cfg.zone if cfg.timezone else None
@@ -170,6 +190,29 @@ class Engine:
     @property
     def voice_ready(self) -> bool:
         return self.cfg.voice_ready or self.speech_factory is not None
+
+    def speech_to_speech(self, graph) -> tuple[bool, str | None]:
+        """Whether this agent's calls use the speech-to-speech model, and why not when they can't."""
+        if self.cfg.voice_mode != "speech-to-speech" or graph is None:
+            return False, None
+        if self.realtime_factory is not None:
+            return True, None
+        why = realtime.problem(graph, self.cfg)
+        return why is None, why
+
+    def voice_session(self, graph, transport, *, rate: int | None = None, stt=None, tts=None, llm=None, **kwargs):
+        """A voice call: the speech-to-speech model when it's chosen and can run this agent, else the chain."""
+        s2s, why = self.speech_to_speech(graph)
+        if s2s:
+            session = realtime.RealtimeVoiceSession(
+                graph, self.cfg, transport, llm=self.realtime_factory() if self.realtime_factory else None,
+                extract_llm=llm, **kwargs)
+        else:
+            rates = {"audio_in_rate": rate, "audio_out_rate": rate} if rate else {}
+            session = VoiceSession(graph, self.cfg, transport, stt=stt, tts=tts, llm=llm, **rates, **kwargs)
+        if why:
+            session.emit({"type": "notice", "message": f"Using the normal voice chain: {why}."})
+        return session
 
     @property
     def llm_ready(self) -> bool:
@@ -249,6 +292,9 @@ class Engine:
             self._message_starts.append(now)
 
     def add(self, session: Session) -> Session:
+        if (isinstance(session, (VoiceSession, realtime.RealtimeVoiceSession)) and self.cfg.call_recordings == "on" and self.cfg.call_history != "off"
+                and session.meta.get("agent")):
+            session.record_to = self.history.recordings / f"{session.id}.wav"
         self.sessions[session.id] = session
         self.locks[session.id] = asyncio.Lock()
         try:
@@ -258,8 +304,14 @@ class Engine:
         return session
 
     async def _after(self, session: Session) -> None:
-        """When a conversation ends, run the agent's after-call triggers."""
+        """When a conversation ends, keep it in the call history and run the agent's after-call triggers."""
         await session.finished.wait()
+        if session.meta.get("agent") and self.cfg.call_history != "off":
+            try:
+                await asyncio.to_thread(self.history.save, session)
+                await asyncio.to_thread(self.history.prune, int(self.cfg.call_history_days or 30))
+            except Exception:  # noqa: BLE001
+                log.exception("saving the call history failed")
         if session.meta.get("agent"):
             try:
                 await self.automations.after_call(session)
@@ -307,6 +359,7 @@ class Engine:
         if self._webrtc is not None:
             await self._webrtc.close()
         self.library.close()
+        self.history.close()
 
 
 def chat_payload(session: Session, events: list[dict]) -> dict:
@@ -320,6 +373,10 @@ def create_app(engine: Engine) -> FastAPI:
         if engine.cfg.stt == "whisper" or engine.cfg.tts == "kokoro":
             # Load the built-in models now so the first call doesn't wait for them.
             asyncio.get_running_loop().run_in_executor(None, warm, engine.cfg.local_whisper_model)
+        if engine.cfg.stt == "moonshine" and moonshine_stt.ready(engine.cfg.moonshine_model):
+            asyncio.get_running_loop().run_in_executor(None, moonshine_stt.load, engine.cfg.moonshine_model)
+        if engine.cfg.stt == "parakeet" and parakeet_stt.ready(engine.cfg.parakeet_model):
+            asyncio.get_running_loop().run_in_executor(None, parakeet_stt.load, engine.cfg.parakeet_model)
         if engine.store is not None:            # tests drive triggers directly
             engine.automations.start()
         yield
@@ -329,13 +386,21 @@ def create_app(engine: Engine) -> FastAPI:
     app = FastAPI(title="Voice engine", version=__version__, docs_url=None, redoc_url=None, lifespan=lifespan)
 
     def require_key(request: Request) -> None:
+        """The owner key (VPE_API_KEY) or a named key; a named key's role limits what it may change."""
+        request.state.who = keys_module.describe(None)
         if not engine.api_key:
             return
         given = request.headers.get("x-api-key") or ""
         if not given and request.method == "GET" and request.url.path.endswith("/events"):
             given = request.query_params.get("key") or ""      # EventSource can't send headers
-        if not hmac.compare_digest(given.encode(), engine.api_key.encode()):
+        if hmac.compare_digest(given.encode(), engine.api_key.encode()):
+            return
+        rec = engine.keys.match(given)
+        if rec is None:
             raise HTTPException(401, "missing or wrong X-API-Key")
+        request.state.who = keys_module.describe(rec)
+        if not keys_module.allowed(rec["role"], request.method, request.url.path):
+            raise HTTPException(403, f"your key ({rec['name']}) is a {rec['role']} key, which can't do this; ask an admin")
 
     auth = [Depends(require_key)]
 
@@ -426,6 +491,8 @@ def create_app(engine: Engine) -> FastAPI:
         return False
 
     def _local_only(request: Request) -> None:
+        if engine.remote_editing and not keys_module.always_local(request.method, request.url.path):
+            return                                   # require_key already checked the key and its role
         if not _is_local(request):
             raise HTTPException(403, "this can only be done on this computer, not through the tunnel or the network")
 
@@ -469,6 +536,32 @@ def create_app(engine: Engine) -> FastAPI:
         except RuntimeError as exc:
             raise HTTPException(409, str(exc)) from exc
         return engine.downloads.status(engine.cfg.local_whisper_model)
+
+    @app.get("/v1/moonshine", dependencies=auth)
+    async def moonshine_status():
+        return engine.moonshine.status(engine.cfg.moonshine_model)
+
+    @app.post("/v1/moonshine/download", dependencies=auth)
+    async def moonshine_download(request: Request):
+        _local_only(request)
+        try:
+            engine.moonshine.start(engine.cfg.moonshine_model)
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return engine.moonshine.status(engine.cfg.moonshine_model)
+
+    @app.get("/v1/parakeet", dependencies=auth)
+    async def parakeet_status():
+        return engine.parakeet.status(engine.cfg.parakeet_model)
+
+    @app.post("/v1/parakeet/download", dependencies=auth)
+    async def parakeet_download(request: Request):
+        _local_only(request)
+        try:
+            engine.parakeet.start(engine.cfg.parakeet_model)
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return engine.parakeet.status(engine.cfg.parakeet_model)
 
     @app.get("/v1/local-speech", dependencies=auth)
     async def local_speech_status():
@@ -901,15 +994,16 @@ def create_app(engine: Engine) -> FastAPI:
         from pipecat.transports.smallwebrtc.request_handler import SmallWebRTCRequest
         from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 
-        if not engine.voice_ready:
+        graph = engine.load_agent(body.agent) if not body.pc_id else None
+        s2s = engine.speech_to_speech(graph)[0]
+        if not engine.voice_ready and not s2s:
             raise HTTPException(503, "voice calls need speech set up in Integrations (text chat works without it)")
-        if not engine.llm_ready:
+        if not engine.llm_ready and not s2s:
             raise HTTPException(503, "no model key set: add one in Integrations")
-        if engine.speech_factory is None and not body.pc_id:
+        if engine.speech_factory is None and not body.pc_id and not s2s:
             problem = await local_speech_problem(engine.cfg)
             if problem:
                 raise HTTPException(503, problem)
-        graph = engine.load_agent(body.agent) if not body.pc_id else None
         if graph is not None:
             engine._check_capacity()
         holder: dict[str, Session] = {}
@@ -918,7 +1012,7 @@ def create_app(engine: Engine) -> FastAPI:
             transport = SmallWebRTCTransport(connection, TransportParams(audio_in_enabled=True,
                                                                          audio_out_enabled=True))
             stt, tts = engine.speech_factory() if engine.speech_factory else (None, None)
-            session = engine.add(VoiceSession(graph, engine.cfg, transport, autostart=False, stt=stt, tts=tts,
+            session = engine.add(engine.voice_session(graph, transport, autostart=False, stt=stt, tts=tts,
                                               variables=body.context, llm=engine._make_llm(),
                                               tools=engine.tool_runner(mock=body.mock_tools),
                                               meta={"agent": body.agent, "channel": "web"}))
@@ -962,21 +1056,23 @@ def create_app(engine: Engine) -> FastAPI:
     async def _refusal(agent: str) -> str | None:
         """Why this line can't take a call right now (logged; the caller hears a short apology)."""
         try:
-            engine.load_agent(agent)
+            graph = engine.load_agent(agent)
             engine._check_capacity()
         except HTTPException as exc:
             return str(exc.detail)
+        if engine.speech_to_speech(graph)[0]:
+            return None
         if not engine.voice_ready or not engine.llm_ready:
             return "model or speech isn't set up"
         if engine.speech_factory is None:
             return await local_speech_problem(engine.cfg)
         return None
 
-    def _phone_context(form: dict, request: Request) -> tuple[dict, str]:
+    def _phone_context(form: dict, request: Request, ctx: str = "") -> tuple[dict, str]:
         """The caller's number (or, on our outbound calls, who we called) plus any context we started it with."""
         outbound = str(form.get("Direction", "")).startswith("outbound")
         contact = str(form.get("To" if outbound else "From", "") or "")
-        context = engine.automations.take_context(request.query_params.get("ctx", ""))
+        context = engine.automations.take_context(ctx or request.query_params.get("ctx", ""))
         if contact and re.fullmatch(r"\+?\d{7,15}", contact):
             context.setdefault("caller_phone", contact)
         return context, contact
@@ -995,7 +1091,7 @@ def create_app(engine: Engine) -> FastAPI:
             pass
         return None
 
-    async def _run_phone_call(websocket: WebSocket, pending, serializer) -> None:
+    async def _run_phone_call(websocket: WebSocket, pending, serializer, rate: int = 8000, on_transfer=None) -> None:
         from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams, FastAPIWebsocketTransport
 
         agent = pending.agent
@@ -1008,7 +1104,7 @@ def create_app(engine: Engine) -> FastAPI:
             audio_in_enabled=True, audio_out_enabled=True, add_wav_header=False, serializer=serializer))
         stt, tts = engine.speech_factory() if engine.speech_factory else (None, None)
         try:
-            session = engine.add(VoiceSession(graph, engine.cfg, transport, audio_in_rate=8000, audio_out_rate=8000,
+            session = engine.add(engine.voice_session(graph, transport, rate=rate,
                                               stt=stt, tts=tts, llm=engine._make_llm(), variables=pending.context,
                                               tools=engine.tool_runner(channel={"kind": "phone", "to": pending.contact}),
                                               meta={"agent": agent, "channel": "phone", "contact": pending.contact}))
@@ -1016,6 +1112,8 @@ def create_app(engine: Engine) -> FastAPI:
             log.warning("cannot start phone call: %s", exc)
             await websocket.close(code=1011)
             return
+
+        session.on_transfer = on_transfer
 
         @transport.event_handler("on_client_disconnected")
         async def _gone(t, client):
@@ -1027,6 +1125,13 @@ def create_app(engine: Engine) -> FastAPI:
             # Stopping the call after the caller hung up cancels the pipeline; that's a normal end.
             if not session.finished.is_set():
                 raise
+        finally:
+            if session.transfer_to is not None:
+                # The carrier carries on once the stream closes (Twilio's <Redirect>, jambonz's actionHook).
+                try:
+                    await websocket.close()
+                except Exception:  # noqa: BLE001 - already closed
+                    pass
 
     # Twilio
 
@@ -1045,7 +1150,19 @@ def create_app(engine: Engine) -> FastAPI:
             return _xml(reject_twiml("Sorry, this line can't take calls right now. Please try again later."))
         context, contact = _phone_context(form, request)
         token = engine.stream_tokens.issue(agent, form.get("CallSid", ""), context, contact)
-        return _xml(stream_twiml(_stream_url("/v1/twilio/stream"), token))
+        return _xml(stream_twiml(_stream_url("/v1/twilio/stream"), token, f"{engine.public_url}/v1/twilio/after"))
+
+    @app.post("/v1/twilio/after")
+    async def twilio_after(request: Request):
+        """Where Twilio goes once our stream closes: connect a transfer, or hang up."""
+        if not engine.twilio_auth_token or not engine.public_url:
+            raise HTTPException(503, "Twilio isn't set up")
+        form = dict(parse_qsl((await _webhook_body(request)).decode("utf-8", "replace"), keep_blank_values=True))
+        url = f"{engine.public_url}{request.url.path}" + (f"?{request.url.query}" if request.url.query else "")
+        if not valid_signature(engine.twilio_auth_token, url, form, request.headers.get("x-twilio-signature", "")):
+            raise HTTPException(403, "bad Twilio signature")
+        transfer = engine.transfers.pop(form.get("CallSid"))
+        return _xml(transfer.twiml() if transfer else hangup_twiml())
 
     @app.websocket("/v1/twilio/stream")
     async def twilio_stream(websocket: WebSocket):
@@ -1062,7 +1179,12 @@ def create_app(engine: Engine) -> FastAPI:
             stream_sid=start.get("streamSid", ""), call_sid=start.get("callSid"),
             account_sid=start.get("accountSid"), auth_token=engine.twilio_auth_token,
             params=TwilioFrameSerializer.InputParams(auto_hang_up=engine.twilio_hang_up))
-        await _run_phone_call(websocket, pending, serializer)
+
+        async def hand_off(transfer):
+            engine.transfers.add(start.get("callSid", ""), transfer)
+            serializer._params.auto_hang_up = False      # close the stream instead; Twilio then asks /v1/twilio/after
+
+        await _run_phone_call(websocket, pending, serializer, on_transfer=hand_off)
 
     # Telnyx
 
@@ -1105,7 +1227,20 @@ def create_app(engine: Engine) -> FastAPI:
             inbound_encoding="PCMU", call_control_id=call_control_id, api_key=api_key or None,
             params=TelnyxFrameSerializer.InputParams(
                 auto_hang_up=bool(api_key and call_control_id and engine.twilio_hang_up)))
-        await _run_phone_call(websocket, pending, serializer)
+
+        async def hand_off(transfer):
+            if not (api_key and call_control_id):
+                raise RuntimeError("Telnyx transfers need the Telnyx API key (Integrations → Telnyx)")
+            import httpx
+
+            async with httpx.AsyncClient(timeout=10) as http:
+                r = await http.post(f"{telnyx.API}/calls/{call_control_id}/actions/transfer",
+                                    headers={"Authorization": f"Bearer {api_key}"}, json=transfer.telnyx_body())
+            if r.status_code >= 300:
+                raise RuntimeError(f"Telnyx refused the transfer ({r.status_code})")
+            serializer._params.auto_hang_up = False      # the transfer has the call now
+
+        await _run_phone_call(websocket, pending, serializer, on_transfer=hand_off)
 
     # jambonz (SIP trunks, phone systems and SBCs)
 
@@ -1126,21 +1261,25 @@ def create_app(engine: Engine) -> FastAPI:
         if not engine.cfg.jambonz_webhook_secret or not engine.public_url:
             raise HTTPException(503, "jambonz calls need the application's webhook secret and a public address")
         call = await _jambonz_body(request)
+        placed, ctx = jambonz.outbound_tag(call)     # a call we placed through the REST API names its agent
+        agent = placed if placed and str(call.get("direction", "")).startswith("outbound") else agent
         problem = await _refusal(agent)
         if problem:
             log.warning("rejecting jambonz call: %s", problem)
             return jambonz.reject_verbs("Sorry, this line can't take calls right now. Please try again later.")
         context, contact = _phone_context({"Direction": call.get("direction", ""), "From": call.get("from", ""),
-                                           "To": call.get("to", "")}, request)
+                                           "To": call.get("to", "")}, request, ctx)
         token = engine.stream_tokens.issue(agent, str(call.get("call_sid") or ""), context, contact)
         log.info("jambonz call %s for %s", call.get("call_sid", "?"), agent)
-        return jambonz.listen_verbs(_stream_url("/v1/jambonz/stream"), token, f"{engine.public_url}/v1/jambonz/done")
+        return jambonz.listen_verbs(_stream_url("/v1/jambonz/stream"), token, f"{engine.public_url}/v1/jambonz/done",
+                                    int(engine.cfg.jambonz_sample_rate))
 
     @app.post("/v1/jambonz/done")
     async def jambonz_done(request: Request):
         """The listen verb's actionHook (the stream ended) and the application's call status webhook."""
-        await _jambonz_body(request)
-        return [{"verb": "hangup"}]
+        call = await _jambonz_body(request)
+        transfer = engine.transfers.pop(str(call.get("call_sid") or ""))
+        return transfer.jambonz_verbs() if transfer else [{"verb": "hangup"}]
 
     @app.websocket("/v1/jambonz/stream")
     async def jambonz_stream(websocket: WebSocket):
@@ -1158,9 +1297,74 @@ def create_app(engine: Engine) -> FastAPI:
         if pending is None:
             await websocket.close(code=1008)
             return
+        try:
+            rate = int(first.get("sampleRate") or jambonz.SAMPLE_RATE)
+        except (TypeError, ValueError):
+            rate = jambonz.SAMPLE_RATE
+        rate = rate if rate in jambonz.RATES else jambonz.SAMPLE_RATE
         serializer = jambonz.JambonzFrameSerializer(jambonz.JambonzFrameSerializer.InputParams(
-            jambonz_sample_rate=int(first.get("sampleRate") or jambonz.SAMPLE_RATE), hang_up=engine.twilio_hang_up))
-        await _run_phone_call(websocket, pending, serializer)
+            jambonz_sample_rate=rate, hang_up=engine.twilio_hang_up))
+        async def hand_off(transfer):
+            engine.transfers.add(str(sid or ""), transfer)   # the stream ends; jambonz asks /v1/jambonz/done
+
+        await _run_phone_call(websocket, pending, serializer, rate, on_transfer=hand_off)
+
+    # -- users and roles -------------------------------------------------------
+
+    @app.get("/v1/me", dependencies=auth)
+    async def me(request: Request):
+        return {**request.state.who, "auth": bool(engine.api_key)}
+
+    @app.get("/v1/keys", dependencies=auth)
+    async def list_keys():
+        return {"keys": engine.keys.list(), "enabled": bool(engine.api_key), "roles": list(keys_module.ROLES)}
+
+    @app.post("/v1/keys", dependencies=auth)
+    async def create_key(body: dict[str, Any]):
+        if not engine.api_key:
+            raise HTTPException(409, "named keys need the owner key first: start the engine with VPE_API_KEY set "
+                                     "(scripts/engine-up.sh --tunnel and Docker set one for you)")
+        try:
+            rec, key = engine.keys.create(str(body.get("name") or ""), str(body.get("role") or ""))
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return {**rec, "key": key}
+
+    @app.delete("/v1/keys/{kid}", dependencies=auth)
+    async def revoke_key(kid: str):
+        if not engine.keys.revoke(kid):
+            raise HTTPException(404, "no such key")
+        return {"revoked": kid}
+
+    # -- call history --------------------------------------------------------
+
+    @app.get("/v1/calls", dependencies=auth)
+    async def list_calls(agent: str = "", channel: str = "", q: str = "", before: float | None = None, limit: int = 50):
+        calls = await asyncio.to_thread(engine.history.list, agent=agent, channel=channel, query=q[:100],
+                                        before=before, limit=limit)
+        return {"calls": calls, "keeping": engine.cfg.call_history != "off",
+                "days": int(engine.cfg.call_history_days or 30), "recordings": engine.cfg.call_recordings == "on"}
+
+    @app.get("/v1/calls/{call_id}", dependencies=auth)
+    async def get_call(call_id: str):
+        call = await asyncio.to_thread(engine.history.get, call_id)
+        if call is None:
+            raise HTTPException(404, "no such call (calls older than the history setting are deleted)")
+        return call
+
+    @app.get("/v1/calls/{call_id}/recording", dependencies=auth)
+    async def call_recording(call_id: str):
+        path = engine.history.recording_path(call_id)
+        if path is None:
+            raise HTTPException(404, "this call has no recording")
+        return FileResponse(path, media_type="audio/wav", filename=f"call-{call_id}.wav",
+                            headers={"Cache-Control": "no-store"})
+
+    @app.delete("/v1/calls/{call_id}", dependencies=auth)
+    async def delete_call(call_id: str):
+        if not await asyncio.to_thread(engine.history.delete, call_id):
+            raise HTTPException(404, "no such call")
+        return {"deleted": call_id}
 
     # -- automation: triggers, channels, outbound ------------------------------
 
@@ -1184,7 +1388,7 @@ def create_app(engine: Engine) -> FastAPI:
             sample = {"summary": "This is a test note: a caller asked to book a cleaning next Tuesday morning.",
                       "details": "preferred day: Tuesday\npreferred time: morning", "agent": a.name, "channel": "phone",
                       "contact": "+15550100000", "transcript": "(test)", "session_id": "test", "ended_reason": "completed",
-                      "duration_seconds": 0, "steps": "", "caller_name": "Test Caller", "caller_phone": "+15550100000"}
+                      "duration_seconds": 0, "steps": "", "transferred_to": "", "caller_name": "Test Caller", "caller_phone": "+15550100000"}
             return {"results": [await engine.automations._send(slug, tid, t["send"], sample, dry_run=dry)]}
         raise HTTPException(400, "message triggers run when someone writes in")
 
@@ -1341,7 +1545,8 @@ def _engine_from_env() -> Engine:
                   api_key=os.environ.get("VPE_API_KEY", "").strip(),
                   max_sessions=int(os.environ.get("VPE_MAX_SESSIONS", "20")),
                   public_url=os.environ.get("VPE_PUBLIC_URL", "").strip(), store=store, listen_host=host,
-                  container=os.environ.get("VPE_CONTAINER", "") == "1")
+                  container=os.environ.get("VPE_CONTAINER", "") == "1",
+                  remote_editing=os.environ.get("VPE_REMOTE_EDITING", "").strip().lower() == "on")
 
 
 def app_from_env() -> FastAPI:
@@ -1384,7 +1589,8 @@ def main(argv: list[str] | None = None) -> int:
     container = os.environ.get("VPE_CONTAINER", "") == "1"
     engine = Engine(Path(args.agents).resolve(), cfg, api_key=api_key,
                     max_sessions=int(os.environ.get("VPE_MAX_SESSIONS", "20")), public_url=public_url,
-                    store=store, listen_host=args.host, container=container)
+                    store=store, listen_host=args.host, container=container,
+                    remote_editing=os.environ.get("VPE_REMOTE_EDITING", "").strip().lower() == "on")
     found = engine.list_agents()
     print(f"voice engine {__version__}: {len(found)} agent(s) in {engine.agents_dir}")
     print(f"  model: {cfg.llm} {cfg.model}" + ("" if cfg.llm_ready else "  (no key set: chats will fail)"))
