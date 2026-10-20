@@ -156,3 +156,31 @@ def test_odd_rates_fall_back_to_phone_audio():
     from vpengine.services import Config, ConfigError
     with pytest.raises(ConfigError, match="VPE_JAMBONZ_SAMPLE_RATE"):
         Config.load({"VPE_JAMBONZ_SAMPLE_RATE": "48000"})
+
+
+def test_outbound_call_body_and_tag():
+    body = jambonz.outbound_call("app-1", "+15550009999", "+15550101234", "front-desk", "tok")
+    assert body == {"application_sid": "app-1", "from": "+15550009999", "to": {"type": "phone", "number": "+15550101234"},
+                    "tag": {"lampline_agent": "front-desk", "lampline_ctx": "tok"}}
+    assert jambonz.outbound_tag({"customerData": body["tag"]}) == ("front-desk", "tok")
+    assert jambonz.outbound_tag({"customerData": "x"}) == ("", "") and jambonz.outbound_tag({}) == ("", "")
+
+
+def test_a_call_we_placed_runs_its_agent_with_its_context(client, engine):
+    engine.automations.contexts["tok"] = ({"caller_name": "Sam", "caller_phone": "+15550101234"}, time.time() + 60)
+    call = {**CALL, "direction": "outbound", "from": "+15550009999", "to": "+15550101234",
+            "customerData": {"lampline_agent": "front-desk", "lampline_ctx": "tok"}}
+    body = json.dumps(call, separators=(",", ":")).encode()
+    r = client.post("/v1/jambonz/call?agent=nope", content=body, headers={"Content-Type": "application/json", **sign(body)})
+    assert r.json()[0]["verb"] == "listen"                          # the tag's agent, not the application's
+    token = r.json()[0]["url"].split("t=", 1)[1]
+    pending = engine.stream_tokens.redeem(token, "jz-1")
+    assert pending is not None and pending.context["caller_name"] == "Sam" and pending.contact == "+15550101234"
+    assert "tok" not in engine.automations.contexts                  # used once
+
+
+def test_an_inbound_call_cant_pick_its_agent(client):
+    call = {**CALL, "customerData": {"lampline_agent": "front-desk"}}
+    body = json.dumps(call, separators=(",", ":")).encode()
+    r = client.post("/v1/jambonz/call?agent=nope", content=body, headers={"Content-Type": "application/json", **sign(body)})
+    assert [v["verb"] for v in r.json()] == ["say", "hangup"]

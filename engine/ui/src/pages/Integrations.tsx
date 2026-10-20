@@ -405,7 +405,12 @@ export function Integrations() {
         groups: [f("jambonz_webhook_secret", { hint: "In jambonz: Account → Webhook secret. Used to check that calls really come from your jambonz." }),
           f("jambonz_sample_rate", { labels: { "8000": "Phone audio, 8 kHz (works with every trunk)", "16000": "HD voice, 16 kHz (G.722, Opus or wideband SIP)" },
             hint: "HD voice is clearer for listening. Use it when your trunk or phone system carries wideband audio; otherwise it only costs bandwidth." }),
-          node(<PhoneLink />)] },
+          node(<PhoneLink />),
+          { details: "Outbound calls (triggers)", items: [
+            f("jambonz_api_url", { placeholder: "https://api.jambonz.cloud", hint: "jambonz.cloud, or your own jambonz's API server." }),
+            row({ field: "jambonz_account_sid" }, { field: "jambonz_application_sid", opts: { hint: "The application whose calling webhook points here." } }),
+            row({ field: "jambonz_api_key", opts: { hint: "Account → API keys." } }, { field: "jambonz_from_number", opts: { placeholder: "+15551234567" } }),
+            node(<p className="text-[12.5px] text-muted-foreground">Calls go out through your carrier in jambonz. They need the engine's public address and Outbound turned on under Automation.</p>)] }] },
       ...CONTACT_CENTERS.map<Provider>((c) => ({ key: c.key, icon: c.key, name: c.name, tag: c.tag, category: "contact", blurb: c.blurb,
         configured: false, footer: false, label: "Coming soon",
         body: <Notice><Info className="mt-0.5 size-4 shrink-0" /><span>{c.how} {c.key === "twilio-flex"

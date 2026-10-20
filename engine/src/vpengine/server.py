@@ -991,11 +991,11 @@ def create_app(engine: Engine) -> FastAPI:
             return await local_speech_problem(engine.cfg)
         return None
 
-    def _phone_context(form: dict, request: Request) -> tuple[dict, str]:
+    def _phone_context(form: dict, request: Request, ctx: str = "") -> tuple[dict, str]:
         """The caller's number (or, on our outbound calls, who we called) plus any context we started it with."""
         outbound = str(form.get("Direction", "")).startswith("outbound")
         contact = str(form.get("To" if outbound else "From", "") or "")
-        context = engine.automations.take_context(request.query_params.get("ctx", ""))
+        context = engine.automations.take_context(ctx or request.query_params.get("ctx", ""))
         if contact and re.fullmatch(r"\+?\d{7,15}", contact):
             context.setdefault("caller_phone", contact)
         return context, contact
@@ -1184,12 +1184,14 @@ def create_app(engine: Engine) -> FastAPI:
         if not engine.cfg.jambonz_webhook_secret or not engine.public_url:
             raise HTTPException(503, "jambonz calls need the application's webhook secret and a public address")
         call = await _jambonz_body(request)
+        placed, ctx = jambonz.outbound_tag(call)     # a call we placed through the REST API names its agent
+        agent = placed if placed and str(call.get("direction", "")).startswith("outbound") else agent
         problem = await _refusal(agent)
         if problem:
             log.warning("rejecting jambonz call: %s", problem)
             return jambonz.reject_verbs("Sorry, this line can't take calls right now. Please try again later.")
         context, contact = _phone_context({"Direction": call.get("direction", ""), "From": call.get("from", ""),
-                                           "To": call.get("to", "")}, request)
+                                           "To": call.get("to", "")}, request, ctx)
         token = engine.stream_tokens.issue(agent, str(call.get("call_sid") or ""), context, contact)
         log.info("jambonz call %s for %s", call.get("call_sid", "?"), agent)
         return jambonz.listen_verbs(_stream_url("/v1/jambonz/stream"), token, f"{engine.public_url}/v1/jambonz/done",
