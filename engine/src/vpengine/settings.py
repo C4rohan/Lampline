@@ -181,6 +181,14 @@ async def check(service: str, cfg: Config, timeout: float = 10.0) -> dict:
                     return {"ok": False, "message": "not installed on this computer (needs Linux or an Apple-silicon Mac)"}
                 ok = moonshine_stt.ready(cfg.moonshine_model)
                 return {"ok": ok, "message": "model downloaded" if ok else "download the model first"}
+            elif target == "parakeet":
+                from . import parakeet_stt
+                if not parakeet_stt.installed():
+                    return {"ok": False, "message": "onnx-asr isn't installed"}
+                ok = parakeet_stt.ready(cfg.parakeet_model)
+                return {"ok": ok, "message": "model downloaded" if ok else "download the model first"}
+            elif target == "qwen3-tts":
+                r = await http.get(cfg.qwen3_tts_url.rstrip("/") + "/audio/voices")
             elif target == "kokoro":
                 from .builtin_speech import kokoro_ready
                 ok = kokoro_ready()
@@ -244,11 +252,17 @@ async def local_speech_problem(cfg: Config, timeout: float = 1.5) -> str | None:
         from . import moonshine_stt
         if not moonshine_stt.ready(cfg.moonshine_model):
             return "The Moonshine model isn't downloaded yet. Open Integrations → Moonshine and press Download."
+    if cfg.stt == "parakeet":
+        from . import parakeet_stt
+        if not parakeet_stt.ready(cfg.parakeet_model):
+            return "The Parakeet model isn't downloaded yet. Open Integrations → Parakeet and press Download."
     servers = []
     if cfg.stt == "whisper-server":
         servers.append(("Whisper", cfg.whisper_url.rstrip("/") + "/models"))
     if cfg.tts == "kokoro-server":
         servers.append(("Kokoro", cfg.kokoro_url.rstrip("/") + "/audio/voices"))
+    if cfg.tts == "qwen3-tts":
+        servers.append(("Qwen3-TTS", cfg.qwen3_tts_url.rstrip("/") + "/audio/voices"))
     async with httpx.AsyncClient(timeout=timeout) as http:
         for name, url in servers:
             try:

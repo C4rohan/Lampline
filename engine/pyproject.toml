@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vpengine"
-version = "0.1.0"
+version = "0.2.0"
 description = "Voice agent engine for agent.yaml folders, built on Pipecat"
 readme = "README.md"
 license = "Apache-2.0"
@@ -17,6 +17,7 @@ dependencies = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
     "pypdf>=6.0.0,<7",                               # reading PDFs into knowledge bases (BSD-3-Clause, pure Python)
+    "onnx-asr==0.12.0",                              # Parakeet speech to text on this computer (MIT; uses the onnxruntime Kokoro already needs)
 ]
 
 [project.optional-dependencies]

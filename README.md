@@ -220,7 +220,7 @@ flowchart LR
   carriers --> engine
   engine --> agents[(agents/<br/>YAML + Markdown)]
   engine --> data[(Records and<br/>knowledge, SQLite)]
-  engine --> models{{Model and speech<br/>cloud APIs or local<br/>Whisper · Moonshine · Kokoro · Ollama}}
+  engine --> models{{Model and speech<br/>cloud APIs or local<br/>Whisper · Moonshine · Parakeet · Kokoro · Qwen3-TTS · Ollama}}
   engine -- tools --> hooks[Your APIs and<br/>MCP servers]
 ```
 
@@ -277,6 +277,7 @@ tools, data and knowledge: [engine/README.md](engine/README.md).
 - [x] Transfer to a person with the call's details as SIP headers ([engine/README.md](engine/README.md#transfer-to-a-person))
 - [ ] **Google Cloud deployment** (coming soon)
 - [ ] **Contact centers:** Genesys Cloud, Avaya, Cisco Webex Contact Center, Cisco UCCE, Amazon Connect, NICE CXone, Five9, Twilio Flex (coming soon)
+- [x] Users and roles, and an HTTPS guide ([docs/HTTPS.md](docs/HTTPS.md))
 - [x] Call history and optional recordings, on this computer ([engine/README.md](engine/README.md#call-history))
 - [ ] Published benchmarks
 
@@ -306,7 +307,7 @@ link this repository. GitHub's **Cite this repository** button (from
   author  = {Salvi, Rohan},
   title   = {Lampline: open-source, self-hosted voice agents},
   year    = {2026},
-  version = {0.1.0},
+  version = {0.2.0},
   url     = {https://github.com/C4rohan/lampline}
 }
 ```
