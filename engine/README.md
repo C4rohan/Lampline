@@ -472,6 +472,8 @@ one container, built from the `Dockerfile` at the top of the repo:
 | `VPE_LLM_TEMPERATURE` | provider default | |
 | `VPE_STT` / `VPE_TTS` | `deepgram` / `deepgram` | `whisper`, `whisper-server`; `fish`, `kokoro`, `kokoro-server` |
 | `VPE_LOCAL_WHISPER_MODEL` | `base.en` | built-in Whisper: `tiny.en`, `base.en`, `small.en`, `distil-small.en` |
+| `VPE_JAMBONZ_SAMPLE_RATE` | `8000` | `16000` for HD voice on SIP calls through jambonz |
+| `VPE_TURN_DETECTION` / `VPE_TURN_PAUSE` | `smart` / `3` (`0.8` with `pause`) | how a call decides the caller has finished: [Turn taking](#turn-taking-and-response-time) |
 | `VPE_MODEL_CACHE` | `~/.cache/vpengine` | where built-in models download |
 | `DEEPGRAM_API_KEY` | | voice calls; text chat works without it |
 | `VPE_STT_MODEL` / `VPE_TTS_VOICE` | `nova-3-general` / `aura-2-helena-en` | Deepgram |
@@ -548,11 +550,29 @@ from your own carrier or PBX reach an agent without Twilio or Telnyx.
 5. Call the number.
 
 The engine checks the `Jambonz-Signature` on every webhook and answers with a
-`listen` verb: the call's audio streams to `/v1/jambonz/stream` as 8 kHz
-linear PCM in both directions, with keypad presses passed through and a
+`listen` verb: the call's audio streams to `/v1/jambonz/stream` as linear PCM
+in both directions (8 kHz phone audio, or 16 kHz HD voice when you choose it
+on the jambonz tile or set `VPE_JAMBONZ_SAMPLE_RATE=16000`; HD voice helps
+listening when your trunk carries G.722, Opus or wideband SIP), with keypad presses passed through and a
 one-time token in the stream's address. When the caller talks over the agent
 the engine sends `killAudio`; when the agent ends the call it sends
 `disconnect` and jambonz hangs up. Inbound calls only for now.
+
+## Turn taking and response time
+
+On a voice call the agent has to decide when the caller has finished. By
+default it uses Pipecat's **smart-turn** model, which runs on this computer and
+listens to how the caller sounds (a trailing "and…" means more is coming), not
+just to silence. It answers once the caller is done, or after the pause limit
+(3 seconds) if they trail off. On lines where that doesn't suit, Integrations →
+**Turn taking** switches to a fixed pause (0.8 seconds unless you change it).
+
+The Test call page shows a **Response time** card. On a call it is how long
+the caller waited after their last word for the agent's first sound, plus where
+the time went: the turn decision, listening (time to the final transcript), the
+model (time to its first words) and speaking (time to the first audio). In a
+chat it is the model's time to its first words. The same numbers arrive as
+`turn_metrics` events on `/v1/sessions/{id}/events`, so you can log them.
 
 ## Test agents on it
 

@@ -36,6 +36,7 @@ from pipecat.serializers.base_serializer import FrameSerializer
 
 TOLERANCE = 300                      # seconds, the same as jambonz's own SDK
 SAMPLE_RATE = 8000                   # phone audio; jambonz resamples whatever the trunk uses
+RATES = (8000, 16000)                # 16000: HD voice (G.722, Opus or wideband SIP), clearer for listening
 SUBPROTOCOLS = ("audio.jambonz.org", "audio.drachtio.org")
 
 
@@ -70,12 +71,13 @@ def valid_signature(secret: str, header: str, body: bytes, *, now: float | None 
     return False
 
 
-def listen_verbs(stream_url: str, token: str, action_url: str) -> list[dict[str, Any]]:
+def listen_verbs(stream_url: str, token: str, action_url: str, sample_rate: int = SAMPLE_RATE) -> list[dict[str, Any]]:
     """Stream the call to us (both ways, as raw PCM) and hang up when the stream ends."""
+    rate = sample_rate if sample_rate in RATES else SAMPLE_RATE
     return [
         {"verb": "listen", "url": f"{stream_url}?t={token}", "actionHook": action_url,
-         "sampleRate": SAMPLE_RATE, "mixType": "mono", "passDtmf": True,
-         "bidirectionalAudio": {"enabled": True, "streaming": True, "sampleRate": SAMPLE_RATE},
+         "sampleRate": rate, "mixType": "mono", "passDtmf": True,
+         "bidirectionalAudio": {"enabled": True, "streaming": True, "sampleRate": rate},
          "metadata": {"t": token}},
         {"verb": "hangup"},
     ]

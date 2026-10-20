@@ -326,6 +326,14 @@ export function Integrations() {
       { key: "stt-whisper-server", icon: "whisper-server", name: "Whisper server", tag: "Advanced · Docker", category: "listening", chooser: "stt", value: "whisper-server", check: "whisper-server",
         blurb: "Whisper in a separate container, or any compatible server.", configured: false,
         groups: [node(<LocalSpeechPanel lead="Runs Whisper in Docker. Most people want Whisper on this computer instead." />), row({ field: "whisper_url" }, { field: "whisper_model" })] },
+      { key: "turns", icon: "turns", name: "Turn taking", category: "listening", configured: true,
+        tag: fl.turn_detection?.value === "pause" ? "Fixed pause" : "Smart turn", label: fl.turn_detection?.value === "pause" ? "Fixed pause" : "Smart turn",
+        blurb: "How a call decides the caller has finished speaking, so the agent answers without cutting them off.",
+        groups: [f("turn_detection", { labels: { smart: "Smart turn: listens to how the caller sounds, on this computer (recommended)", pause: "Fixed pause: answers after a set silence" } }),
+          f("turn_pause", { placeholder: fl.turn_detection?.value === "pause" ? "0.8" : "3",
+            hint: fl.turn_detection?.value === "pause"
+              ? "The silence that ends the caller's turn. Shorter replies faster but may cut people off."
+              : "The longest the agent waits when the caller pauses mid-thought, before answering anyway." })] },
       { key: "tts-kokoro", icon: "kokoro", name: "Kokoro", tag: "On this computer · free", category: "speaking", chooser: "tts", value: "kokoro", check: "kokoro",
         blurb: "Natural voices that run inside the engine. Private and free.", configured: !!builtin?.kokoro_ready,
         groups: [node(<BuiltinPanel onReady={afterDownload} />), f("kokoro_voice", { hint: "For example af_heart, af_bella, am_adam or bf_emma." })] },
@@ -359,7 +367,10 @@ export function Integrations() {
           { details: "Outbound calls (triggers)", items: [row({ field: "telnyx_texml_app_id" }, { field: "telnyx_from_number", opts: { placeholder: "+15551234567" } })] }] },
       { key: "jambonz", icon: "jambonz", name: "jambonz", tag: "SIP trunks, phone systems, SBCs", category: "phone", configured: set("jambonz_webhook_secret"),
         blurb: "Answer calls from any SIP trunk, PBX or session border controller through jambonz, open source and self-hostable.",
-        groups: [f("jambonz_webhook_secret", { hint: "In jambonz: Account → Webhook secret. Used to check that calls really come from your jambonz." }), node(<PhoneLink />)] },
+        groups: [f("jambonz_webhook_secret", { hint: "In jambonz: Account → Webhook secret. Used to check that calls really come from your jambonz." }),
+          f("jambonz_sample_rate", { labels: { "8000": "Phone audio, 8 kHz (works with every trunk)", "16000": "HD voice, 16 kHz (G.722, Opus or wideband SIP)" },
+            hint: "HD voice is clearer for listening. Use it when your trunk or phone system carries wideband audio; otherwise it only costs bandwidth." }),
+          node(<PhoneLink />)] },
       ...CONTACT_CENTERS.map<Provider>((c) => ({ key: c.key, icon: c.key, name: c.name, tag: c.tag, category: "contact", blurb: c.blurb,
         configured: false, footer: false, label: "Coming soon",
         body: <Notice><Info className="mt-0.5 size-4 shrink-0" /><span>{c.how} {c.key === "twilio-flex"
