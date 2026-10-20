@@ -4,6 +4,8 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 
 ## Unreleased (on dev)
 
+- Response time on the Test call page: how long the caller waits for each reply, split into turn detection, listening, model and speaking; also as `turn_metrics` events.
+- Turn taking settings: smart turn (the default, now adjustable) or a fixed pause.
 - CI scans every commit for keys and tokens.
 - Pull request template, issue templates, code of conduct and this changelog.
 - Engine UI on React 19.3, Radix UI 1.8, React Flow 12.12 and Tailwind CSS 4.3; Dependabot now sends one weekly pull request for the UI's packages.

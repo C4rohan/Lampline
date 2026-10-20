@@ -41,7 +41,7 @@ class FieldSpec:
 FISH_TTS_MODELS = ("s2.1-pro-free", "s2.1-pro", "s2-pro", "drama-3", "s1")
 
 # Numeric settings: (minimum, maximum). Empty means the provider's default.
-RANGES = {"fish_speed": (0.5, 2.0), "fish_volume": (-20.0, 20.0), "fish_temperature": (0.0, 1.0),
+RANGES = {"turn_pause": (0.2, 6.0), "fish_speed": (0.5, 2.0), "fish_volume": (-20.0, 20.0), "fish_temperature": (0.0, 1.0),
           "fish_top_p": (0.0, 1.0)}
 
 
@@ -164,6 +164,8 @@ SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("whisper_url", "VPE_WHISPER_URL", "Whisper server URL"),
     FieldSpec("whisper_model", "VPE_WHISPER_MODEL", "Whisper server model"),
     FieldSpec("local_whisper_model", "VPE_LOCAL_WHISPER_MODEL", "Whisper model", choices=("tiny.en", "base.en", "small.en", "distil-small.en")),
+    FieldSpec("turn_detection", "VPE_TURN_DETECTION", "How the agent knows the caller has finished", choices=("smart", "pause")),
+    FieldSpec("turn_pause", "VPE_TURN_PAUSE", "Pause in seconds"),
     FieldSpec("tts", "VPE_TTS", "Text to speech", choices=("deepgram", "fish", "kokoro", "kokoro-server")),
     FieldSpec("tts_voice", "VPE_TTS_VOICE", "Deepgram voice"),
     FieldSpec("fish_key", "FISH_API_KEY", "Fish Audio API key", secret=True),
@@ -259,6 +261,8 @@ class Config:
     whisper_url: str = "http://localhost:8001/v1"
     whisper_model: str = "Systran/faster-whisper-small"
     local_whisper_model: str = "base.en"
+    turn_detection: str = "smart"
+    turn_pause: str = ""          # smart: longest pause before answering anyway (3s); pause: silence that ends a turn (0.8s)
     tts: str = "deepgram"
     tts_voice: str = "aura-2-helena-en"
     fish_key: str = ""
@@ -440,6 +444,7 @@ class Config:
         return {"llm": self.llm, "llm_label": LLM_BY_NAME[self.llm].label, "model": self.model,
                 "base_url": self.base_url or None,
                 "llm_ready": self.llm_ready, "voice_ready": self.voice_ready,
+                "turn_detection": self.turn_detection,
                 "stt": self.stt, "stt_ready": self.stt_ready, "tts": self.tts, "tts_ready": self.tts_ready,
                 "stt_model": {"deepgram": self.stt_model, "whisper": self.local_whisper_model,
                               "fish": self.fish_stt_model}.get(self.stt, self.whisper_model),
@@ -549,6 +554,26 @@ def make_llm(cfg: Config) -> LLMService:
 
 
 # -- listening -----------------------------------------------------------------
+
+def make_turn_strategies(cfg: Config):
+    """How a voice call decides the caller has finished speaking.
+
+    smart: Pipecat's smart-turn model listens to how the caller sounds, and
+    answers once they have finished, or after the pause limit at most.
+    pause: answer after a fixed silence, for lines where the model struggles.
+    """
+    from pipecat.turns.user_stop import SpeechTimeoutUserTurnStopStrategy, TurnAnalyzerUserTurnStopStrategy
+    from pipecat.turns.user_turn_strategies import UserTurnStrategies
+
+    pause = float(cfg.turn_pause) if cfg.turn_pause else None
+    if cfg.turn_detection == "pause":
+        return UserTurnStrategies(stop=[SpeechTimeoutUserTurnStopStrategy(user_speech_timeout=pause or 0.8)])
+    from pipecat.audio.turn.smart_turn.base_smart_turn import SmartTurnParams
+    from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
+
+    analyzer = LocalSmartTurnAnalyzerV3(params=SmartTurnParams(stop_secs=pause or 3.0))
+    return UserTurnStrategies(stop=[TurnAnalyzerUserTurnStopStrategy(turn_analyzer=analyzer)])
+
 
 def make_stt(cfg: Config):
     if cfg.stt == "fish":
