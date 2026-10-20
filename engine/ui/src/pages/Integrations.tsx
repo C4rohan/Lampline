@@ -326,6 +326,14 @@ export function Integrations() {
       { key: "stt-whisper-server", icon: "whisper-server", name: "Whisper server", tag: "Advanced · Docker", category: "listening", chooser: "stt", value: "whisper-server", check: "whisper-server",
         blurb: "Whisper in a separate container, or any compatible server.", configured: false,
         groups: [node(<LocalSpeechPanel lead="Runs Whisper in Docker. Most people want Whisper on this computer instead." />), row({ field: "whisper_url" }, { field: "whisper_model" })] },
+      { key: "turns", icon: "turns", name: "Turn taking", category: "listening", configured: true,
+        tag: fl.turn_detection?.value === "pause" ? "Fixed pause" : "Smart turn", label: fl.turn_detection?.value === "pause" ? "Fixed pause" : "Smart turn",
+        blurb: "How a call decides the caller has finished speaking, so the agent answers without cutting them off.",
+        groups: [f("turn_detection", { labels: { smart: "Smart turn: listens to how the caller sounds, on this computer (recommended)", pause: "Fixed pause: answers after a set silence" } }),
+          f("turn_pause", { placeholder: fl.turn_detection?.value === "pause" ? "0.8" : "3",
+            hint: fl.turn_detection?.value === "pause"
+              ? "The silence that ends the caller's turn. Shorter replies faster but may cut people off."
+              : "The longest the agent waits when the caller pauses mid-thought, before answering anyway." })] },
       { key: "tts-kokoro", icon: "kokoro", name: "Kokoro", tag: "On this computer · free", category: "speaking", chooser: "tts", value: "kokoro", check: "kokoro",
         blurb: "Natural voices that run inside the engine. Private and free.", configured: !!builtin?.kokoro_ready,
         groups: [node(<BuiltinPanel onReady={afterDownload} />), f("kokoro_voice", { hint: "For example af_heart, af_bella, am_adam or bf_emma." })] },
