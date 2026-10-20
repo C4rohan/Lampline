@@ -167,6 +167,12 @@ SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("moonshine_model", "VPE_MOONSHINE_MODEL", "Moonshine model", choices=("small-streaming", "tiny-streaming")),
     FieldSpec("parakeet_model", "VPE_PARAKEET_MODEL", "Parakeet model", choices=("parakeet-tdt-0.6b-v2", "parakeet-tdt-0.6b-v3")),
     FieldSpec("local_whisper_model", "VPE_LOCAL_WHISPER_MODEL", "Whisper model", choices=("tiny.en", "base.en", "small.en", "distil-small.en")),
+    FieldSpec("voice_mode", "VPE_VOICE_MODE", "How calls talk", choices=("chain", "speech-to-speech")),
+    FieldSpec("realtime_url", "VPE_REALTIME_URL", "Realtime server"),
+    FieldSpec("realtime_model", "VPE_REALTIME_MODEL", "Speech-to-speech model"),
+    FieldSpec("realtime_voice", "VPE_REALTIME_VOICE", "Voice"),
+    FieldSpec("realtime_key", "VPE_REALTIME_API_KEY", "API key for the realtime server", secret=True),
+    FieldSpec("realtime_turns", "VPE_REALTIME_TURNS", "Turn taking", choices=("semantic", "pause")),
     FieldSpec("turn_detection", "VPE_TURN_DETECTION", "How the agent knows the caller has finished", choices=("smart", "pause")),
     FieldSpec("turn_pause", "VPE_TURN_PAUSE", "Pause in seconds"),
     FieldSpec("tts", "VPE_TTS", "Text to speech", choices=("deepgram", "fish", "kokoro", "kokoro-server", "qwen3-tts")),
@@ -280,6 +286,12 @@ class Config:
     local_whisper_model: str = "base.en"
     moonshine_model: str = "small-streaming"
     parakeet_model: str = "parakeet-tdt-0.6b-v2"   # v3: 25 European languages
+    voice_mode: str = "chain"           # speech-to-speech: one model listens and talks (experimental; realtime.py)
+    realtime_url: str = "wss://api.openai.com/v1/realtime"   # or any server that speaks the OpenAI Realtime protocol
+    realtime_model: str = "gpt-realtime"
+    realtime_voice: str = "marin"
+    realtime_key: str = ""              # empty: the OpenAI key, for OpenAI's own server
+    realtime_turns: str = "semantic"    # semantic: the model judges when the caller is done; pause: a fixed silence
     turn_detection: str = "smart"
     turn_pause: str = ""          # smart: longest pause before answering anyway (3s); pause: silence that ends a turn (0.8s)
     tts: str = "deepgram"
@@ -391,6 +403,8 @@ class Config:
                               ("base_url", "https://api.openai.com/v1")):
             if values.get(name) and not re.match(r"^https?://[^\s/]+", values[name]):
                 raise ConfigError(f"{SPEC_BY_NAME[name].label} must be an http(s) address, like {example}")
+        if values.get("realtime_url") and not re.match(r"^wss?://[^\s/]+", values["realtime_url"]):
+            raise ConfigError("the realtime server must be a ws(s) address, like wss://api.openai.com/v1/realtime")
         if values.get("vertex_credentials"):
             import json as _json
             try:
@@ -473,6 +487,10 @@ class Config:
             from .builtin_speech import kokoro_ready
             return kokoro_ready()
         return bool(self.kokoro_url)
+
+    @property
+    def realtime_api_key(self) -> str:
+        return self.realtime_key or (self.openai_key if "api.openai.com" in self.realtime_url else "")
 
     @property
     def voice_ready(self) -> bool:

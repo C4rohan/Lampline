@@ -475,6 +475,8 @@ one container, built from the `Dockerfile` at the top of the repo:
 | `VPE_STT` / `VPE_TTS` | `deepgram` / `deepgram` | `whisper`, `moonshine`, `parakeet`, `whisper-server`; `fish`, `kokoro`, `kokoro-server`, `qwen3-tts` |
 | `VPE_LOCAL_WHISPER_MODEL` | `base.en` | built-in Whisper: `tiny.en`, `base.en`, `small.en`, `distil-small.en` |
 | `VPE_MOONSHINE_MODEL` | `small-streaming` | `tiny-streaming` for the fastest replies and the lightest CPU load |
+| `VPE_VOICE_MODE` | `chain` | `speech-to-speech`: one model listens and talks (experimental) |
+| `VPE_REALTIME_URL`, `VPE_REALTIME_MODEL`, `VPE_REALTIME_VOICE`, `VPE_REALTIME_API_KEY`, `VPE_REALTIME_TURNS` | `wss://api.openai.com/v1/realtime`, `gpt-realtime`, `marin`, the OpenAI key, `semantic` | the speech-to-speech server |
 | `VPE_PARAKEET_MODEL` | `parakeet-tdt-0.6b-v2` | `parakeet-tdt-0.6b-v3` for 25 European languages |
 | `VPE_JAMBONZ_SAMPLE_RATE` | `8000` | `16000` for HD voice on SIP calls through jambonz |
 | `VPE_TURN_DETECTION` / `VPE_TURN_PAUSE` | `smart` / `3` (`0.8` with `pause`) | how a call decides the caller has finished: [Turn taking](#turn-taking-and-response-time) |
@@ -678,6 +680,29 @@ then choose Integrations → Speaking → **Qwen3-TTS** and set its address
 `serena`, `ryan`, `aiden`, ...) and language (`Auto`). The engine asks the
 server to stream raw audio as it's generated, so the agent starts speaking
 before the whole sentence is ready.
+
+### Speech to speech (experimental)
+
+A normal call is a chain: speech to text, the text model, then a voice. A
+speech-to-speech model listens and answers with audio itself, so there's no
+wait for a transcript or a voice, and it hears how things are said.
+
+Turn it on in Integrations → Listening → **Speech to speech**
+(`VPE_VOICE_MODE=speech-to-speech`). Voice calls then run on any server that
+speaks the OpenAI Realtime protocol: OpenAI's `gpt-realtime` (your OpenAI key,
+or `VPE_REALTIME_API_KEY`), or one you host (`VPE_REALTIME_URL`, like
+`ws://gpu-box:8000/v1/realtime`). Steps, transfers and tools work as before:
+each step's instructions and tools go to the model as the call moves on.
+
+What's different, so it's off by default:
+
+- Lines the agent must say word for word (Start's greeting, "say while
+  running" lines) are spoken by the model, so the wording can differ slightly.
+- Agents with scripted pages keep the normal chain; the call page says so.
+- Collecting details still uses your text model, so keep its key set.
+- Calls cost what the realtime model costs, per minute of audio.
+
+Text chats always use the text model.
 
 ## Users and roles
 

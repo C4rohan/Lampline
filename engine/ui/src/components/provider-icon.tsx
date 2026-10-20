@@ -14,6 +14,7 @@ const MONO: Record<string, Mono> = {
   whisper: { icon: Ear, hue: "#2f8a5c" },
   moonshine: { icon: Moon, hue: "#3b5fa8" },
   parakeet: { icon: Feather, hue: "#5b8a3a" },
+  s2s: { icon: AudioWaveform, hue: "#a8451c" },
   qwen3: { icon: Mic, hue: "#6a4bb0" },
   "whisper-server": { icon: Server, hue: "#55707f" },
   kokoro: { icon: AudioWaveform, hue: "#7457b0" },
