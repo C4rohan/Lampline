@@ -53,6 +53,7 @@ from .graph import Graph
 from .services import Config, ConfigError, make_llm
 from .session import Session, TextSession, VoiceSession
 from . import builder, generate
+from . import moonshine_stt
 from .builtin_speech import Downloads, warm
 from .fish import list_voices
 from .local_speech import LocalSpeech
@@ -126,6 +127,7 @@ class Engine:
         self.container = container
         self.local_speech = LocalSpeech(agents_dir)
         self.downloads = Downloads()
+        self.moonshine = moonshine_stt.Downloads()
         self.twilio_hang_up = twilio_hang_up            # end the phone call via Twilio's API on an end step
         self.stream_tokens = StreamTokens()
         self.cfg = cfg
@@ -320,6 +322,8 @@ def create_app(engine: Engine) -> FastAPI:
         if engine.cfg.stt == "whisper" or engine.cfg.tts == "kokoro":
             # Load the built-in models now so the first call doesn't wait for them.
             asyncio.get_running_loop().run_in_executor(None, warm, engine.cfg.local_whisper_model)
+        if engine.cfg.stt == "moonshine" and moonshine_stt.ready(engine.cfg.moonshine_model):
+            asyncio.get_running_loop().run_in_executor(None, moonshine_stt.load, engine.cfg.moonshine_model)
         if engine.store is not None:            # tests drive triggers directly
             engine.automations.start()
         yield
@@ -469,6 +473,19 @@ def create_app(engine: Engine) -> FastAPI:
         except RuntimeError as exc:
             raise HTTPException(409, str(exc)) from exc
         return engine.downloads.status(engine.cfg.local_whisper_model)
+
+    @app.get("/v1/moonshine", dependencies=auth)
+    async def moonshine_status():
+        return engine.moonshine.status(engine.cfg.moonshine_model)
+
+    @app.post("/v1/moonshine/download", dependencies=auth)
+    async def moonshine_download(request: Request):
+        _local_only(request)
+        try:
+            engine.moonshine.start(engine.cfg.moonshine_model)
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return engine.moonshine.status(engine.cfg.moonshine_model)
 
     @app.get("/v1/local-speech", dependencies=auth)
     async def local_speech_status():

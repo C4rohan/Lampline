@@ -367,6 +367,7 @@ how well an agent follows its steps still depends on the model.
 | Deepgram | `DEEPGRAM_API_KEY`; new accounts get free credit |
 | Fish Audio | `FISH_API_KEY` (the same key as speaking); each caller utterance goes to Fish's speech-to-text (`transcribe-1`, $0.36 per audio hour on Fish's price list) |
 | Whisper on this computer (free) | runs inside the engine (faster-whisper, int8 on the CPU); no Docker, no key |
+| Moonshine on this computer (free, streaming) | runs inside the engine and transcribes while the caller talks, so the text is ready moments after they stop; English; Linux or an Apple-silicon Mac on macOS 15 ([details](#moonshine-streaming-speech-to-text)) |
 | Whisper server (advanced) | any OpenAI-style transcription server, e.g. Speaches in Docker |
 
 | Speaking | |
@@ -472,6 +473,7 @@ one container, built from the `Dockerfile` at the top of the repo:
 | `VPE_LLM_TEMPERATURE` | provider default | |
 | `VPE_STT` / `VPE_TTS` | `deepgram` / `deepgram` | `whisper`, `whisper-server`; `fish`, `kokoro`, `kokoro-server` |
 | `VPE_LOCAL_WHISPER_MODEL` | `base.en` | built-in Whisper: `tiny.en`, `base.en`, `small.en`, `distil-small.en` |
+| `VPE_MOONSHINE_MODEL` | `small-streaming` | `tiny-streaming` for the fastest replies and the lightest CPU load |
 | `VPE_JAMBONZ_SAMPLE_RATE` | `8000` | `16000` for HD voice on SIP calls through jambonz |
 | `VPE_TURN_DETECTION` / `VPE_TURN_PAUSE` | `smart` / `3` (`0.8` with `pause`) | how a call decides the caller has finished: [Turn taking](#turn-taking-and-response-time) |
 | `VPE_MODEL_CACHE` | `~/.cache/vpengine` | where built-in models download |
@@ -558,6 +560,35 @@ one-time token in the stream's address. When the caller talks over the agent
 the engine sends `killAudio`; when the agent ends the call it sends
 `disconnect` and jambonz hangs up. Inbound calls only for now.
 
+### Moonshine: streaming speech to text
+
+[Moonshine](https://github.com/moonshine-ai/moonshine) (MIT) streams: it
+transcribes 20 ms at a time while the caller talks, and when voice detection
+hears them stop it finishes the line at once. Whisper waits for the whole turn
+and then transcribes it, so the caller waits for all of it.
+
+Measured on a 2-CPU cloud machine, real-time audio, from the end of speech to
+the final text (lower is better):
+
+| | After the caller stops | CPU while they talk |
+|---|---|---|
+| Whisper `base.en` (the Whisper default) | 0.66 s | |
+| Whisper `tiny.en` | 0.35 s | |
+| Moonshine small (the default) | 0.30 s | about half a core |
+| Moonshine tiny | 0.17 s | about a third of a core |
+
+All four transcribed the test sentences word for word, at 16 kHz and on 8 kHz
+phone audio. Laptops and desktops are faster than this machine across the
+board. The cost is CPU while the caller talks, so a small machine takes fewer
+calls at once than with Whisper.
+
+Choose it in Integrations → Listening → **Moonshine**, pick small or tiny, and
+press **Download model** (140 or 46 MB, once, into `VPE_MODEL_CACHE`). It is
+English only here: some of Moonshine's other languages use a non-commercial
+licence. It installs with the engine on Linux and on Apple-silicon Macs with
+macOS 15 or later (`pip install -e "engine[moonshine]"`; `scripts/engine-up.sh`
+and the Docker image include it); elsewhere the tile says it isn't available.
+
 ## Turn taking and response time
 
 On a voice call the agent has to decide when the caller has finished. By
@@ -626,7 +657,7 @@ Events: `node_transition`, `bot_speech`, `user_speech`, `tool_call_started`,
 ## Develop
 
 ```bash
-python3.12 -m venv .venv-engine && .venv-engine/bin/pip install -e cli -e "engine[dev]"
+python3.12 -m venv .venv-engine && .venv-engine/bin/pip install -e cli -e "engine[dev,moonshine]"
 .venv-engine/bin/pytest -q engine/tests
 ```
 

@@ -158,11 +158,12 @@ SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("novita_key", "NOVITA_API_KEY", "Novita AI API key", secret=True),
     FieldSpec("ollama_url", "OLLAMA_BASE_URL", "Ollama address"),
     FieldSpec("temperature", "VPE_LLM_TEMPERATURE", "Temperature"),
-    FieldSpec("stt", "VPE_STT", "Speech to text", choices=("deepgram", "fish", "whisper", "whisper-server")),
+    FieldSpec("stt", "VPE_STT", "Speech to text", choices=("deepgram", "fish", "whisper", "moonshine", "whisper-server")),
     FieldSpec("deepgram_key", "DEEPGRAM_API_KEY", "Deepgram API key", secret=True),
     FieldSpec("stt_model", "VPE_STT_MODEL", "Deepgram model"),
     FieldSpec("whisper_url", "VPE_WHISPER_URL", "Whisper server URL"),
     FieldSpec("whisper_model", "VPE_WHISPER_MODEL", "Whisper server model"),
+    FieldSpec("moonshine_model", "VPE_MOONSHINE_MODEL", "Moonshine model", choices=("small-streaming", "tiny-streaming")),
     FieldSpec("local_whisper_model", "VPE_LOCAL_WHISPER_MODEL", "Whisper model", choices=("tiny.en", "base.en", "small.en", "distil-small.en")),
     FieldSpec("turn_detection", "VPE_TURN_DETECTION", "How the agent knows the caller has finished", choices=("smart", "pause")),
     FieldSpec("turn_pause", "VPE_TURN_PAUSE", "Pause in seconds"),
@@ -262,6 +263,7 @@ class Config:
     whisper_url: str = "http://localhost:8001/v1"
     whisper_model: str = "Systran/faster-whisper-small"
     local_whisper_model: str = "base.en"
+    moonshine_model: str = "small-streaming"
     turn_detection: str = "smart"
     turn_pause: str = ""          # smart: longest pause before answering anyway (3s); pause: silence that ends a turn (0.8s)
     tts: str = "deepgram"
@@ -422,6 +424,9 @@ class Config:
         if self.stt == "whisper":
             from .builtin_speech import whisper_ready
             return whisper_ready(self.local_whisper_model)
+        if self.stt == "moonshine":
+            from . import moonshine_stt
+            return moonshine_stt.ready(self.moonshine_model)
         return bool(self.whisper_url)
 
     @property
@@ -449,7 +454,7 @@ class Config:
                 "turn_detection": self.turn_detection,
                 "stt": self.stt, "stt_ready": self.stt_ready, "tts": self.tts, "tts_ready": self.tts_ready,
                 "stt_model": {"deepgram": self.stt_model, "whisper": self.local_whisper_model,
-                              "fish": self.fish_stt_model}.get(self.stt, self.whisper_model),
+                              "fish": self.fish_stt_model, "moonshine": self.moonshine_model}.get(self.stt, self.whisper_model),
                 "tts_voice": voice[self.tts], "twilio_ready": bool(self.twilio_auth_token),
                 "telnyx_ready": bool(self.telnyx_public_key),
                 "jambonz_ready": bool(self.jambonz_webhook_secret),
@@ -588,6 +593,13 @@ def make_stt(cfg: Config):
         if not whisper_ready(cfg.local_whisper_model):
             raise ConfigError("the built-in Whisper model isn't downloaded yet: Integrations → Download models")
         return make_builtin_stt(cfg.local_whisper_model)
+    if cfg.stt == "moonshine":
+        from . import moonshine_stt
+        if not moonshine_stt.installed():
+            raise ConfigError("Moonshine isn't installed on this computer (it needs Linux or an Apple-silicon Mac)")
+        if not moonshine_stt.ready(cfg.moonshine_model):
+            raise ConfigError("the Moonshine model isn't downloaded yet: Integrations → Moonshine → Download")
+        return moonshine_stt.MoonshineSTTService(model=cfg.moonshine_model)
     if cfg.stt == "whisper-server":
         if not cfg.whisper_url:
             raise ConfigError("no Whisper server URL")

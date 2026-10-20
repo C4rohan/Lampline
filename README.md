@@ -172,7 +172,8 @@ Details: [engine/README.md](engine/README.md#docker).
 
 Prefer no Docker? `scripts/engine-up.sh` runs the engine natively (Python 3.11+)
 at http://localhost:7860, which also lets browser calls reach it directly.
-Free, private speech: Integrations → Whisper and Kokoro → **Download models**.
+Free, private speech: Integrations → Whisper and Kokoro → **Download models**,
+or Moonshine for listening, which transcribes while the caller talks.
 
 ## 🧠 Models
 
@@ -219,7 +220,7 @@ flowchart LR
   carriers --> engine
   engine --> agents[(agents/<br/>YAML + Markdown)]
   engine --> data[(Records and<br/>knowledge, SQLite)]
-  engine --> models{{Model and speech<br/>cloud APIs or local<br/>Whisper · Kokoro · Ollama}}
+  engine --> models{{Model and speech<br/>cloud APIs or local<br/>Whisper · Moonshine · Kokoro · Ollama}}
   engine -- tools --> hooks[Your APIs and<br/>MCP servers]
 ```
 
