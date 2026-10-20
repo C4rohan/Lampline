@@ -13,6 +13,8 @@ Endpoints (all JSON; /v1/* need X-API-Key when VPE_API_KEY is set):
     GET    /v1/sessions/{id}/events          live events (server-sent events)
     POST   /v1/calls/webrtc/offer            {agent, sdp, type, context}
     PATCH  /v1/calls/webrtc/offer            {pc_id, candidates}
+    GET    /v1/me                            who this key is, and its role
+    GET    /v1/keys, POST /v1/keys {name, role}, DELETE /v1/keys/{id}   named keys (admin)
     GET    /v1/calls                         call history (agent, channel, q, before, limit)
     GET    /v1/calls/{id}                    one call: transcript, events, collected details
     GET    /v1/calls/{id}/recording          its recording (WAV), when recordings are on
@@ -51,6 +53,7 @@ from . import __version__
 from . import graph as graph_module
 from .automation import Automations
 from .embed import Download as EmbedDownload, Embedder, MINILM
+from . import keys as keys_module
 from .history import CallHistory
 from .library import KINDS, Library, LibraryError
 from .connectors import ConnectorError, Connectors
@@ -122,7 +125,7 @@ class Engine:
     def __init__(self, agents_dir: Path, cfg: Config, *, api_key: str = "", max_sessions: int = 20,
                  llm_factory=None, speech_factory=None, public_url: str = "", twilio_auth_token: str = "",
                  twilio_hang_up: bool = True, store: "SettingsStore | None" = None, listen_host: str = "",
-                 data_dir: Path | None = None, container: bool = False):
+                 data_dir: Path | None = None, container: bool = False, remote_editing: bool = False):
         self.agents_dir = agents_dir
         self.public_url = public_url.rstrip("/")        # https address Twilio reaches us at (a tunnel)
         self._twilio_override = twilio_auth_token     # tests; otherwise from settings
@@ -131,6 +134,9 @@ class Engine:
         # In a container the published port is the only way in, and every request already needs the API key,
         # so "this computer" means: holds the key and didn't come through a tunnel or proxy.
         self.container = container
+        # VPE_REMOTE_EDITING=on: keys may change agents, data and knowledge from elsewhere (HTTPS proxy), as
+        # their role allows. Settings, secrets, downloads and anything that contacts people stay on this computer.
+        self.remote_editing = bool(remote_editing and api_key)
         self.local_speech = LocalSpeech(agents_dir)
         self.downloads = Downloads()
         self.moonshine = moonshine_stt.Downloads()
@@ -150,6 +156,7 @@ class Engine:
         self.connectors = Connectors(cfg, save=self._save_settings)
         self.library = Library(data_dir, self._embedder(cfg))          # records and knowledge, opened on first use
         self.history = CallHistory(self.library.folder)                 # finished calls, next to records
+        self.keys = keys_module.KeyStore(store.path.parent / "keys.json" if store else None)   # named keys and roles
         self.connectors.library = self.library
         self.embed_download = EmbedDownload()
         graph_module.ZONE = cfg.zone if cfg.timezone else None
@@ -351,13 +358,21 @@ def create_app(engine: Engine) -> FastAPI:
     app = FastAPI(title="Voice engine", version=__version__, docs_url=None, redoc_url=None, lifespan=lifespan)
 
     def require_key(request: Request) -> None:
+        """The owner key (VPE_API_KEY) or a named key; a named key's role limits what it may change."""
+        request.state.who = keys_module.describe(None)
         if not engine.api_key:
             return
         given = request.headers.get("x-api-key") or ""
         if not given and request.method == "GET" and request.url.path.endswith("/events"):
             given = request.query_params.get("key") or ""      # EventSource can't send headers
-        if not hmac.compare_digest(given.encode(), engine.api_key.encode()):
+        if hmac.compare_digest(given.encode(), engine.api_key.encode()):
+            return
+        rec = engine.keys.match(given)
+        if rec is None:
             raise HTTPException(401, "missing or wrong X-API-Key")
+        request.state.who = keys_module.describe(rec)
+        if not keys_module.allowed(rec["role"], request.method, request.url.path):
+            raise HTTPException(403, f"your key ({rec['name']}) is a {rec['role']} key, which can't do this; ask an admin")
 
     auth = [Depends(require_key)]
 
@@ -448,6 +463,8 @@ def create_app(engine: Engine) -> FastAPI:
         return False
 
     def _local_only(request: Request) -> None:
+        if engine.remote_editing and not keys_module.always_local(request.method, request.url.path):
+            return                                   # require_key already checked the key and its role
         if not _is_local(request):
             raise HTTPException(403, "this can only be done on this computer, not through the tunnel or the network")
 
@@ -1248,6 +1265,33 @@ def create_app(engine: Engine) -> FastAPI:
 
         await _run_phone_call(websocket, pending, serializer, rate, on_transfer=hand_off)
 
+    # -- users and roles -------------------------------------------------------
+
+    @app.get("/v1/me", dependencies=auth)
+    async def me(request: Request):
+        return {**request.state.who, "auth": bool(engine.api_key)}
+
+    @app.get("/v1/keys", dependencies=auth)
+    async def list_keys():
+        return {"keys": engine.keys.list(), "enabled": bool(engine.api_key), "roles": list(keys_module.ROLES)}
+
+    @app.post("/v1/keys", dependencies=auth)
+    async def create_key(body: dict[str, Any]):
+        if not engine.api_key:
+            raise HTTPException(409, "named keys need the owner key first: start the engine with VPE_API_KEY set "
+                                     "(scripts/engine-up.sh --tunnel and Docker set one for you)")
+        try:
+            rec, key = engine.keys.create(str(body.get("name") or ""), str(body.get("role") or ""))
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return {**rec, "key": key}
+
+    @app.delete("/v1/keys/{kid}", dependencies=auth)
+    async def revoke_key(kid: str):
+        if not engine.keys.revoke(kid):
+            raise HTTPException(404, "no such key")
+        return {"revoked": kid}
+
     # -- call history --------------------------------------------------------
 
     @app.get("/v1/calls", dependencies=auth)
@@ -1457,7 +1501,8 @@ def _engine_from_env() -> Engine:
                   api_key=os.environ.get("VPE_API_KEY", "").strip(),
                   max_sessions=int(os.environ.get("VPE_MAX_SESSIONS", "20")),
                   public_url=os.environ.get("VPE_PUBLIC_URL", "").strip(), store=store, listen_host=host,
-                  container=os.environ.get("VPE_CONTAINER", "") == "1")
+                  container=os.environ.get("VPE_CONTAINER", "") == "1",
+                  remote_editing=os.environ.get("VPE_REMOTE_EDITING", "").strip().lower() == "on")
 
 
 def app_from_env() -> FastAPI:
@@ -1500,7 +1545,8 @@ def main(argv: list[str] | None = None) -> int:
     container = os.environ.get("VPE_CONTAINER", "") == "1"
     engine = Engine(Path(args.agents).resolve(), cfg, api_key=api_key,
                     max_sessions=int(os.environ.get("VPE_MAX_SESSIONS", "20")), public_url=public_url,
-                    store=store, listen_host=args.host, container=container)
+                    store=store, listen_host=args.host, container=container,
+                    remote_editing=os.environ.get("VPE_REMOTE_EDITING", "").strip().lower() == "on")
     found = engine.list_agents()
     print(f"voice engine {__version__}: {len(found)} agent(s) in {engine.agents_dir}")
     print(f"  model: {cfg.llm} {cfg.model}" + ("" if cfg.llm_ready else "  (no key set: chats will fail)"))

@@ -10,6 +10,7 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 - Moonshine: free, streaming speech to text on this computer (English). The text is ready about 0.2–0.3 s after the caller stops, against 0.66 s for the default Whisper.
 - Transfer to a person: an End call step can hand the caller to a phone number or SIP address on Twilio, Telnyx and jambonz, with what the agent collected as SIP headers (and User-to-User data for Avaya and Cisco). Dialogflow CX live agent transfers import and export.
 - Outbound calls over SIP through jambonz, from schedules and the API trigger, with the same limits as Twilio and Telnyx.
+- Users and roles: named keys (admin, builder, viewer) on a new Team page, stored as fingerprints; an HTTPS guide for Caddy and nginx (docs/HTTPS.md); `VPE_REMOTE_EDITING` to allow changes through the proxy.
 - Calls page: every finished call and chat with its transcript, collected details, steps, response times and how it ended; search, filter and delete. Kept on this computer for 30 days by default. Optional recordings (off by default) as stereo WAV.
 - CI scans every commit for keys and tokens.
 - Pull request template, issue templates, code of conduct and this changelog.

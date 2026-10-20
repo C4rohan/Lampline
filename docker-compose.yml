@@ -19,6 +19,7 @@ services:
       VPE_API_KEY: "${VPE_DOCKER_API_KEY:?run scripts/docker-up.sh, or set VPE_DOCKER_API_KEY in .env}"
       VPE_PUBLISHED_PORT: "${VPE_DOCKER_PORT:-7860}"
       VPE_PUBLIC_URL: "${VPE_DOCKER_PUBLIC_URL:-}"
+      VPE_REMOTE_EDITING: "${VPE_REMOTE_EDITING:-off}"
       VPE_MAX_SESSIONS: "${VPE_MAX_SESSIONS:-20}"
       VPE_LOG_LEVEL: "${VPE_LOG_LEVEL:-warning}"
       # Optional: keys can also be saved on the Integrations page instead (it lists every provider).
