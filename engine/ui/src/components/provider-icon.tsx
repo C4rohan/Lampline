@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AudioWaveform, BookOpen, Ear, KeyRound, Moon, Server, Tag, Timer, Braces, Mail, ShieldCheck, Workflow } from "lucide-react";
+import { AudioWaveform, BookOpen, Ear, History, KeyRound, Moon, Server, Tag, Timer, Braces, Mail, ShieldCheck, Workflow } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +27,7 @@ const MONO: Record<string, Mono> = {
   mcp: { icon: Workflow, hue: "#6b4fa8" },
   automation: { icon: ShieldCheck, hue: "#a8720c" },
   knowledge: { icon: BookOpen, hue: "#3f7a5a" },
+  history: { icon: History, hue: "#5a6b8c" },
   turns: { icon: Timer, hue: "#2f6fb0" },
   // more model providers
   vertex: { text: "Vx", hue: "#3b6fd8" }, azure: { text: "Az", hue: "#2f6fb0" }, bedrock: { text: "Br", hue: "#b06a1f" },

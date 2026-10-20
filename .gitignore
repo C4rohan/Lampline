@@ -14,6 +14,7 @@ __pycache__/
 
 # Engine UI dependencies (the built app is committed under engine/src/vpengine/static)
 engine/ui/node_modules/
+*.tsbuildinfo
 
 # Your own agents (engine-up.sh and docker-up.sh create agents/ on first run); keep them in a repo of their own
 /agents/

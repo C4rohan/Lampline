@@ -176,6 +176,42 @@ class _ScriptGate(FrameProcessor):
         await self.push_frame(frame, direction)
 
 
+RECORDING_RATE = 16000
+
+
+def _recorder(path):
+    """A stereo WAV of the call (caller left, agent right), written in 5-second pieces as it goes.
+
+    Pipecat's AudioBufferProcessor lines up the caller's and the agent's audio; its events normally
+    run as tasks, which a hang-up can cancel, so the file is written right where they're raised."""
+    import wave
+
+    from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
+
+    class Recorder(AudioBufferProcessor):
+        _wav = None
+
+        async def _call_event_handler(self, event_name: str, *args, **kwargs):
+            if event_name == "on_recording_started":
+                path.parent.mkdir(parents=True, exist_ok=True)
+                self._wav = wave.open(str(path), "wb")
+                self._wav.setnchannels(2)
+                self._wav.setsampwidth(2)
+                self._wav.setframerate(RECORDING_RATE)
+            elif event_name == "on_audio_data" and self._wav is not None and args and args[0]:
+                self._wav.writeframes(args[0])
+            elif event_name == "on_recording_stopped" and self._wav is not None:
+                empty = self._wav.getnframes() == 0
+                self._wav.close()
+                self._wav = None
+                if empty:
+                    path.unlink(missing_ok=True)
+            await super()._call_event_handler(event_name, *args, **kwargs)
+
+    return Recorder(sample_rate=RECORDING_RATE, num_channels=2, buffer_size=RECORDING_RATE * 2 * 2 * 5,
+                    auto_start_recording=True)
+
+
 class Session:
     """Base class. Subclasses build the pipeline and say things."""
 
@@ -375,6 +411,7 @@ class VoiceSession(Session):
         self._begun = False
         self.audio_in_rate = audio_in_rate
         self.audio_out_rate = audio_out_rate
+        self.record_to = None        # a .wav path when call recordings are on (set before the call runs)
         from pipecat.processors.aggregators.llm_response_universal import LLMUserAggregatorParams
 
         if vad is None:
@@ -408,6 +445,7 @@ class VoiceSession(Session):
             _BotTap(self),
             self.tts,
             self.transport.output(),
+            *([_recorder(self.record_to)] if self.record_to else []),
             _LatencyTap(self),
             self.aggregators.assistant(),
         ])

@@ -13,6 +13,10 @@ Endpoints (all JSON; /v1/* need X-API-Key when VPE_API_KEY is set):
     GET    /v1/sessions/{id}/events          live events (server-sent events)
     POST   /v1/calls/webrtc/offer            {agent, sdp, type, context}
     PATCH  /v1/calls/webrtc/offer            {pc_id, candidates}
+    GET    /v1/calls                         call history (agent, channel, q, before, limit)
+    GET    /v1/calls/{id}                    one call: transcript, events, collected details
+    GET    /v1/calls/{id}/recording          its recording (WAV), when recordings are on
+    DELETE /v1/calls/{id}
 
 Agents' HTTP tools run for real on calls; chat and browser test calls can ask for
 each tool's mock response instead (mock_tools). See README.md for the full list.
@@ -37,7 +41,7 @@ from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -47,6 +51,7 @@ from . import __version__
 from . import graph as graph_module
 from .automation import Automations
 from .embed import Download as EmbedDownload, Embedder, MINILM
+from .history import CallHistory
 from .library import KINDS, Library, LibraryError
 from .connectors import ConnectorError, Connectors
 from .graph import Graph
@@ -144,6 +149,7 @@ class Engine:
         self._webrtc = None
         self.connectors = Connectors(cfg, save=self._save_settings)
         self.library = Library(data_dir, self._embedder(cfg))          # records and knowledge, opened on first use
+        self.history = CallHistory(self.library.folder)                 # finished calls, next to records
         self.connectors.library = self.library
         self.embed_download = EmbedDownload()
         graph_module.ZONE = cfg.zone if cfg.timezone else None
@@ -253,6 +259,9 @@ class Engine:
             self._message_starts.append(now)
 
     def add(self, session: Session) -> Session:
+        if (isinstance(session, VoiceSession) and self.cfg.call_recordings == "on" and self.cfg.call_history != "off"
+                and session.meta.get("agent")):
+            session.record_to = self.history.recordings / f"{session.id}.wav"
         self.sessions[session.id] = session
         self.locks[session.id] = asyncio.Lock()
         try:
@@ -262,8 +271,14 @@ class Engine:
         return session
 
     async def _after(self, session: Session) -> None:
-        """When a conversation ends, run the agent's after-call triggers."""
+        """When a conversation ends, keep it in the call history and run the agent's after-call triggers."""
         await session.finished.wait()
+        if session.meta.get("agent") and self.cfg.call_history != "off":
+            try:
+                await asyncio.to_thread(self.history.save, session)
+                await asyncio.to_thread(self.history.prune, int(self.cfg.call_history_days or 30))
+            except Exception:  # noqa: BLE001
+                log.exception("saving the call history failed")
         if session.meta.get("agent"):
             try:
                 await self.automations.after_call(session)
@@ -311,6 +326,7 @@ class Engine:
         if self._webrtc is not None:
             await self._webrtc.close()
         self.library.close()
+        self.history.close()
 
 
 def chat_payload(session: Session, events: list[dict]) -> dict:
@@ -1231,6 +1247,36 @@ def create_app(engine: Engine) -> FastAPI:
             engine.transfers.add(str(sid or ""), transfer)   # the stream ends; jambonz asks /v1/jambonz/done
 
         await _run_phone_call(websocket, pending, serializer, rate, on_transfer=hand_off)
+
+    # -- call history --------------------------------------------------------
+
+    @app.get("/v1/calls", dependencies=auth)
+    async def list_calls(agent: str = "", channel: str = "", q: str = "", before: float | None = None, limit: int = 50):
+        calls = await asyncio.to_thread(engine.history.list, agent=agent, channel=channel, query=q[:100],
+                                        before=before, limit=limit)
+        return {"calls": calls, "keeping": engine.cfg.call_history != "off",
+                "days": int(engine.cfg.call_history_days or 30), "recordings": engine.cfg.call_recordings == "on"}
+
+    @app.get("/v1/calls/{call_id}", dependencies=auth)
+    async def get_call(call_id: str):
+        call = await asyncio.to_thread(engine.history.get, call_id)
+        if call is None:
+            raise HTTPException(404, "no such call (calls older than the history setting are deleted)")
+        return call
+
+    @app.get("/v1/calls/{call_id}/recording", dependencies=auth)
+    async def call_recording(call_id: str):
+        path = engine.history.recording_path(call_id)
+        if path is None:
+            raise HTTPException(404, "this call has no recording")
+        return FileResponse(path, media_type="audio/wav", filename=f"call-{call_id}.wav",
+                            headers={"Cache-Control": "no-store"})
+
+    @app.delete("/v1/calls/{call_id}", dependencies=auth)
+    async def delete_call(call_id: str):
+        if not await asyncio.to_thread(engine.history.delete, call_id):
+            raise HTTPException(404, "no such call")
+        return {"deleted": call_id}
 
     # -- automation: triggers, channels, outbound ------------------------------
 

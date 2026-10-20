@@ -57,6 +57,13 @@ export const LLM_LABEL: Record<string, string> = { anthropic: "Claude (Anthropic
 export const STT_LABEL: Record<string, string> = { deepgram: "Deepgram", fish: "Fish Audio", whisper: "Whisper on this computer (free)", moonshine: "Moonshine on this computer (free, streaming)", "whisper-server": "Whisper server (advanced)" };
 export const TTS_LABEL: Record<string, string> = { deepgram: "Deepgram", fish: "Fish Audio", kokoro: "Kokoro on this computer (free)", "kokoro-server": "Kokoro server (advanced)" };
 
+/** A file from the engine as an object URL (for <audio>); the caller revokes it. */
+export async function blobUrl(path: string): Promise<string> {
+  const r = await fetch(path, { headers: key ? { "X-API-Key": key } : {} });
+  if (!r.ok) throw new ApiError(`${r.status} ${r.statusText}`, r.status);
+  return URL.createObjectURL(await r.blob());
+}
+
 /** Download a file from the engine (sends the API key, which a plain link can't). */
 export async function download(path: string, fallbackName: string): Promise<string | null> {
   const headers: Record<string, string> = {};
