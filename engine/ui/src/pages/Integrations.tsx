@@ -56,6 +56,7 @@ const CONTACT_CENTERS: { key: string; name: string; tag: string; blurb: string; 
     how: "Planned: Twilio numbers already work; this adds transfer into Flex TaskRouter queues with the call's details." },
 ];
 
+type Moon = { installed: boolean; ready: boolean; state: string; message?: string; progress?: number | null; size_mb: number; model: string };
 type Builtin = { installed: boolean; state: string; message?: string; progress?: number | null; size_mb: number; whisper_ready: boolean; kokoro_ready: boolean; whisper_model: string };
 type LocalSpeech = { available: boolean; docker: boolean; state: string; message?: string; seconds?: number; servers: { whisper: boolean; kokoro: boolean }; log?: string[] };
 
@@ -89,6 +90,34 @@ function BuiltinPanel({ onReady }: { onReady: () => void }) {
                 try { setData(await api<Builtin>("POST", "/v1/builtin-speech/download")); } catch (e) { setData({ ...st, state: "error", message: (e as Error).message }); }
                 kick();
               }}>Download models (about {st.size_mb} MB, once)</Button>}
+        </span>
+      </div>
+      {busy && st.progress != null && <div className="h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full bg-lamp transition-[width]" style={{ width: `${Math.round(st.progress * 100)}%` }} /></div>}
+      {(busy || st.state === "error") && st.message && <p className={cn("text-[13px]", st.state === "error" ? "text-bad" : "text-muted-foreground")}>{st.message}</p>}
+    </Panel>
+  );
+}
+
+function MoonshinePanel({ onReady }: { onReady: () => void }) {
+  const { data: st, setData, kick } = usePoll<Moon>("/v1/moonshine", (s) => s.state === "downloading");
+  const [was, setWas] = useState("");
+  useEffect(() => { if (st) { if (was === "downloading" && st.state !== "downloading") onReady(); setWas(st.state); } }, [st]); // eslint-disable-line
+  const lead = "Free and private: runs inside the engine and transcribes while the caller talks, so replies start sooner. English only.";
+  if (!st) return <Panel lead={lead}><span className="text-sm text-muted-foreground">Checking…</span></Panel>;
+  const busy = st.state === "downloading";
+  return (
+    <Panel lead={lead}>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+        <span className="inline-flex items-center gap-2 text-sm"><Lamp on={st.ready} warn={busy} />Moonshine ({st.model.replace("-streaming", "")})
+          <span className="text-muted-foreground">{st.ready ? "ready" : busy ? "downloading" : "not downloaded"}</span></span>
+        <span className="ml-auto">
+          {!st.installed ? <span className="text-sm text-bad">Not available on this computer: it needs Linux or an Apple-silicon Mac on macOS 15.</span>
+            : busy ? <Button size="sm" variant="outline" disabled>Downloading…</Button>
+            : st.ready ? <Badge variant="ok">Ready</Badge>
+            : <Button size="sm" variant="lamp" onClick={async () => {
+                try { setData(await api<Moon>("POST", "/v1/moonshine/download")); } catch (e) { setData({ ...st, state: "error", message: (e as Error).message }); }
+                kick();
+              }}>Download model (about {st.size_mb} MB, once)</Button>}
         </span>
       </div>
       {busy && st.progress != null && <div className="h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full bg-lamp transition-[width]" style={{ width: `${Math.round(st.progress * 100)}%` }} /></div>}
@@ -285,6 +314,7 @@ function Tile({ p, inUse, ready, onOpen }: { p: Provider; inUse: boolean; ready:
 export function Integrations() {
   const { data: settings, error, setData, reload } = useLoad(() => api<Settings>("GET", "/v1/settings"));
   const { data: builtin } = useLoad(() => api<{ whisper_ready: boolean; kokoro_ready: boolean }>("GET", "/v1/builtin-speech").catch(() => null));
+  const { data: moon } = useLoad(() => api<Moon>("GET", "/v1/moonshine").catch(() => null));
   const { data: secrets } = useLoad(() => api<{ secrets: unknown[] }>("GET", "/v1/secrets").catch(() => ({ secrets: [] })));
   const { refresh, health } = useApp();
   const [open, setOpen] = useState<string | null>(null);
@@ -316,6 +346,11 @@ export function Integrations() {
       { key: "stt-whisper", icon: "whisper", name: "Whisper", tag: "On this computer · free", category: "listening", chooser: "stt", value: "whisper", check: "whisper",
         blurb: "Runs inside the engine. Private, no account, downloads once.", configured: !!builtin?.whisper_ready,
         groups: [node(<BuiltinPanel onReady={afterDownload} />), f("local_whisper_model", { labels: WHISPER_SIZES, hint: "Save after changing it, then download." })] },
+      { key: "stt-moonshine", icon: "moonshine", name: "Moonshine", tag: "On this computer · free · streaming", category: "listening", chooser: "stt", value: "moonshine", check: "moonshine",
+        blurb: "Transcribes while the caller talks, so the agent answers sooner. English.", configured: !!moon?.ready,
+        groups: [node(<MoonshinePanel onReady={afterDownload} />),
+          f("moonshine_model", { labels: { "small-streaming": "Small: more accurate (140 MB)", "tiny-streaming": "Tiny: fastest, lightest on the CPU (46 MB)" },
+            hint: "Save after changing it, then download. Each call uses about half a CPU core while the caller talks (tiny: a third)." })] },
       { key: "stt-deepgram", icon: "deepgram", name: "Deepgram", tag: "Cloud", category: "listening", chooser: "stt", value: "deepgram", check: "deepgram",
         blurb: "Fast streaming speech to text. New accounts get free credit.", configured: set("deepgram_key"),
         groups: [f("deepgram_key", { hint: "New Deepgram accounts get free credit. The same key works for speaking." }), f("stt_model")] },
@@ -429,7 +464,7 @@ export function Integrations() {
       { key: "workspace", icon: "workspace", name: "Workspace", tag: health?.brand || "", category: "more", configured: true,
         blurb: "The name shown across this app.", groups: [f("brand_name")] },
     ];
-  }, [settings, builtin, secrets, voicePick, health?.brand]); // eslint-disable-line
+  }, [settings, builtin, moon, secrets, voicePick, health?.brand]); // eslint-disable-line
 
   if (error) return <Page title="Integrations"><p className="text-sm text-bad">{error}</p></Page>;
   if (!settings) return <Page title="Integrations"><p className="text-sm text-muted-foreground">Loading…</p></Page>;

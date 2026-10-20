@@ -55,6 +55,9 @@ if [[ ! -x "$VENV/bin/vpengine" || "$(cat "$STAMP" 2>/dev/null)" != "$WANT" ]]; 
   "$PY" -m venv --clear "$VENV"
   "$VENV/bin/python" -m pip install --quiet --upgrade pip
   "$VENV/bin/python" -m pip install --quiet -e cli -e engine
+  # Moonshine (streaming local speech to text) where this computer can run it; fine without it.
+  "$VENV/bin/python" -m pip install --quiet -e "engine[moonshine]" 2>/dev/null \
+    || echo "note: Moonshine isn't available on this computer; Whisper and the cloud services still are"
   echo "$WANT" > "$STAMP"
 fi
 
