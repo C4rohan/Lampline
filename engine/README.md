@@ -278,8 +278,9 @@ Integrations → Automation. Then they're kept out of quiet hours (default
 21:00 to 08:00), to a daily limit per agent (default 50), and to one contact
 per person per agent every 10 minutes; only contacts that went out count.
 Every attempt is logged (recipients masked) under Automation → Recent
-activity. Outbound calls need Twilio (account SID, auth token and a number) or
-Telnyx (API key, TeXML application and a number) and the public address.
+activity. Outbound calls need Twilio (account SID, auth token and a number),
+Telnyx (API key, TeXML application and a number) or jambonz (API key, account
+and application SIDs and a number), and the public address.
 WhatsApp only allows approved templates more than 24 hours after a person last
 wrote, so reminders outside that window need a template on Meta's side.
 
@@ -367,6 +368,7 @@ how well an agent follows its steps still depends on the model.
 | Deepgram | `DEEPGRAM_API_KEY`; new accounts get free credit |
 | Fish Audio | `FISH_API_KEY` (the same key as speaking); each caller utterance goes to Fish's speech-to-text (`transcribe-1`, $0.36 per audio hour on Fish's price list) |
 | Whisper on this computer (free) | runs inside the engine (faster-whisper, int8 on the CPU); no Docker, no key |
+| Moonshine on this computer (free, streaming) | runs inside the engine and transcribes while the caller talks, so the text is ready moments after they stop; English; Linux or an Apple-silicon Mac on macOS 15 ([details](#moonshine-streaming-speech-to-text)) |
 | Whisper server (advanced) | any OpenAI-style transcription server, e.g. Speaches in Docker |
 
 | Speaking | |
@@ -472,6 +474,9 @@ one container, built from the `Dockerfile` at the top of the repo:
 | `VPE_LLM_TEMPERATURE` | provider default | |
 | `VPE_STT` / `VPE_TTS` | `deepgram` / `deepgram` | `whisper`, `whisper-server`; `fish`, `kokoro`, `kokoro-server` |
 | `VPE_LOCAL_WHISPER_MODEL` | `base.en` | built-in Whisper: `tiny.en`, `base.en`, `small.en`, `distil-small.en` |
+| `VPE_MOONSHINE_MODEL` | `small-streaming` | `tiny-streaming` for the fastest replies and the lightest CPU load |
+| `VPE_JAMBONZ_SAMPLE_RATE` | `8000` | `16000` for HD voice on SIP calls through jambonz |
+| `VPE_TURN_DETECTION` / `VPE_TURN_PAUSE` | `smart` / `3` (`0.8` with `pause`) | how a call decides the caller has finished: [Turn taking](#turn-taking-and-response-time) |
 | `VPE_MODEL_CACHE` | `~/.cache/vpengine` | where built-in models download |
 | `DEEPGRAM_API_KEY` | | voice calls; text chat works without it |
 | `VPE_STT_MODEL` / `VPE_TTS_VOICE` | `nova-3-general` / `aura-2-helena-en` | Deepgram |
@@ -490,6 +495,7 @@ one container, built from the `Dockerfile` at the top of the repo:
 | `VPE_SETTINGS_FILE` | `~/.config/vpengine/settings.json` | where Integrations saves |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_FROM_NUMBER` | | outbound calls through Twilio |
 | `TELNYX_TEXML_APP_ID`, `TELNYX_FROM_NUMBER` | | outbound calls through Telnyx |
+| `JAMBONZ_API_URL`, `JAMBONZ_ACCOUNT_SID`, `JAMBONZ_API_KEY`, `JAMBONZ_APPLICATION_SID`, `JAMBONZ_FROM_NUMBER` | `https://api.jambonz.cloud` | outbound calls over SIP through jambonz |
 | `TELEGRAM_BOT_TOKEN` | | Telegram |
 | `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN` | | WhatsApp Cloud API |
 | `VPE_EMAIL_PROVIDER` | `smtp` | or `gmail` |
@@ -548,11 +554,99 @@ from your own carrier or PBX reach an agent without Twilio or Telnyx.
 5. Call the number.
 
 The engine checks the `Jambonz-Signature` on every webhook and answers with a
-`listen` verb: the call's audio streams to `/v1/jambonz/stream` as 8 kHz
-linear PCM in both directions, with keypad presses passed through and a
+`listen` verb: the call's audio streams to `/v1/jambonz/stream` as linear PCM
+in both directions (8 kHz phone audio, or 16 kHz HD voice when you choose it
+on the jambonz tile or set `VPE_JAMBONZ_SAMPLE_RATE=16000`; HD voice helps
+listening when your trunk carries G.722, Opus or wideband SIP), with keypad presses passed through and a
 one-time token in the stream's address. When the caller talks over the agent
 the engine sends `killAudio`; when the agent ends the call it sends
-`disconnect` and jambonz hangs up. Inbound calls only for now.
+`disconnect` and jambonz hangs up, or dials the person the step transfers to.
+
+Outbound calls (schedules and the API trigger) go out the same way, through
+your own carrier: on the jambonz tile, under "Outbound calls", add the API
+address (`https://api.jambonz.cloud` or your own jambonz), the account SID, an
+API key (Account → API keys), the application's SID and the number calls come
+from. The engine asks jambonz's REST API to place the call through that
+application, and tags it with the agent and the call's details; when the
+person answers, the application's calling webhook runs the agent as it does
+for inbound calls. Outbound has the same limits as Twilio and Telnyx: turned
+on under Automation, quiet hours, a daily cap, one contact per person every 10
+minutes.
+
+### Transfer to a person
+
+An End call step can hand the caller to a person instead of hanging up. In the
+builder, open the step and fill in **Transfer to a person**: a phone number
+(`+15551234567`) or a SIP address on your phone system or contact center
+(`sip:desk@pbx.example.com`); `{{variables}}` work, so a lookup can pick the
+desk. The agent says its line, then the carrier connects the caller.
+
+The person picking up gets what the agent collected. On a SIP address the
+details travel as SIP headers: `X-Lampline-Session` (the session ID, to look
+the call up afterwards) and `X-Lampline-<name>` for each detail, ASCII and at
+most 200 characters each. Choose which details to send, or leave the list
+empty to send everything this call collected. For Avaya and Cisco, the step
+can also send User-to-User data (`transfer_uui`, hex encoded as RFC 7433
+describes), which their screen pops read. A phone number on the public
+network can't carry headers; the details stay in the call's `transfer` event,
+and after-call triggers can send them on (`{{transferred_to}}`, `{{details}}`,
+`{{session_id}}`).
+
+| Carrier | How the transfer happens |
+| --- | --- |
+| Twilio | The stream's TwiML ends with a redirect to `/v1/twilio/after`, which answers `<Dial>` with the number or SIP address |
+| Telnyx | Call Control's transfer command (needs the API key on the Phone numbers page) |
+| jambonz | The `listen` verb's action hook (`/v1/jambonz/done`) answers with a `dial` verb |
+
+In text and browser calls, the Test call page shows where the caller would
+have gone and what would have been sent. `vk lint` checks the address
+(VK134). Dialogflow CX imports and exports map it to a live agent transfer
+(`telephonyTransferCall`).
+
+### Moonshine: streaming speech to text
+
+[Moonshine](https://github.com/moonshine-ai/moonshine) (MIT) streams: it
+transcribes 20 ms at a time while the caller talks, and when voice detection
+hears them stop it finishes the line at once. Whisper waits for the whole turn
+and then transcribes it, so the caller waits for all of it.
+
+Measured on a 2-CPU cloud machine, real-time audio, from the end of speech to
+the final text (lower is better):
+
+| | After the caller stops | CPU while they talk |
+|---|---|---|
+| Whisper `base.en` (the Whisper default) | 0.66 s | |
+| Whisper `tiny.en` | 0.35 s | |
+| Moonshine small (the default) | 0.30 s | about half a core |
+| Moonshine tiny | 0.17 s | about a third of a core |
+
+All four transcribed the test sentences word for word, at 16 kHz and on 8 kHz
+phone audio. Laptops and desktops are faster than this machine across the
+board. The cost is CPU while the caller talks, so a small machine takes fewer
+calls at once than with Whisper.
+
+Choose it in Integrations → Listening → **Moonshine**, pick small or tiny, and
+press **Download model** (140 or 46 MB, once, into `VPE_MODEL_CACHE`). It is
+English only here: some of Moonshine's other languages use a non-commercial
+licence. It installs with the engine on Linux and on Apple-silicon Macs with
+macOS 15 or later (`pip install -e "engine[moonshine]"`; `scripts/engine-up.sh`
+and the Docker image include it); elsewhere the tile says it isn't available.
+
+## Turn taking and response time
+
+On a voice call the agent has to decide when the caller has finished. By
+default it uses Pipecat's **smart-turn** model, which runs on this computer and
+listens to how the caller sounds (a trailing "and…" means more is coming), not
+just to silence. It answers once the caller is done, or after the pause limit
+(3 seconds) if they trail off. On lines where that doesn't suit, Integrations →
+**Turn taking** switches to a fixed pause (0.8 seconds unless you change it).
+
+The Test call page shows a **Response time** card. On a call it is how long
+the caller waited after their last word for the agent's first sound, plus where
+the time went: the turn decision, listening (time to the final transcript), the
+model (time to its first words) and speaking (time to the first audio). In a
+chat it is the model's time to its first words. The same numbers arrive as
+`turn_metrics` events on `/v1/sessions/{id}/events`, so you can log them.
 
 ## Test agents on it
 
@@ -606,7 +700,7 @@ Events: `node_transition`, `bot_speech`, `user_speech`, `tool_call_started`,
 ## Develop
 
 ```bash
-python3.12 -m venv .venv-engine && .venv-engine/bin/pip install -e cli -e "engine[dev]"
+python3.12 -m venv .venv-engine && .venv-engine/bin/pip install -e cli -e "engine[dev,moonshine]"
 .venv-engine/bin/pytest -q engine/tests
 ```
 

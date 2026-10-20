@@ -175,6 +175,12 @@ async def check(service: str, cfg: Config, timeout: float = 10.0) -> dict:
                 from .builtin_speech import whisper_ready
                 ok = whisper_ready(cfg.local_whisper_model)
                 return {"ok": ok, "message": "model downloaded" if ok else "download the models first"}
+            elif target == "moonshine":
+                from . import moonshine_stt
+                if not moonshine_stt.installed():
+                    return {"ok": False, "message": "not installed on this computer (needs Linux or an Apple-silicon Mac)"}
+                ok = moonshine_stt.ready(cfg.moonshine_model)
+                return {"ok": ok, "message": "model downloaded" if ok else "download the model first"}
             elif target == "kokoro":
                 from .builtin_speech import kokoro_ready
                 ok = kokoro_ready()
@@ -234,6 +240,10 @@ async def local_speech_problem(cfg: Config, timeout: float = 1.5) -> str | None:
     from .builtin_speech import kokoro_ready, whisper_ready
     if cfg.stt == "whisper" and not whisper_ready(cfg.local_whisper_model) or cfg.tts == "kokoro" and not kokoro_ready():
         return "The built-in speech models aren't downloaded yet. Press \"Download models\" on the Integrations page."
+    if cfg.stt == "moonshine":
+        from . import moonshine_stt
+        if not moonshine_stt.ready(cfg.moonshine_model):
+            return "The Moonshine model isn't downloaded yet. Open Integrations → Moonshine and press Download."
     servers = []
     if cfg.stt == "whisper-server":
         servers.append(("Whisper", cfg.whisper_url.rstrip("/") + "/models"))

@@ -57,7 +57,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install vk and the engine
-        run: pip install -e cli -e "engine[dev]"
+        run: pip install -e cli -e "engine[dev,moonshine]"
       - name: Engine tests (fake model and speech, real WebRTC handshake)
         run: pytest -q engine/tests
 

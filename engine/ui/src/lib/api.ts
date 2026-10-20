@@ -54,7 +54,7 @@ export async function api<T = any>(method: string, path: string, body?: unknown)
 
 /** Fallback names; the engine reports the label of the provider in use (config.llm_label). */
 export const LLM_LABEL: Record<string, string> = { anthropic: "Claude (Anthropic)", openai: "OpenAI-compatible" };
-export const STT_LABEL: Record<string, string> = { deepgram: "Deepgram", fish: "Fish Audio", whisper: "Whisper on this computer (free)", "whisper-server": "Whisper server (advanced)" };
+export const STT_LABEL: Record<string, string> = { deepgram: "Deepgram", fish: "Fish Audio", whisper: "Whisper on this computer (free)", moonshine: "Moonshine on this computer (free, streaming)", "whisper-server": "Whisper server (advanced)" };
 export const TTS_LABEL: Record<string, string> = { deepgram: "Deepgram", fish: "Fish Audio", kokoro: "Kokoro on this computer (free)", "kokoro-server": "Kokoro server (advanced)" };
 
 /** Download a file from the engine (sends the API key, which a plain link can't). */

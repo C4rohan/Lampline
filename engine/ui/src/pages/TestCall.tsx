@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { AudioLines, GitBranch, MessageSquare, Mic, PhoneOff, Send, Wrench } from "lucide-react";
+import { AudioLines, GitBranch, MessageSquare, Mic, PhoneOff, Send, Timer, Wrench } from "lucide-react";
 import { api, auth, STT_LABEL, TTS_LABEL, type AgentSummary } from "@/lib/api";
 import { useApp, useLoad } from "@/lib/app";
 import { cn, local } from "@/lib/utils";
@@ -12,6 +12,44 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type Ev = { type: string; [k: string]: any };
+type Turn = { response_ms?: number | null; turn_ms?: number; listening_ms?: number; model_ms?: number; speaking_ms?: number };
+
+const secs = (ms?: number | null) => (ms == null ? "—" : ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(2)} s`);
+
+/* How long the caller waited for each reply, and where the time went. */
+function Latency({ turns, call }: { turns: Turn[]; call: boolean }) {
+  const last = turns[turns.length - 1];
+  const timed = turns.map((t) => (call ? t.response_ms : t.model_ms)).filter((v): v is number => typeof v === "number");
+  const avg = timed.length ? Math.round(timed.reduce((a, b) => a + b, 0) / timed.length) : null;
+  const parts: [string, number | undefined, string][] = [
+    ["Turn detection", last?.turn_ms, "How long the smart-turn model took to decide the caller had finished"],
+    ["Listening", last?.listening_ms, "Speech to text: time to the final transcript"],
+    ["Model", last?.model_ms, "Time to the model's first words"],
+    ["Speaking", last?.speaking_ms, "Text to speech: time to the first audio"],
+  ];
+  return (
+    <Card className="p-5">
+      <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Timer className="size-4 text-muted-foreground" />Response time</h3>
+      {!last ? (
+        <p className="text-sm text-muted-foreground">{call ? "How long the caller waits after they stop talking, measured on each reply." : "How long the model takes to start each reply."}</p>
+      ) : (
+        <>
+          <div className="mb-3 flex items-baseline gap-4">
+            <div><div className="font-mono text-2xl font-medium tabular-nums">{secs(call ? last.response_ms : last.model_ms)}</div><div className="text-xs text-muted-foreground">last reply</div></div>
+            <div><div className="font-mono text-lg tabular-nums text-muted-foreground">{secs(avg)}</div><div className="text-xs text-muted-foreground">average of {timed.length}</div></div>
+          </div>
+          {call && (
+            <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-sm">
+              {parts.map(([label, ms, title]) => (
+                <Fragment key={label}><dt className="text-muted-foreground" title={title}>{label}</dt><dd className="text-right font-mono text-xs leading-5 tabular-nums">{secs(ms)}</dd></Fragment>
+              ))}
+            </dl>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
 type Line =
   | { kind: "step"; name: string }
   | { kind: "agent"; text: string; filler?: boolean }
@@ -61,6 +99,7 @@ export function TestCall({ params }: { params: URLSearchParams }) {
   const [lines, setLines] = useState<Line[]>([]);
   const [visited, setVisited] = useState<string[]>([]);
   const [collected, setCollected] = useState<Record<string, unknown>>({});
+  const [turns, setTurns] = useState<Turn[]>([]);
   const [text, setText] = useState("");
   const [level, setLevel] = useState<number[]>(Array(16).fill(0));
   const rt = useRef<{ pc?: RTCPeerConnection; mic?: MediaStream; es?: EventSource; ctx?: AudioContext; raf?: number; session?: string | null; mode?: string }>({});
@@ -81,7 +120,13 @@ export function TestCall({ params }: { params: URLSearchParams }) {
       case "user_speech": if (rt.current.mode === "call") add({ kind: "caller", text: e.text }); break;
       case "tool_call_result": add({ kind: "tool", name: e.function_name, result: e.result || {} }); break;
       case "variables": setCollected((v) => ({ ...v, ...e.values })); break;
+      case "turn_metrics": setTurns((t) => [...t, e as Turn]); break;
       case "execution_error": add({ kind: "sys", text: e.message, error: true }); break;
+      case "transfer": {
+        const sent = Object.keys(e.details || {});
+        add({ kind: "sys", text: `Handing the caller to ${e.to}${sent.length ? ` with ${sent.join(", ")}` : ""}. On a phone call they're connected now.` });
+        break;
+      }
       case "call_ended": add({ kind: "sys", text: `Call ended: ${e.reason}` }); finish(); break;
     }
   }
@@ -100,7 +145,7 @@ export function TestCall({ params }: { params: URLSearchParams }) {
   }
 
   async function start() {
-    setLines([]); setVisited([]); setCollected({}); setBusy(true);
+    setLines([]); setVisited([]); setCollected({}); setTurns([]); setBusy(true);
     rt.current.mode = callMode ? "call" : "chat";
     try {
       if (!callMode) {
@@ -248,6 +293,7 @@ export function TestCall({ params }: { params: URLSearchParams }) {
               </dl>
             ) : <p className="text-sm text-muted-foreground">Values the agent collects show up here.</p>}
           </Card>
+          <Latency turns={turns} call={rt.current.mode === "call" || callMode} />
           <Card className="p-5">
             <h3 className="mb-3 text-sm font-semibold">Running on</h3>
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm">

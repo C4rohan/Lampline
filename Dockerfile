@@ -22,7 +22,7 @@ COPY cli/pyproject.toml cli/README.md cli/
 COPY cli/src cli/src
 COPY engine/pyproject.toml engine/README.md engine/
 COPY engine/src engine/src
-RUN pip install ./cli ./engine && rm -rf /opt/vpe/cli /opt/vpe/engine
+RUN pip install ./cli "./engine[moonshine]" && rm -rf /opt/vpe/cli /opt/vpe/engine
 
 COPY docker/entrypoint.sh /usr/local/bin/vpe-entrypoint
 RUN chmod 755 /usr/local/bin/vpe-entrypoint && mkdir -p /agents /data && chmod 777 /agents /data

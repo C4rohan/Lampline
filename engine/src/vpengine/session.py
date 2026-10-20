@@ -14,6 +14,7 @@ import uuid
 from typing import Any, Callable
 
 from pipecat.frames.frames import (
+    BotStartedSpeakingFrame,
     EndFrame,
     ErrorFrame,
     Frame,
@@ -23,9 +24,12 @@ from pipecat.frames.frames import (
     LLMFullResponseStartFrame,
     LLMMessagesAppendFrame,
     LLMTextFrame,
+    MetricsFrame,
     TranscriptionFrame,
     TTSSpeakFrame,
+    VADUserStoppedSpeakingFrame,
 )
+from pipecat.metrics.metrics import ProcessingMetricsData, TTFBMetricsData, TurnMetricsData
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.workers.runner import WorkerRunner
@@ -35,7 +39,7 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from .flow import FlowController
 from .graph import Graph
-from .services import Config, make_llm, make_stt, make_tts
+from .services import Config, make_llm, make_stt, make_tts, make_turn_strategies
 
 log = logging.getLogger("vpengine.session")
 
@@ -84,6 +88,59 @@ class _CallerTap(FrameProcessor):
         elif isinstance(frame, InputDTMFFrame):
             key = getattr(frame.button, "value", str(frame.button))
             asyncio.create_task(self._session.flow.keypad(str(key)))
+        await self.push_frame(frame, direction)
+
+
+class _LatencyTap(FrameProcessor):
+    """Sits at the end of the pipeline: one turn_metrics event per agent reply.
+
+    response_ms runs from the caller's last word (the moment voice detection
+    heard silence, minus its own wait) to the agent's first sound. The parts
+    are what Pipecat measured on the way: the smart-turn decision, the time
+    to first result from listening, the model and the voice.
+    """
+
+    def __init__(self, session: "Session"):
+        super().__init__(name="latency-tap")
+        self._session = session
+        self._speech_end: float | None = None
+        self._parts: dict[str, int] = {}
+
+    def _kind(self, processor: str) -> str | None:
+        s = self._session
+        for kind, svc in (("listening", getattr(s, "stt", None)), ("model", s.llm), ("speaking", getattr(s, "tts", None))):
+            if svc is not None and processor == getattr(svc, "name", None):
+                return kind
+        return None
+
+    def _report(self, response_ms: int | None) -> None:
+        if response_ms is None and not self._parts:
+            return
+        self._session.emit({"type": "turn_metrics", "response_ms": response_ms, **self._parts})
+        self._parts = {}
+        self._speech_end = None
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+        if isinstance(frame, MetricsFrame):
+            for d in frame.data:
+                if isinstance(d, TurnMetricsData):
+                    self._parts["turn_ms"] = round(d.e2e_processing_time_ms)
+                elif isinstance(d, (TTFBMetricsData, ProcessingMetricsData)) and d.value > 0:
+                    kind = self._kind(d.processor)
+                    if kind:
+                        self._parts.setdefault(f"{kind}_ms", round(d.value * 1000))
+        elif isinstance(frame, VADUserStoppedSpeakingFrame):
+            # a new caller turn: start measuring from here
+            self._parts = {}
+            self._speech_end = time.monotonic() - float(getattr(frame, "stop_secs", 0) or 0)
+        elif isinstance(frame, BotStartedSpeakingFrame) and direction == FrameDirection.DOWNSTREAM:
+            if self._speech_end is not None:
+                self._report(round((time.monotonic() - self._speech_end) * 1000))
+            else:
+                self._parts = {}          # the greeting, or the agent speaking unprompted
+        elif isinstance(frame, LLMFullResponseEndFrame) and not hasattr(self._session, "tts"):
+            self._report(None)            # text chat: the model's time is the whole story
         await self.push_frame(frame, direction)
 
 
@@ -138,6 +195,8 @@ class Session:
         self._runner_task: asyncio.Task | None = None
         self.finished = asyncio.Event()
         self.error: str | None = None
+        self.transfer_to = None                     # the Transfer, once the call is handed to a person
+        self.on_transfer = None                     # async (Transfer) -> None: set by the phone handlers
 
     # -- Host protocol for FlowController ---------------------------------
 
@@ -164,6 +223,12 @@ class Session:
 
     async def say(self, text: str) -> None:
         raise NotImplementedError
+
+    async def transfer(self, transfer) -> None:
+        """Remember the hand-off; a phone call's carrier acts on it (on_transfer), a test chat just reports it."""
+        self.transfer_to = transfer
+        if self.on_transfer is not None:
+            await self.on_transfer(transfer)
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -225,8 +290,12 @@ class TextSession(Session):
         self.aggregators = LLMContextAggregatorPair(self.context)
         self._started = asyncio.Event()
 
+    def task_params(self) -> PipelineParams:
+        return PipelineParams(enable_metrics=True)
+
     def build(self) -> Pipeline:
-        return Pipeline([self.aggregators.user(), _ScriptGate(self), self.llm, _BotTap(self), self.aggregators.assistant()])
+        return Pipeline([self.aggregators.user(), _ScriptGate(self), self.llm, _BotTap(self), _LatencyTap(self),
+                         self.aggregators.assistant()])
 
     async def say(self, text: str) -> None:
         self.context.add_message({"role": "assistant", "content": text})
@@ -311,8 +380,8 @@ class VoiceSession(Session):
         if vad is None:
             from pipecat.audio.vad.silero import SileroVADAnalyzer
             vad = SileroVADAnalyzer()
-        self.aggregators = LLMContextAggregatorPair(self.context,
-                                                    user_params=LLMUserAggregatorParams(vad_analyzer=vad))
+        self.aggregators = LLMContextAggregatorPair(self.context, user_params=LLMUserAggregatorParams(
+            vad_analyzer=vad, user_turn_strategies=make_turn_strategies(cfg)))
 
     async def on_started(self) -> None:
         if self.autostart:
@@ -339,6 +408,7 @@ class VoiceSession(Session):
             _BotTap(self),
             self.tts,
             self.transport.output(),
+            _LatencyTap(self),
             self.aggregators.assistant(),
         ])
 

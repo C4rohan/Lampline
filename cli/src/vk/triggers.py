@@ -56,7 +56,7 @@ KEYS = {"message": ("id", "type", "enabled", "channel", "description"),
                      "description")}
 SEND_KEYS = ("via", "to", "subject", "text", "url", "method", "headers", "payload")
 TEMPLATE_VARIABLES = ("summary", "details", "transcript", "agent", "channel", "contact", "ended_reason",
-                      "duration_seconds", "session_id", "steps")
+                      "duration_seconds", "session_id", "steps", "transferred_to")
 
 
 # --------------------------------------------------------------------- cron

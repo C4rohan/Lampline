@@ -131,3 +131,56 @@ async def test_serializer_maps_frames():
     assert await s.deserialize(json.dumps({"type": "playDone"})) is None
     frame = await s.deserialize(b"\x00\x00" * 160)
     assert frame.sample_rate == 8000 and len(frame.audio) == 320
+
+
+def test_hd_voice_asks_jambonz_for_16_khz(cfg, agents_dir):
+    from dataclasses import replace
+    eng = Engine(agents_dir, replace(cfg, jambonz_webhook_secret=SECRET, jambonz_sample_rate="16000"),
+                 public_url=PUBLIC, twilio_hang_up=True, speech_factory=lambda: (vf.FakeSTT(), vf.FakeTTS()))
+    with TestClient(create_app(eng), base_url=PUBLIC) as c:
+        listen = ring(c).json()[0]
+        assert listen["sampleRate"] == 16000 and listen["bidirectionalAudio"]["sampleRate"] == 16000
+        token = listen["url"].split("?t=", 1)[1]
+        with c.websocket_connect(f"/v1/jambonz/stream?t={token}", subprotocols=["audio.jambonz.org"]) as ws:
+            ws.send_text(json.dumps({"callSid": "jz-1", "sampleRate": 16000, "metadata": {"t": token}}))
+            ws.send_bytes(b"\x00\x00" * 320)                   # 20 ms at 16 kHz
+            deadline = time.time() + 20
+            while time.time() < deadline and not ws.receive().get("bytes"):
+                pass
+            session = next(iter(eng.sessions.values()))
+            assert (session.audio_in_rate, session.audio_out_rate) == (16000, 16000)
+
+
+def test_odd_rates_fall_back_to_phone_audio():
+    assert jambonz.listen_verbs("wss://x/s", "t", "https://x/d", 44100)[0]["sampleRate"] == 8000
+    from vpengine.services import Config, ConfigError
+    with pytest.raises(ConfigError, match="VPE_JAMBONZ_SAMPLE_RATE"):
+        Config.load({"VPE_JAMBONZ_SAMPLE_RATE": "48000"})
+
+
+def test_outbound_call_body_and_tag():
+    body = jambonz.outbound_call("app-1", "+15550009999", "+15550101234", "front-desk", "tok")
+    assert body == {"application_sid": "app-1", "from": "+15550009999", "to": {"type": "phone", "number": "+15550101234"},
+                    "tag": {"lampline_agent": "front-desk", "lampline_ctx": "tok"}}
+    assert jambonz.outbound_tag({"customerData": body["tag"]}) == ("front-desk", "tok")
+    assert jambonz.outbound_tag({"customerData": "x"}) == ("", "") and jambonz.outbound_tag({}) == ("", "")
+
+
+def test_a_call_we_placed_runs_its_agent_with_its_context(client, engine):
+    engine.automations.contexts["tok"] = ({"caller_name": "Sam", "caller_phone": "+15550101234"}, time.time() + 60)
+    call = {**CALL, "direction": "outbound", "from": "+15550009999", "to": "+15550101234",
+            "customerData": {"lampline_agent": "front-desk", "lampline_ctx": "tok"}}
+    body = json.dumps(call, separators=(",", ":")).encode()
+    r = client.post("/v1/jambonz/call?agent=nope", content=body, headers={"Content-Type": "application/json", **sign(body)})
+    assert r.json()[0]["verb"] == "listen"                          # the tag's agent, not the application's
+    token = r.json()[0]["url"].split("t=", 1)[1]
+    pending = engine.stream_tokens.redeem(token, "jz-1")
+    assert pending is not None and pending.context["caller_name"] == "Sam" and pending.contact == "+15550101234"
+    assert "tok" not in engine.automations.contexts                  # used once
+
+
+def test_an_inbound_call_cant_pick_its_agent(client):
+    call = {**CALL, "customerData": {"lampline_agent": "front-desk"}}
+    body = json.dumps(call, separators=(",", ":")).encode()
+    r = client.post("/v1/jambonz/call?agent=nope", content=body, headers={"Content-Type": "application/json", **sign(body)})
+    assert [v["verb"] for v in r.json()] == ["say", "hangup"]

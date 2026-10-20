@@ -41,7 +41,7 @@ class FieldSpec:
 FISH_TTS_MODELS = ("s2.1-pro-free", "s2.1-pro", "s2-pro", "drama-3", "s1")
 
 # Numeric settings: (minimum, maximum). Empty means the provider's default.
-RANGES = {"fish_speed": (0.5, 2.0), "fish_volume": (-20.0, 20.0), "fish_temperature": (0.0, 1.0),
+RANGES = {"turn_pause": (0.2, 6.0), "fish_speed": (0.5, 2.0), "fish_volume": (-20.0, 20.0), "fish_temperature": (0.0, 1.0),
           "fish_top_p": (0.0, 1.0)}
 
 
@@ -158,12 +158,15 @@ SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("novita_key", "NOVITA_API_KEY", "Novita AI API key", secret=True),
     FieldSpec("ollama_url", "OLLAMA_BASE_URL", "Ollama address"),
     FieldSpec("temperature", "VPE_LLM_TEMPERATURE", "Temperature"),
-    FieldSpec("stt", "VPE_STT", "Speech to text", choices=("deepgram", "fish", "whisper", "whisper-server")),
+    FieldSpec("stt", "VPE_STT", "Speech to text", choices=("deepgram", "fish", "whisper", "moonshine", "whisper-server")),
     FieldSpec("deepgram_key", "DEEPGRAM_API_KEY", "Deepgram API key", secret=True),
     FieldSpec("stt_model", "VPE_STT_MODEL", "Deepgram model"),
     FieldSpec("whisper_url", "VPE_WHISPER_URL", "Whisper server URL"),
     FieldSpec("whisper_model", "VPE_WHISPER_MODEL", "Whisper server model"),
+    FieldSpec("moonshine_model", "VPE_MOONSHINE_MODEL", "Moonshine model", choices=("small-streaming", "tiny-streaming")),
     FieldSpec("local_whisper_model", "VPE_LOCAL_WHISPER_MODEL", "Whisper model", choices=("tiny.en", "base.en", "small.en", "distil-small.en")),
+    FieldSpec("turn_detection", "VPE_TURN_DETECTION", "How the agent knows the caller has finished", choices=("smart", "pause")),
+    FieldSpec("turn_pause", "VPE_TURN_PAUSE", "Pause in seconds"),
     FieldSpec("tts", "VPE_TTS", "Text to speech", choices=("deepgram", "fish", "kokoro", "kokoro-server")),
     FieldSpec("tts_voice", "VPE_TTS_VOICE", "Deepgram voice"),
     FieldSpec("fish_key", "FISH_API_KEY", "Fish Audio API key", secret=True),
@@ -188,6 +191,12 @@ SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("telnyx_texml_app_id", "TELNYX_TEXML_APP_ID", "Telnyx TeXML application ID"),
     FieldSpec("telnyx_from_number", "TELNYX_FROM_NUMBER", "Telnyx number for outbound calls"),
     FieldSpec("jambonz_webhook_secret", "JAMBONZ_WEBHOOK_SECRET", "jambonz webhook secret", secret=True),
+    FieldSpec("jambonz_sample_rate", "VPE_JAMBONZ_SAMPLE_RATE", "Call audio", choices=("8000", "16000")),
+    FieldSpec("jambonz_api_url", "JAMBONZ_API_URL", "jambonz API address"),
+    FieldSpec("jambonz_account_sid", "JAMBONZ_ACCOUNT_SID", "jambonz account SID"),
+    FieldSpec("jambonz_api_key", "JAMBONZ_API_KEY", "jambonz API key", secret=True),
+    FieldSpec("jambonz_application_sid", "JAMBONZ_APPLICATION_SID", "jambonz application SID"),
+    FieldSpec("jambonz_from_number", "JAMBONZ_FROM_NUMBER", "Number calls come from"),
     # messaging and email
     FieldSpec("telegram_bot_token", "TELEGRAM_BOT_TOKEN", "Telegram bot token", secret=True),
     FieldSpec("whatsapp_token", "WHATSAPP_ACCESS_TOKEN", "WhatsApp access token", secret=True),
@@ -259,6 +268,9 @@ class Config:
     whisper_url: str = "http://localhost:8001/v1"
     whisper_model: str = "Systran/faster-whisper-small"
     local_whisper_model: str = "base.en"
+    moonshine_model: str = "small-streaming"
+    turn_detection: str = "smart"
+    turn_pause: str = ""          # smart: longest pause before answering anyway (3s); pause: silence that ends a turn (0.8s)
     tts: str = "deepgram"
     tts_voice: str = "aura-2-helena-en"
     fish_key: str = ""
@@ -283,6 +295,12 @@ class Config:
     telnyx_texml_app_id: str = ""
     telnyx_from_number: str = ""
     jambonz_webhook_secret: str = ""
+    jambonz_sample_rate: str = "8000"   # 16000: HD voice, when the trunk or phone system carries wideband audio
+    jambonz_api_url: str = "https://api.jambonz.cloud"   # or your own jambonz's API server
+    jambonz_account_sid: str = ""
+    jambonz_api_key: str = ""
+    jambonz_application_sid: str = ""
+    jambonz_from_number: str = ""
     telegram_bot_token: str = ""
     whatsapp_token: str = ""
     whatsapp_phone_number_id: str = ""
@@ -349,6 +367,7 @@ class Config:
                 raise ConfigError(f"{label} must be a whole number from 1 to {hi}")
         for name, example in (("embeddings_url", "http://localhost:11434/v1"), ("ollama_url", "http://localhost:11434/v1"),
                               ("azure_endpoint", "https://my-resource.openai.azure.com"),
+                              ("jambonz_api_url", "https://api.jambonz.cloud"),
                               ("base_url", "https://api.openai.com/v1")):
             if values.get(name) and not re.match(r"^https?://[^\s/]+", values[name]):
                 raise ConfigError(f"{SPEC_BY_NAME[name].label} must be an http(s) address, like {example}")
@@ -416,6 +435,9 @@ class Config:
         if self.stt == "whisper":
             from .builtin_speech import whisper_ready
             return whisper_ready(self.local_whisper_model)
+        if self.stt == "moonshine":
+            from . import moonshine_stt
+            return moonshine_stt.ready(self.moonshine_model)
         return bool(self.whisper_url)
 
     @property
@@ -440,19 +462,26 @@ class Config:
         return {"llm": self.llm, "llm_label": LLM_BY_NAME[self.llm].label, "model": self.model,
                 "base_url": self.base_url or None,
                 "llm_ready": self.llm_ready, "voice_ready": self.voice_ready,
+                "turn_detection": self.turn_detection,
                 "stt": self.stt, "stt_ready": self.stt_ready, "tts": self.tts, "tts_ready": self.tts_ready,
                 "stt_model": {"deepgram": self.stt_model, "whisper": self.local_whisper_model,
-                              "fish": self.fish_stt_model}.get(self.stt, self.whisper_model),
+                              "fish": self.fish_stt_model, "moonshine": self.moonshine_model}.get(self.stt, self.whisper_model),
                 "tts_voice": voice[self.tts], "twilio_ready": bool(self.twilio_auth_token),
                 "telnyx_ready": bool(self.telnyx_public_key),
                 "jambonz_ready": bool(self.jambonz_webhook_secret),
                 "phone_ready": bool(self.twilio_auth_token or self.telnyx_public_key or self.jambonz_webhook_secret),
                 "outbound_call_ready": bool(self.twilio_auth_token and self.twilio_account_sid and self.twilio_from_number)
-                or bool(self.telnyx_api_key and self.telnyx_texml_app_id and self.telnyx_from_number),
+                or bool(self.telnyx_api_key and self.telnyx_texml_app_id and self.telnyx_from_number)
+                or self.jambonz_outbound_ready,
                 "telegram_ready": bool(self.telegram_bot_token),
                 "whatsapp_ready": bool(self.whatsapp_token and self.whatsapp_phone_number_id),
                 "email_ready": self.email_ready, "google_ready": self.google_ready,
                 "outbound": self.outbound}
+
+    @property
+    def jambonz_outbound_ready(self) -> bool:
+        return bool(self.jambonz_webhook_secret and self.jambonz_api_url and self.jambonz_account_sid
+                    and self.jambonz_api_key and self.jambonz_application_sid and self.jambonz_from_number)
 
     @property
     def google_ready(self) -> bool:
@@ -550,6 +579,26 @@ def make_llm(cfg: Config) -> LLMService:
 
 # -- listening -----------------------------------------------------------------
 
+def make_turn_strategies(cfg: Config):
+    """How a voice call decides the caller has finished speaking.
+
+    smart: Pipecat's smart-turn model listens to how the caller sounds, and
+    answers once they have finished, or after the pause limit at most.
+    pause: answer after a fixed silence, for lines where the model struggles.
+    """
+    from pipecat.turns.user_stop import SpeechTimeoutUserTurnStopStrategy, TurnAnalyzerUserTurnStopStrategy
+    from pipecat.turns.user_turn_strategies import UserTurnStrategies
+
+    pause = float(cfg.turn_pause) if cfg.turn_pause else None
+    if cfg.turn_detection == "pause":
+        return UserTurnStrategies(stop=[SpeechTimeoutUserTurnStopStrategy(user_speech_timeout=pause or 0.8)])
+    from pipecat.audio.turn.smart_turn.base_smart_turn import SmartTurnParams
+    from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
+
+    analyzer = LocalSmartTurnAnalyzerV3(params=SmartTurnParams(stop_secs=pause or 3.0))
+    return UserTurnStrategies(stop=[TurnAnalyzerUserTurnStopStrategy(turn_analyzer=analyzer)])
+
+
 def make_stt(cfg: Config):
     if cfg.stt == "fish":
         if not cfg.fish_key:
@@ -561,6 +610,13 @@ def make_stt(cfg: Config):
         if not whisper_ready(cfg.local_whisper_model):
             raise ConfigError("the built-in Whisper model isn't downloaded yet: Integrations → Download models")
         return make_builtin_stt(cfg.local_whisper_model)
+    if cfg.stt == "moonshine":
+        from . import moonshine_stt
+        if not moonshine_stt.installed():
+            raise ConfigError("Moonshine isn't installed on this computer (it needs Linux or an Apple-silicon Mac)")
+        if not moonshine_stt.ready(cfg.moonshine_model):
+            raise ConfigError("the Moonshine model isn't downloaded yet: Integrations → Moonshine → Download")
+        return moonshine_stt.MoonshineSTTService(model=cfg.moonshine_model)
     if cfg.stt == "whisper-server":
         if not cfg.whisper_url:
             raise ConfigError("no Whisper server URL")

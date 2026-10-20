@@ -35,11 +35,19 @@ def valid_signature(auth_token: str, url: str, params: dict[str, str], given: st
     return hmac.compare_digest(signature(auth_token, url, params), given)
 
 
-def stream_twiml(stream_url: str, token: str) -> str:
+def stream_twiml(stream_url: str, token: str, after_url: str = "") -> str:
+    """Stream the call to us. When we close the stream, Twilio carries on with what follows: a
+    <Redirect> to after_url, where we answer with a transfer (<Dial>) or <Hangup/>."""
+    from xml.sax.saxutils import escape
+    after = f"<Redirect method=\"POST\">{escape(after_url)}</Redirect>" if after_url else ""
     return ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
             "<Response><Connect>"
             f"<Stream url={quoteattr(stream_url)}><Parameter name=\"t\" value={quoteattr(token)}/></Stream>"
-            "</Connect></Response>")
+            f"</Connect>{after}</Response>")
+
+
+def hangup_twiml() -> str:
+    return "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response><Hangup/></Response>"
 
 
 def reject_twiml(message: str) -> str:

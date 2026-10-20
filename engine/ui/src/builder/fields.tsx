@@ -36,11 +36,13 @@ export function InsertChips({ names, prefix = "", target, label = "Insert" }: { 
 }
 
 /** A text field bound to the document; typing in one field is one undo step. */
-export function TextField({ label, value, onChange, area, rows = 4, hint, placeholder, maxLength, mono, insert, insertPrefix, insertLabel, transform, quietInsert }: {
+export function TextField({ label, value, onChange, area, rows = 4, hint, placeholder, maxLength, mono, insert, insertPrefix, insertLabel, transform, quietInsert, invalid }: {
   label: ReactNode; value: string; onChange: (v: string) => void; area?: boolean; rows?: number; hint?: ReactNode; placeholder?: string;
   maxLength?: number; mono?: boolean; insert?: string[]; insertPrefix?: string; insertLabel?: string; transform?: (v: string) => string;
   /** Show the variable chips only while the field (or a chip) has focus: for long lists of small fields. */
   quietInsert?: boolean;
+  /** Marks the field as not valid (red outline, aria-invalid). */
+  invalid?: boolean;
 }) {
   const id = useId();
   const ref = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
@@ -48,7 +50,7 @@ export function TextField({ label, value, onChange, area, rows = 4, hint, placeh
   const [local, setLocal] = useState(value);
   useEffect(() => { if (value !== local && document.activeElement !== ref.current) setLocal(value); }, [value]); // eslint-disable-line
   const change = (v: string) => { const t = transform ? transform(v) : v; setLocal(t); onChange(t); };
-  const common = { id, ref, value: local, placeholder, maxLength, className: cn(mono && "font-mono text-[13px]"),
+  const common = { id, ref, value: local, placeholder, maxLength, className: cn(mono && "font-mono text-[13px]"), "aria-invalid": invalid || undefined,
     onChange: (e: React.ChangeEvent<HTMLInputElement & HTMLTextAreaElement>) => change(e.target.value) };
   return (
     <Field label={label} htmlFor={id} hint={hint}>

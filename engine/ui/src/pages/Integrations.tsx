@@ -56,6 +56,7 @@ const CONTACT_CENTERS: { key: string; name: string; tag: string; blurb: string; 
     how: "Planned: Twilio numbers already work; this adds transfer into Flex TaskRouter queues with the call's details." },
 ];
 
+type Moon = { installed: boolean; ready: boolean; state: string; message?: string; progress?: number | null; size_mb: number; model: string };
 type Builtin = { installed: boolean; state: string; message?: string; progress?: number | null; size_mb: number; whisper_ready: boolean; kokoro_ready: boolean; whisper_model: string };
 type LocalSpeech = { available: boolean; docker: boolean; state: string; message?: string; seconds?: number; servers: { whisper: boolean; kokoro: boolean }; log?: string[] };
 
@@ -89,6 +90,34 @@ function BuiltinPanel({ onReady }: { onReady: () => void }) {
                 try { setData(await api<Builtin>("POST", "/v1/builtin-speech/download")); } catch (e) { setData({ ...st, state: "error", message: (e as Error).message }); }
                 kick();
               }}>Download models (about {st.size_mb} MB, once)</Button>}
+        </span>
+      </div>
+      {busy && st.progress != null && <div className="h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full bg-lamp transition-[width]" style={{ width: `${Math.round(st.progress * 100)}%` }} /></div>}
+      {(busy || st.state === "error") && st.message && <p className={cn("text-[13px]", st.state === "error" ? "text-bad" : "text-muted-foreground")}>{st.message}</p>}
+    </Panel>
+  );
+}
+
+function MoonshinePanel({ onReady }: { onReady: () => void }) {
+  const { data: st, setData, kick } = usePoll<Moon>("/v1/moonshine", (s) => s.state === "downloading");
+  const [was, setWas] = useState("");
+  useEffect(() => { if (st) { if (was === "downloading" && st.state !== "downloading") onReady(); setWas(st.state); } }, [st]); // eslint-disable-line
+  const lead = "Free and private: runs inside the engine and transcribes while the caller talks, so replies start sooner. English only.";
+  if (!st) return <Panel lead={lead}><span className="text-sm text-muted-foreground">Checking…</span></Panel>;
+  const busy = st.state === "downloading";
+  return (
+    <Panel lead={lead}>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+        <span className="inline-flex items-center gap-2 text-sm"><Lamp on={st.ready} warn={busy} />Moonshine ({st.model.replace("-streaming", "")})
+          <span className="text-muted-foreground">{st.ready ? "ready" : busy ? "downloading" : "not downloaded"}</span></span>
+        <span className="ml-auto">
+          {!st.installed ? <span className="text-sm text-bad">Not available on this computer: it needs Linux or an Apple-silicon Mac on macOS 15.</span>
+            : busy ? <Button size="sm" variant="outline" disabled>Downloading…</Button>
+            : st.ready ? <Badge variant="ok">Ready</Badge>
+            : <Button size="sm" variant="lamp" onClick={async () => {
+                try { setData(await api<Moon>("POST", "/v1/moonshine/download")); } catch (e) { setData({ ...st, state: "error", message: (e as Error).message }); }
+                kick();
+              }}>Download model (about {st.size_mb} MB, once)</Button>}
         </span>
       </div>
       {busy && st.progress != null && <div className="h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full bg-lamp transition-[width]" style={{ width: `${Math.round(st.progress * 100)}%` }} /></div>}
@@ -285,6 +314,7 @@ function Tile({ p, inUse, ready, onOpen }: { p: Provider; inUse: boolean; ready:
 export function Integrations() {
   const { data: settings, error, setData, reload } = useLoad(() => api<Settings>("GET", "/v1/settings"));
   const { data: builtin } = useLoad(() => api<{ whisper_ready: boolean; kokoro_ready: boolean }>("GET", "/v1/builtin-speech").catch(() => null));
+  const { data: moon } = useLoad(() => api<Moon>("GET", "/v1/moonshine").catch(() => null));
   const { data: secrets } = useLoad(() => api<{ secrets: unknown[] }>("GET", "/v1/secrets").catch(() => ({ secrets: [] })));
   const { refresh, health } = useApp();
   const [open, setOpen] = useState<string | null>(null);
@@ -316,6 +346,11 @@ export function Integrations() {
       { key: "stt-whisper", icon: "whisper", name: "Whisper", tag: "On this computer · free", category: "listening", chooser: "stt", value: "whisper", check: "whisper",
         blurb: "Runs inside the engine. Private, no account, downloads once.", configured: !!builtin?.whisper_ready,
         groups: [node(<BuiltinPanel onReady={afterDownload} />), f("local_whisper_model", { labels: WHISPER_SIZES, hint: "Save after changing it, then download." })] },
+      { key: "stt-moonshine", icon: "moonshine", name: "Moonshine", tag: "On this computer · free · streaming", category: "listening", chooser: "stt", value: "moonshine", check: "moonshine",
+        blurb: "Transcribes while the caller talks, so the agent answers sooner. English.", configured: !!moon?.ready,
+        groups: [node(<MoonshinePanel onReady={afterDownload} />),
+          f("moonshine_model", { labels: { "small-streaming": "Small: more accurate (140 MB)", "tiny-streaming": "Tiny: fastest, lightest on the CPU (46 MB)" },
+            hint: "Save after changing it, then download. Each call uses about half a CPU core while the caller talks (tiny: a third)." })] },
       { key: "stt-deepgram", icon: "deepgram", name: "Deepgram", tag: "Cloud", category: "listening", chooser: "stt", value: "deepgram", check: "deepgram",
         blurb: "Fast streaming speech to text. New accounts get free credit.", configured: set("deepgram_key"),
         groups: [f("deepgram_key", { hint: "New Deepgram accounts get free credit. The same key works for speaking." }), f("stt_model")] },
@@ -326,6 +361,14 @@ export function Integrations() {
       { key: "stt-whisper-server", icon: "whisper-server", name: "Whisper server", tag: "Advanced · Docker", category: "listening", chooser: "stt", value: "whisper-server", check: "whisper-server",
         blurb: "Whisper in a separate container, or any compatible server.", configured: false,
         groups: [node(<LocalSpeechPanel lead="Runs Whisper in Docker. Most people want Whisper on this computer instead." />), row({ field: "whisper_url" }, { field: "whisper_model" })] },
+      { key: "turns", icon: "turns", name: "Turn taking", category: "listening", configured: true,
+        tag: fl.turn_detection?.value === "pause" ? "Fixed pause" : "Smart turn", label: fl.turn_detection?.value === "pause" ? "Fixed pause" : "Smart turn",
+        blurb: "How a call decides the caller has finished speaking, so the agent answers without cutting them off.",
+        groups: [f("turn_detection", { labels: { smart: "Smart turn: listens to how the caller sounds, on this computer (recommended)", pause: "Fixed pause: answers after a set silence" } }),
+          f("turn_pause", { placeholder: fl.turn_detection?.value === "pause" ? "0.8" : "3",
+            hint: fl.turn_detection?.value === "pause"
+              ? "The silence that ends the caller's turn. Shorter replies faster but may cut people off."
+              : "The longest the agent waits when the caller pauses mid-thought, before answering anyway." })] },
       { key: "tts-kokoro", icon: "kokoro", name: "Kokoro", tag: "On this computer · free", category: "speaking", chooser: "tts", value: "kokoro", check: "kokoro",
         blurb: "Natural voices that run inside the engine. Private and free.", configured: !!builtin?.kokoro_ready,
         groups: [node(<BuiltinPanel onReady={afterDownload} />), f("kokoro_voice", { hint: "For example af_heart, af_bella, am_adam or bf_emma." })] },
@@ -359,7 +402,15 @@ export function Integrations() {
           { details: "Outbound calls (triggers)", items: [row({ field: "telnyx_texml_app_id" }, { field: "telnyx_from_number", opts: { placeholder: "+15551234567" } })] }] },
       { key: "jambonz", icon: "jambonz", name: "jambonz", tag: "SIP trunks, phone systems, SBCs", category: "phone", configured: set("jambonz_webhook_secret"),
         blurb: "Answer calls from any SIP trunk, PBX or session border controller through jambonz, open source and self-hostable.",
-        groups: [f("jambonz_webhook_secret", { hint: "In jambonz: Account → Webhook secret. Used to check that calls really come from your jambonz." }), node(<PhoneLink />)] },
+        groups: [f("jambonz_webhook_secret", { hint: "In jambonz: Account → Webhook secret. Used to check that calls really come from your jambonz." }),
+          f("jambonz_sample_rate", { labels: { "8000": "Phone audio, 8 kHz (works with every trunk)", "16000": "HD voice, 16 kHz (G.722, Opus or wideband SIP)" },
+            hint: "HD voice is clearer for listening. Use it when your trunk or phone system carries wideband audio; otherwise it only costs bandwidth." }),
+          node(<PhoneLink />),
+          { details: "Outbound calls (triggers)", items: [
+            f("jambonz_api_url", { placeholder: "https://api.jambonz.cloud", hint: "jambonz.cloud, or your own jambonz's API server." }),
+            row({ field: "jambonz_account_sid" }, { field: "jambonz_application_sid", opts: { hint: "The application whose calling webhook points here." } }),
+            row({ field: "jambonz_api_key", opts: { hint: "Account → API keys." } }, { field: "jambonz_from_number", opts: { placeholder: "+15551234567" } }),
+            node(<p className="text-[12.5px] text-muted-foreground">Calls go out through your carrier in jambonz. They need the engine's public address and Outbound turned on under Automation.</p>)] }] },
       ...CONTACT_CENTERS.map<Provider>((c) => ({ key: c.key, icon: c.key, name: c.name, tag: c.tag, category: "contact", blurb: c.blurb,
         configured: false, footer: false, label: "Coming soon",
         body: <Notice><Info className="mt-0.5 size-4 shrink-0" /><span>{c.how} {c.key === "twilio-flex"
@@ -418,7 +469,7 @@ export function Integrations() {
       { key: "workspace", icon: "workspace", name: "Workspace", tag: health?.brand || "", category: "more", configured: true,
         blurb: "The name shown across this app.", groups: [f("brand_name")] },
     ];
-  }, [settings, builtin, secrets, voicePick, health?.brand]); // eslint-disable-line
+  }, [settings, builtin, moon, secrets, voicePick, health?.brand]); // eslint-disable-line
 
   if (error) return <Page title="Integrations"><p className="text-sm text-bad">{error}</p></Page>;
   if (!settings) return <Page title="Integrations"><p className="text-sm text-muted-foreground">Loading…</p></Page>;

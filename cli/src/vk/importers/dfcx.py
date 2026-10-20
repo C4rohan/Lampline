@@ -71,6 +71,19 @@ def _texts(fulfillment: Any, lang: str) -> list[str]:
     return [_params(t).strip() for t in out if t.strip()]
 
 
+def _transfer(fulfillment: Any) -> str:
+    """The phone number or SIP address a fulfillment's live agent transfer dials, or ""."""
+    if not isinstance(fulfillment, dict):
+        return ""
+    for m in fulfillment.get("messages") or []:
+        call = m.get("telephonyTransferCall") if isinstance(m, dict) else None
+        if isinstance(call, dict):
+            to = str(call.get("phoneNumber") or call.get("sipUri") or "").strip()
+            if to:
+                return to if to.startswith(("sip:", "sips:")) else "+" + re.sub(r"\D", "", to)
+    return ""
+
+
 def _params(text: str) -> str:
     """$session.params.x / $flow.x / $page.params.x -> {{x}}; generator output -> a note."""
     text = re.sub(r"\$request\.generative\.[\w-]+", "(the generated answer; see the import report)", text)
@@ -297,6 +310,11 @@ def convert(source, name: str = "") -> tuple[Any, Report]:
                 data["on_entry"] = [webhook_tool(hook, (doc.get("entryFulfillment") or {}).get("tag"))]
             if doc.get("description"):
                 data["description"] = str(doc["description"])[:500]
+            to = _transfer(doc.get("entryFulfillment"))
+            if to:                                    # a page that hands the caller to a person ends the call there
+                end = {"mode": "scripted", "say": data.get("say", ""), "transfer_to": to, "add_global_prompt": True}
+                page_step[(fname, pname)] = g.add("endCall", pname, end, key=f"{fname} {pname}")
+                continue
             page_step[(fname, pname)] = g.add("agentNode", pname, data, key=f"{fname} {pname}")
     report.counts["flows"] = len(cx.flows)
     report.counts["pages"] = len(page_step)
@@ -334,6 +352,15 @@ def convert(source, name: str = "") -> tuple[Any, Report]:
             report.note("Routes that escalated to a human now end the call at “Hand off to a person”. "
                         "Set up a transfer number (Phone page) if you want real hand-offs.")
         return hand_id[0]
+
+    transfer_ids: dict[str, str] = {}
+
+    def transfer_step(to: str) -> str:
+        """A live agent transfer on a route: an End call step that hands the caller to that number."""
+        if to not in transfer_ids:
+            transfer_ids[to] = g.add("endCall", f"Transfer to {to}", {"mode": "scripted", "transfer_to": to, "add_global_prompt": True},
+                                     key=f"transfer {to}")
+        return transfer_ids[to]
 
     # ---- Playbooks and tools -----------------------------------------------------------
     tool_docs = {}
@@ -393,8 +420,13 @@ def convert(source, name: str = "") -> tuple[Any, Report]:
         if fname == "End Conversation":           # ours: the goodbye wording is in the playbooks
             flow_step[fname] = end_step()
             continue
-        said = " ".join(t for r in cx.flows[fname]["doc"].get("transitionRoutes") or [] for t in _texts(r.get("triggerFulfillment"), cx.lang))
-        flow_step[fname] = g.add("endCall", fname, {"mode": "scripted", "say": said, "add_global_prompt": True}, key=f"flow {fname}")
+        froutes = cx.flows[fname]["doc"].get("transitionRoutes") or []
+        said = " ".join(t for r in froutes for t in _texts(r.get("triggerFulfillment"), cx.lang))
+        fdata: dict[str, Any] = {"mode": "scripted", "say": said, "add_global_prompt": True}
+        to = next((x for r in froutes if (x := _transfer(r.get("triggerFulfillment")))), "")
+        if to:
+            fdata["transfer_to"] = to
+        flow_step[fname] = g.add("endCall", fname, fdata, key=f"flow {fname}")
 
     # ---- Routes ----------------------------------------------------------------------
     def wire(src: str, routes: list[dict], fname: str | None, where: str) -> None:
@@ -426,6 +458,11 @@ def convert(source, name: str = "") -> tuple[Any, Report]:
                 dst = page_step.get((fname or "", _ref(target_page))) or next((v for (f2, pg), v in page_step.items() if pg == _ref(target_page)), None)
             elif target_flow:
                 dst = flow_step.get(_ref(target_flow)) or playbook_step.get(_ref(target_flow))
+            to = _transfer(r.get("triggerFulfillment"))
+            if to:                                     # the route hands the caller to a person: that ends the call
+                dst = transfer_step(to)
+                if (target_page and special != "end") or target_flow:
+                    report.note(f"{where}: a route transfers the caller to {to} and then goes on; here the transfer ends the call.")
             if not dst and not (target_page or target_flow):
                 said = " ".join(_texts(r.get("triggerFulfillment"), cx.lang))
                 cond0 = (r.get("condition") or "").strip()
@@ -486,6 +523,11 @@ def convert(source, name: str = "") -> tuple[Any, Report]:
             report.note(f"flow {fname}: {len(f['doc']['eventHandlers'])} event handler(s) (no-match, no-input, …) weren't carried over.")
         for doc in pages_of[fname]:
             pname = doc.get("displayName") or "page"
+            if node_of(page_step[(fname, pname)])["type"] == "endCall":
+                if doc.get("transitionRoutes") or doc.get("form"):
+                    report.note(f"page {pname}: hands the caller to {node_of(page_step[(fname, pname)])['data']['transfer_to']}, "
+                                "which ends the call here; its form and routes weren't carried over.")
+                continue
             proutes = list(doc.get("transitionRoutes") or [])
             for gname in doc.get("transitionRouteGroups") or []:
                 proutes += groups.get(_ref(gname), [])
