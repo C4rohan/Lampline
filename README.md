@@ -277,7 +277,8 @@ tools, data and knowledge: [engine/README.md](engine/README.md).
 - [x] Transfer to a person with the call's details as SIP headers ([engine/README.md](engine/README.md#transfer-to-a-person))
 - [ ] **Google Cloud deployment** (coming soon)
 - [ ] **Contact centers:** Genesys Cloud, Avaya, Cisco Webex Contact Center, Cisco UCCE, Amazon Connect, NICE CXone, Five9, Twilio Flex (coming soon)
-- [ ] Call recordings, published benchmarks
+- [x] Call history and optional recordings, on this computer ([engine/README.md](engine/README.md#call-history))
+- [ ] Published benchmarks
 
 The full list: [docs/ROADMAP.md](docs/ROADMAP.md).
 
