@@ -190,6 +190,7 @@ SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("telnyx_texml_app_id", "TELNYX_TEXML_APP_ID", "Telnyx TeXML application ID"),
     FieldSpec("telnyx_from_number", "TELNYX_FROM_NUMBER", "Telnyx number for outbound calls"),
     FieldSpec("jambonz_webhook_secret", "JAMBONZ_WEBHOOK_SECRET", "jambonz webhook secret", secret=True),
+    FieldSpec("jambonz_sample_rate", "VPE_JAMBONZ_SAMPLE_RATE", "Call audio", choices=("8000", "16000")),
     # messaging and email
     FieldSpec("telegram_bot_token", "TELEGRAM_BOT_TOKEN", "Telegram bot token", secret=True),
     FieldSpec("whatsapp_token", "WHATSAPP_ACCESS_TOKEN", "WhatsApp access token", secret=True),
@@ -287,6 +288,7 @@ class Config:
     telnyx_texml_app_id: str = ""
     telnyx_from_number: str = ""
     jambonz_webhook_secret: str = ""
+    jambonz_sample_rate: str = "8000"   # 16000: HD voice, when the trunk or phone system carries wideband audio
     telegram_bot_token: str = ""
     whatsapp_token: str = ""
     whatsapp_phone_number_id: str = ""

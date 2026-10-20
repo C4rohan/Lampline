@@ -995,7 +995,7 @@ def create_app(engine: Engine) -> FastAPI:
             pass
         return None
 
-    async def _run_phone_call(websocket: WebSocket, pending, serializer) -> None:
+    async def _run_phone_call(websocket: WebSocket, pending, serializer, rate: int = 8000) -> None:
         from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams, FastAPIWebsocketTransport
 
         agent = pending.agent
@@ -1008,7 +1008,7 @@ def create_app(engine: Engine) -> FastAPI:
             audio_in_enabled=True, audio_out_enabled=True, add_wav_header=False, serializer=serializer))
         stt, tts = engine.speech_factory() if engine.speech_factory else (None, None)
         try:
-            session = engine.add(VoiceSession(graph, engine.cfg, transport, audio_in_rate=8000, audio_out_rate=8000,
+            session = engine.add(VoiceSession(graph, engine.cfg, transport, audio_in_rate=rate, audio_out_rate=rate,
                                               stt=stt, tts=tts, llm=engine._make_llm(), variables=pending.context,
                                               tools=engine.tool_runner(channel={"kind": "phone", "to": pending.contact}),
                                               meta={"agent": agent, "channel": "phone", "contact": pending.contact}))
@@ -1134,7 +1134,8 @@ def create_app(engine: Engine) -> FastAPI:
                                            "To": call.get("to", "")}, request)
         token = engine.stream_tokens.issue(agent, str(call.get("call_sid") or ""), context, contact)
         log.info("jambonz call %s for %s", call.get("call_sid", "?"), agent)
-        return jambonz.listen_verbs(_stream_url("/v1/jambonz/stream"), token, f"{engine.public_url}/v1/jambonz/done")
+        return jambonz.listen_verbs(_stream_url("/v1/jambonz/stream"), token, f"{engine.public_url}/v1/jambonz/done",
+                                    int(engine.cfg.jambonz_sample_rate))
 
     @app.post("/v1/jambonz/done")
     async def jambonz_done(request: Request):
@@ -1158,9 +1159,14 @@ def create_app(engine: Engine) -> FastAPI:
         if pending is None:
             await websocket.close(code=1008)
             return
+        try:
+            rate = int(first.get("sampleRate") or jambonz.SAMPLE_RATE)
+        except (TypeError, ValueError):
+            rate = jambonz.SAMPLE_RATE
+        rate = rate if rate in jambonz.RATES else jambonz.SAMPLE_RATE
         serializer = jambonz.JambonzFrameSerializer(jambonz.JambonzFrameSerializer.InputParams(
-            jambonz_sample_rate=int(first.get("sampleRate") or jambonz.SAMPLE_RATE), hang_up=engine.twilio_hang_up))
-        await _run_phone_call(websocket, pending, serializer)
+            jambonz_sample_rate=rate, hang_up=engine.twilio_hang_up))
+        await _run_phone_call(websocket, pending, serializer, rate)
 
     # -- automation: triggers, channels, outbound ------------------------------
 

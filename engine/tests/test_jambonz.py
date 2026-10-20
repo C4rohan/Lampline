@@ -131,3 +131,28 @@ async def test_serializer_maps_frames():
     assert await s.deserialize(json.dumps({"type": "playDone"})) is None
     frame = await s.deserialize(b"\x00\x00" * 160)
     assert frame.sample_rate == 8000 and len(frame.audio) == 320
+
+
+def test_hd_voice_asks_jambonz_for_16_khz(cfg, agents_dir):
+    from dataclasses import replace
+    eng = Engine(agents_dir, replace(cfg, jambonz_webhook_secret=SECRET, jambonz_sample_rate="16000"),
+                 public_url=PUBLIC, twilio_hang_up=True, speech_factory=lambda: (vf.FakeSTT(), vf.FakeTTS()))
+    with TestClient(create_app(eng), base_url=PUBLIC) as c:
+        listen = ring(c).json()[0]
+        assert listen["sampleRate"] == 16000 and listen["bidirectionalAudio"]["sampleRate"] == 16000
+        token = listen["url"].split("?t=", 1)[1]
+        with c.websocket_connect(f"/v1/jambonz/stream?t={token}", subprotocols=["audio.jambonz.org"]) as ws:
+            ws.send_text(json.dumps({"callSid": "jz-1", "sampleRate": 16000, "metadata": {"t": token}}))
+            ws.send_bytes(b"\x00\x00" * 320)                   # 20 ms at 16 kHz
+            deadline = time.time() + 20
+            while time.time() < deadline and not ws.receive().get("bytes"):
+                pass
+            session = next(iter(eng.sessions.values()))
+            assert (session.audio_in_rate, session.audio_out_rate) == (16000, 16000)
+
+
+def test_odd_rates_fall_back_to_phone_audio():
+    assert jambonz.listen_verbs("wss://x/s", "t", "https://x/d", 44100)[0]["sampleRate"] == 8000
+    from vpengine.services import Config, ConfigError
+    with pytest.raises(ConfigError, match="VPE_JAMBONZ_SAMPLE_RATE"):
+        Config.load({"VPE_JAMBONZ_SAMPLE_RATE": "48000"})

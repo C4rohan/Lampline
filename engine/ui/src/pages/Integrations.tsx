@@ -367,7 +367,10 @@ export function Integrations() {
           { details: "Outbound calls (triggers)", items: [row({ field: "telnyx_texml_app_id" }, { field: "telnyx_from_number", opts: { placeholder: "+15551234567" } })] }] },
       { key: "jambonz", icon: "jambonz", name: "jambonz", tag: "SIP trunks, phone systems, SBCs", category: "phone", configured: set("jambonz_webhook_secret"),
         blurb: "Answer calls from any SIP trunk, PBX or session border controller through jambonz, open source and self-hostable.",
-        groups: [f("jambonz_webhook_secret", { hint: "In jambonz: Account → Webhook secret. Used to check that calls really come from your jambonz." }), node(<PhoneLink />)] },
+        groups: [f("jambonz_webhook_secret", { hint: "In jambonz: Account → Webhook secret. Used to check that calls really come from your jambonz." }),
+          f("jambonz_sample_rate", { labels: { "8000": "Phone audio, 8 kHz (works with every trunk)", "16000": "HD voice, 16 kHz (G.722, Opus or wideband SIP)" },
+            hint: "HD voice is clearer for listening. Use it when your trunk or phone system carries wideband audio; otherwise it only costs bandwidth." }),
+          node(<PhoneLink />)] },
       ...CONTACT_CENTERS.map<Provider>((c) => ({ key: c.key, icon: c.key, name: c.name, tag: c.tag, category: "contact", blurb: c.blurb,
         configured: false, footer: false, label: "Coming soon",
         body: <Notice><Info className="mt-0.5 size-4 shrink-0" /><span>{c.how} {c.key === "twilio-flex"
