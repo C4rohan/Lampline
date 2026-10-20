@@ -18,6 +18,12 @@ def fake_url():
     srv.shutdown()
 
 
+@pytest.fixture(autouse=True)
+def _data_dir(tmp_path, monkeypatch):
+    """Records, knowledge and call history go to the test's own folder, never ~/.local/share."""
+    monkeypatch.setenv("VPE_DATA_DIR", str(tmp_path / "data"))
+
+
 @pytest.fixture
 def requests_seen():
     fakellm.REQUESTS.clear()

@@ -233,7 +233,7 @@ const SECTIONS: { id: Category; title: string; lead: string; chooser?: "llm" | "
   { id: "messaging", title: "Messaging and email", lead: "Let people chat with your agents, and let agents send messages." },
   { id: "apps", title: "Apps and tool servers", lead: "Calendars, mail and MCP servers your agents' tools can use." },
   { id: "automation", title: "Automation", lead: "Outbound calls and messages from triggers, with limits." },
-  { id: "more", title: "Tools and workspace", lead: "Keys your agents' tools send, knowledge search, and how this app is named." },
+  { id: "more", title: "Tools and workspace", lead: "Keys your agents' tools send, call history, knowledge search, and how this app is named." },
 ];
 const MODEL_TILES = 6;
 const USE_LABEL = { llm: "Use for the model", stt: "Use for listening", tts: "Use for speaking" };
@@ -456,6 +456,14 @@ export function Integrations() {
           row({ field: "quiet_hours", opts: { placeholder: "21:00-08:00", hint: "No outbound calls or messages between these times." } }, { field: "outbound_daily_cap", opts: { placeholder: "50", hint: "Per agent, per day." } }),
           f("timezone", { placeholder: "this computer's", hint: "Used for schedules, quiet hours and calendars. Like America/New_York." }),
           node(<AutomationActivity />)] },
+      { key: "history", icon: "history", name: "Call history", category: "more",
+        tag: fl.call_history?.value === "off" ? "Off" : `${fl.call_history_days?.value || "30"} days`,
+        configured: true, label: fl.call_history?.value === "off" ? "Off" : fl.call_recordings?.value === "on" ? "Transcripts and recordings" : "Transcripts",
+        blurb: "Finished calls and chats on the Calls page: transcript, collected details and how each ended. Kept on this computer only.",
+        groups: [f("call_history", { labels: { on: "On", off: "Off: keep nothing" } }),
+          row({ field: "call_history_days", opts: { placeholder: "30", hint: "Older calls (and their recordings) are deleted." } },
+              { field: "call_recordings", opts: { labels: { off: "Off", on: "On: stereo WAV, caller left, agent right" }, hint: "Voice calls only. Tell callers if you record them; the rules depend on where they are." } }),
+          node(<p className="text-[12.5px] text-muted-foreground">Use synthetic test data. Real callers' personal or health details belong only on a machine set up to protect them.</p>)] },
       { key: "knowledge", icon: "knowledge", name: "Knowledge search", category: "more",
         tag: fl.embeddings?.value === "off" ? "Keywords only" : fl.embeddings?.value === "ollama" ? "Ollama embeddings" : "On this computer",
         configured: true, label: fl.embeddings?.value === "off" ? "Keywords only" : "Keywords and meaning",

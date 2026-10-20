@@ -222,6 +222,10 @@ SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("outbound", "VPE_OUTBOUND", "Outbound calls and messages", choices=("off", "on")),
     FieldSpec("quiet_hours", "VPE_QUIET_HOURS", "Quiet hours (no outbound)"),
     FieldSpec("outbound_daily_cap", "VPE_OUTBOUND_DAILY_CAP", "Outbound limit per agent per day"),
+    # call history
+    FieldSpec("call_history", "VPE_CALL_HISTORY", "Keep call history", choices=("on", "off")),
+    FieldSpec("call_history_days", "VPE_CALL_HISTORY_DAYS", "Keep calls for (days)"),
+    FieldSpec("call_recordings", "VPE_CALL_RECORDINGS", "Record voice calls", choices=("off", "on")),
     # knowledge search
     FieldSpec("embeddings", "VPE_EMBEDDINGS", "Embeddings for knowledge search", choices=("local", "ollama", "off")),
     FieldSpec("embeddings_url", "VPE_EMBEDDINGS_URL", "Embeddings server (OpenAI-compatible)"),
@@ -323,6 +327,9 @@ class Config:
     outbound: str = "off"
     quiet_hours: str = "21:00-08:00"
     outbound_daily_cap: str = "50"
+    call_history: str = "on"          # transcripts, collected details and outcomes, on this computer
+    call_history_days: str = "30"
+    call_recordings: str = "off"      # stereo WAV of voice calls (caller left, agent right)
     embeddings: str = "local"
     embeddings_url: str = "http://localhost:11434/v1"
     embeddings_model: str = "nomic-embed-text"
@@ -362,7 +369,8 @@ class Config:
                                                             r"(,(mon|tue|wed|thu|fri|sat|sun)(-(mon|tue|wed|thu|fri|sat|sun))?)*",
                                                             values["calendar_days"].lower()):
             raise ConfigError("Open days must look like mon-fri or mon-fri,sat")
-        for name, label, hi in (("smtp_port", "SMTP port", 65535), ("outbound_daily_cap", "Outbound limit", 10000)):
+        for name, label, hi in (("smtp_port", "SMTP port", 65535), ("outbound_daily_cap", "Outbound limit", 10000),
+                                ("call_history_days", "Keep calls for", 3650)):
             if values.get(name) and (not values[name].isdigit() or not 1 <= int(values[name]) <= hi):
                 raise ConfigError(f"{label} must be a whole number from 1 to {hi}")
         for name, example in (("embeddings_url", "http://localhost:11434/v1"), ("ollama_url", "http://localhost:11434/v1"),

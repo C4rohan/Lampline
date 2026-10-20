@@ -58,11 +58,11 @@ trunk through jambonz.
 - One Docker container, non-root, key-protected
 - 20 model providers; SIP through jambonz
 - Transfer to a person (phone number or SIP address), with the call's details as SIP headers and User-to-User data
+- Call history (transcripts, collected details, outcomes) and optional recordings, kept on this computer
 
 ## Next
 
 - Google Cloud deployment
 - Genesys Cloud AudioHook, then the other contact centers above
-- Call recordings
 - Published benchmarks: latency, quality and calls per GPU for common speech and model stacks
 - LLM-played callers for tests, and an MCP server for `vk`

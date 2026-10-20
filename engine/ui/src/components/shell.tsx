@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Home, Workflow, AudioLines, Plug, Phone, Database, BookOpen, Sun, Moon, Monitor, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Home, Workflow, AudioLines, History, Plug, Phone, Database, BookOpen, Sun, Moon, Monitor, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useApp } from "@/lib/app";
 import { auth } from "@/lib/api";
 import { cn, local } from "@/lib/utils";
@@ -13,6 +13,7 @@ const NAV = [
     { id: "overview", label: "Overview", icon: Home },
     { id: "agents", label: "Voice agents", icon: Workflow, also: ["build"] },
     { id: "test", label: "Test call", icon: AudioLines },
+    { id: "calls", label: "Calls", icon: History },
   ] },
   { group: "Data", items: [
     { id: "data", label: "Data", icon: Database },

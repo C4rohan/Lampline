@@ -493,6 +493,9 @@ one container, built from the `Dockerfile` at the top of the repo:
 | `VPE_ICE_SERVERS` | none | comma-separated STUN/TURN URLs, only needed when the browser isn't on the same machine or network |
 | `BRAND_NAME` | Lampline | the workspace name |
 | `VPE_SETTINGS_FILE` | `~/.config/vpengine/settings.json` | where Integrations saves |
+| `VPE_CALL_HISTORY` | `on` | keep finished calls on the Calls page |
+| `VPE_CALL_HISTORY_DAYS` | 30 | then they're deleted, recordings included |
+| `VPE_CALL_RECORDINGS` | `off` | `on` saves voice calls as stereo WAV |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_FROM_NUMBER` | | outbound calls through Twilio |
 | `TELNYX_TEXML_APP_ID`, `TELNYX_FROM_NUMBER` | | outbound calls through Telnyx |
 | `JAMBONZ_API_URL`, `JAMBONZ_ACCOUNT_SID`, `JAMBONZ_API_KEY`, `JAMBONZ_APPLICATION_SID`, `JAMBONZ_FROM_NUMBER` | `https://api.jambonz.cloud` | outbound calls over SIP through jambonz |
@@ -632,6 +635,26 @@ licence. It installs with the engine on Linux and on Apple-silicon Macs with
 macOS 15 or later (`pip install -e "engine[moonshine]"`; `scripts/engine-up.sh`
 and the Docker image include it); elsewhere the tile says it isn't available.
 
+## Call history
+
+Every finished call and chat is kept on the Calls page: when, which agent,
+who it was with, how long, how it ended (or who it was transferred to), the
+details it collected, the steps it went through, tool calls, response times
+and the transcript. Search by number, detail or anything said; filter by
+channel; delete a call when you're done with it.
+
+It's a SQLite file next to records and knowledge (`VPE_DATA_DIR`, by default
+`~/.local/share/vpengine/calls.sqlite3`), never sent anywhere. Calls older than
+30 days are deleted (`VPE_CALL_HISTORY_DAYS`); `VPE_CALL_HISTORY=off` keeps
+nothing. Recordings are off by default: with `VPE_CALL_RECORDINGS=on`, voice
+calls are also saved as stereo WAV (caller left, agent right, 16 kHz) in
+`recordings/`, and play on the Calls page. Tell callers if you record them;
+the rules depend on where they are. Use synthetic test data unless the
+machine is set up to protect real callers' details.
+
+The API: `GET /v1/calls` (`agent`, `channel`, `q`, `before`, `limit`),
+`GET /v1/calls/{id}`, `GET /v1/calls/{id}/recording`, `DELETE /v1/calls/{id}`.
+
 ## Turn taking and response time
 
 On a voice call the agent has to decide when the caller has finished. By
@@ -684,6 +707,10 @@ The folder runs as it is on disk: nothing to save or deploy first.
 | POST | `/v1/chat/sessions/{id}/end` | |
 | GET | `/v1/sessions/{id}` | steps visited, current step, collected values, events |
 | GET | `/v1/sessions/{id}/events` | the same events live (server-sent events) |
+| GET | `/v1/calls` | call history: `agent`, `channel`, `q`, `before`, `limit` |
+| GET | `/v1/calls/{id}` | one call: transcript, events, collected details |
+| GET | `/v1/calls/{id}/recording` | its recording (WAV), when recordings are on |
+| DELETE | `/v1/calls/{id}` | delete a call and its recording |
 | POST / PATCH | `/v1/calls/webrtc/offer` | browser call signalling |
 | POST | `/v1/twilio/voice?agent=<folder>` | Twilio's incoming-call webhook (signed) |
 | WebSocket | `/v1/twilio/stream` | Twilio media stream (one-time token) |
