@@ -190,6 +190,9 @@ class BuiltinKokoroTTS(TTSService):
             yield ErrorFrame(error=f"Kokoro failed: {exc}")
 
 
+WHISPER_RATE = 16000
+
+
 def make_builtin_stt(model: str):
     """Whisper inside the engine, sharing one loaded model across calls."""
     from pipecat.services.whisper.stt import WhisperSTTService
@@ -199,6 +202,18 @@ def make_builtin_stt(model: str):
             if not whisper_ready(model):
                 raise RuntimeError("the Whisper model isn't downloaded yet (Integrations → Download models)")
             self._model = load_whisper(model)
+
+        async def run_stt(self, audio: bytes):
+            # Whisper reads 16 kHz audio, but each caller's turn arrives at the call's rate: 8 kHz on a
+            # phone call. Unconverted, phone audio plays twice as fast to Whisper and comes out as nonsense.
+            if self.sample_rate and self.sample_rate != WHISPER_RATE and audio:
+                import numpy as np
+                import soxr
+
+                pcm = np.frombuffer(audio, dtype=np.int16)
+                audio = soxr.resample(pcm, self.sample_rate, WHISPER_RATE).astype(np.int16).tobytes()
+            async for frame in super().run_stt(audio):
+                yield frame
 
     return BuiltinWhisperSTT(settings=WhisperSTTService.Settings(model=model), device="cpu", compute_type="int8")
 
