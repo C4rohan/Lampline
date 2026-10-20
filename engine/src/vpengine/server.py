@@ -61,7 +61,7 @@ from .graph import Graph
 from .services import Config, ConfigError, make_llm
 from .session import Session, TextSession, VoiceSession
 from . import builder, generate
-from . import moonshine_stt
+from . import moonshine_stt, parakeet_stt
 from .transfer import PendingTransfers
 from .builtin_speech import Downloads, warm
 from .fish import list_voices
@@ -140,6 +140,7 @@ class Engine:
         self.local_speech = LocalSpeech(agents_dir)
         self.downloads = Downloads()
         self.moonshine = moonshine_stt.Downloads()
+        self.parakeet = parakeet_stt.Downloads()
         self.twilio_hang_up = twilio_hang_up            # end the phone call via Twilio's API on an end step
         self.stream_tokens = StreamTokens()
         self.transfers = PendingTransfers()      # calls handed to a person, until the carrier asks what's next
@@ -349,6 +350,8 @@ def create_app(engine: Engine) -> FastAPI:
             asyncio.get_running_loop().run_in_executor(None, warm, engine.cfg.local_whisper_model)
         if engine.cfg.stt == "moonshine" and moonshine_stt.ready(engine.cfg.moonshine_model):
             asyncio.get_running_loop().run_in_executor(None, moonshine_stt.load, engine.cfg.moonshine_model)
+        if engine.cfg.stt == "parakeet" and parakeet_stt.ready(engine.cfg.parakeet_model):
+            asyncio.get_running_loop().run_in_executor(None, parakeet_stt.load, engine.cfg.parakeet_model)
         if engine.store is not None:            # tests drive triggers directly
             engine.automations.start()
         yield
@@ -521,6 +524,19 @@ def create_app(engine: Engine) -> FastAPI:
         except RuntimeError as exc:
             raise HTTPException(409, str(exc)) from exc
         return engine.moonshine.status(engine.cfg.moonshine_model)
+
+    @app.get("/v1/parakeet", dependencies=auth)
+    async def parakeet_status():
+        return engine.parakeet.status(engine.cfg.parakeet_model)
+
+    @app.post("/v1/parakeet/download", dependencies=auth)
+    async def parakeet_download(request: Request):
+        _local_only(request)
+        try:
+            engine.parakeet.start(engine.cfg.parakeet_model)
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return engine.parakeet.status(engine.cfg.parakeet_model)
 
     @app.get("/v1/local-speech", dependencies=auth)
     async def local_speech_status():

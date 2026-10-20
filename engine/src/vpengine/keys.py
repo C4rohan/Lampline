@@ -38,7 +38,7 @@ ADMIN_ONLY = (
     ("PUT", "/v1/settings"), ("POST", "/v1/settings/"),
     ("PUT", "/v1/secrets/"), ("DELETE", "/v1/secrets/"),
     ("POST", "/v1/oauth/"), ("POST", "/v1/connectors/"),
-    ("POST", "/v1/builtin-speech/"), ("POST", "/v1/moonshine/"), ("POST", "/v1/local-speech/"),
+    ("POST", "/v1/builtin-speech/"), ("POST", "/v1/moonshine/"), ("POST", "/v1/parakeet/"), ("POST", "/v1/local-speech/"),
     ("POST", "/v1/embeddings/"),
     ("DELETE", "/v1/calls/"),
 )
@@ -55,7 +55,7 @@ VIEWER_ACTIONS = (
 
 # What stays on this computer even with VPE_REMOTE_EDITING=on: settings and secrets, downloads,
 # sign-ins, anything that fetches an address it's given, and running triggers (they contact people).
-ALWAYS_LOCAL = re.compile(r"^/v1/(settings|secrets|builtin-speech|moonshine|local-speech|embeddings/download|oauth|"
+ALWAYS_LOCAL = re.compile(r"^/v1/(settings|secrets|builtin-speech|moonshine|parakeet|local-speech|embeddings/download|oauth|"
                           r"connectors|tools/mcp|agents/[^/]+/triggers)")
 
 

@@ -56,7 +56,7 @@ def test_public_view_never_contains_keys(store):
     assert KEY not in text and "fish-secret" not in text
     assert view["fields"]["anthropic_key"] == {"label": "Anthropic API key", "source": "saved",
                                                "env": "ANTHROPIC_API_KEY", "set": True, "hint": "…1234"}
-    assert view["fields"]["tts"]["value"] == "fish" and view["fields"]["tts"]["choices"] == ["deepgram", "fish", "kokoro", "kokoro-server"]
+    assert view["fields"]["tts"]["value"] == "fish" and view["fields"]["tts"]["choices"] == ["deepgram", "fish", "kokoro", "kokoro-server", "qwen3-tts"]
     assert view["status"]["tts"] == "fish" and view["status"]["tts_ready"]
 
 

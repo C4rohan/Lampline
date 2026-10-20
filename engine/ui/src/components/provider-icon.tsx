@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AudioWaveform, BookOpen, Ear, History, KeyRound, Moon, Server, Tag, Timer, Braces, Mail, ShieldCheck, Workflow } from "lucide-react";
+import { AudioWaveform, BookOpen, Ear, Feather, History, KeyRound, Mic, Moon, Server, Tag, Timer, Braces, Mail, ShieldCheck, Workflow } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -13,6 +13,8 @@ const MONO: Record<string, Mono> = {
   fish: { text: "Fi", hue: "#2f6fb0" },
   whisper: { icon: Ear, hue: "#2f8a5c" },
   moonshine: { icon: Moon, hue: "#3b5fa8" },
+  parakeet: { icon: Feather, hue: "#5b8a3a" },
+  qwen3: { icon: Mic, hue: "#6a4bb0" },
   "whisper-server": { icon: Server, hue: "#55707f" },
   kokoro: { icon: AudioWaveform, hue: "#7457b0" },
   "kokoro-server": { icon: Server, hue: "#55707f" },

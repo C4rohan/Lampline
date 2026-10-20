@@ -472,9 +472,10 @@ one container, built from the `Dockerfile` at the top of the repo:
 | `VPE_LLM_MODEL` | the provider's default | |
 | `VPE_LLM_BASE_URL`, `OPENAI_API_KEY` | | for `VPE_LLM=openai` (a local server needs only the URL) |
 | `VPE_LLM_TEMPERATURE` | provider default | |
-| `VPE_STT` / `VPE_TTS` | `deepgram` / `deepgram` | `whisper`, `whisper-server`; `fish`, `kokoro`, `kokoro-server` |
+| `VPE_STT` / `VPE_TTS` | `deepgram` / `deepgram` | `whisper`, `moonshine`, `parakeet`, `whisper-server`; `fish`, `kokoro`, `kokoro-server`, `qwen3-tts` |
 | `VPE_LOCAL_WHISPER_MODEL` | `base.en` | built-in Whisper: `tiny.en`, `base.en`, `small.en`, `distil-small.en` |
 | `VPE_MOONSHINE_MODEL` | `small-streaming` | `tiny-streaming` for the fastest replies and the lightest CPU load |
+| `VPE_PARAKEET_MODEL` | `parakeet-tdt-0.6b-v2` | `parakeet-tdt-0.6b-v3` for 25 European languages |
 | `VPE_JAMBONZ_SAMPLE_RATE` | `8000` | `16000` for HD voice on SIP calls through jambonz |
 | `VPE_TURN_DETECTION` / `VPE_TURN_PAUSE` | `smart` / `3` (`0.8` with `pause`) | how a call decides the caller has finished: [Turn taking](#turn-taking-and-response-time) |
 | `VPE_MODEL_CACHE` | `~/.cache/vpengine` | where built-in models download |
@@ -483,6 +484,7 @@ one container, built from the `Dockerfile` at the top of the repo:
 | `VPE_WHISPER_URL` / `VPE_WHISPER_MODEL` | `http://localhost:8001/v1` / `Systran/faster-whisper-small` | Whisper server |
 | `FISH_API_KEY`, `VPE_FISH_VOICE`, `VPE_FISH_MODEL` | model `s2.1-pro-free` | voice ID from fish.audio; empty uses their default |
 | `VPE_KOKORO_URL` / `VPE_KOKORO_VOICE` | `http://localhost:8880/v1` / `af_heart` | the voice is used by built-in Kokoro too |
+| `VPE_QWEN3_TTS_URL`, `VPE_QWEN3_TTS_VOICE`, `VPE_QWEN3_TTS_LANGUAGE`, `VPE_QWEN3_TTS_MODEL` | `http://localhost:8091/v1`, `vivian`, `Auto`, `Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice` | a vLLM-Omni server |
 | `VPE_API_KEY` | | require `X-API-Key` on `/v1/*` (Twilio's routes use their own checks); required to listen beyond 127.0.0.1 or with `VPE_PUBLIC_URL` |
 | `VPE_PUBLIC_URL` | | the https address Twilio, Telnyx or jambonz reach the engine at (`--tunnel` sets it) |
 | `TWILIO_AUTH_TOKEN` | | checks Twilio's webhook signatures and hangs up finished calls |
@@ -635,6 +637,47 @@ English only here: some of Moonshine's other languages use a non-commercial
 licence. It installs with the engine on Linux and on Apple-silicon Macs with
 macOS 15 or later (`pip install -e "engine[moonshine]"`; `scripts/engine-up.sh`
 and the Docker image include it); elsewhere the tile says it isn't available.
+
+### Parakeet: the most accurate speech to text on this computer
+
+[Parakeet TDT 0.6B](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) is
+NVIDIA's open speech recognition model (CC-BY-4.0), at the top of open English
+leaderboards. It runs inside the engine through
+[onnx-asr](https://github.com/istupakov/onnx-asr) (MIT) with int8 ONNX
+exports, and transcribes each turn when the caller stops, like Whisper.
+
+Same machine and clips as the Moonshine table, from the end of a 2 to 5 second
+turn to the final text:
+
+| | After the caller stops | Words |
+|---|---|---|
+| Whisper `base.en` | 0.69 to 0.86 s | all right |
+| Whisper `tiny.en` | about 0.39 s | all right |
+| Parakeet v2 (the default) | 0.25 to 0.45 s | all right, numbers as digits |
+
+The same results on 8 kHz phone audio. Parakeet uses no CPU while the caller
+talks (Moonshine does), but its download is bigger.
+
+Choose it in Integrations → Listening → **Parakeet**, pick v2 (English) or v3
+(25 European languages, detected per turn), and press **Download model**
+(about 660 MB, once, into `VPE_MODEL_CACHE`).
+
+### Qwen3-TTS: natural voices from your GPU server
+
+[Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) sounds more natural than
+Kokoro, but on a CPU it runs slower than real time, so it's offered as a
+server: run it with [vLLM-Omni](https://docs.vllm.ai/projects/vllm-omni/) on
+a machine with an NVIDIA GPU,
+
+```bash
+vllm serve Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice --omni --port 8091 --trust-remote-code
+```
+
+then choose Integrations → Speaking → **Qwen3-TTS** and set its address
+(`VPE_QWEN3_TTS_URL`, like `http://gpu-box:8091/v1`), voice (`vivian`,
+`serena`, `ryan`, `aiden`, ...) and language (`Auto`). The engine asks the
+server to stream raw audio as it's generated, so the agent starts speaking
+before the whole sentence is ready.
 
 ## Users and roles
 
