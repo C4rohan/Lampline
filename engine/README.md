@@ -278,8 +278,9 @@ Integrations → Automation. Then they're kept out of quiet hours (default
 21:00 to 08:00), to a daily limit per agent (default 50), and to one contact
 per person per agent every 10 minutes; only contacts that went out count.
 Every attempt is logged (recipients masked) under Automation → Recent
-activity. Outbound calls need Twilio (account SID, auth token and a number) or
-Telnyx (API key, TeXML application and a number) and the public address.
+activity. Outbound calls need Twilio (account SID, auth token and a number),
+Telnyx (API key, TeXML application and a number) or jambonz (API key, account
+and application SIDs and a number), and the public address.
 WhatsApp only allows approved templates more than 24 hours after a person last
 wrote, so reminders outside that window need a template on Meta's side.
 
@@ -494,6 +495,7 @@ one container, built from the `Dockerfile` at the top of the repo:
 | `VPE_SETTINGS_FILE` | `~/.config/vpengine/settings.json` | where Integrations saves |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_FROM_NUMBER` | | outbound calls through Twilio |
 | `TELNYX_TEXML_APP_ID`, `TELNYX_FROM_NUMBER` | | outbound calls through Telnyx |
+| `JAMBONZ_API_URL`, `JAMBONZ_ACCOUNT_SID`, `JAMBONZ_API_KEY`, `JAMBONZ_APPLICATION_SID`, `JAMBONZ_FROM_NUMBER` | `https://api.jambonz.cloud` | outbound calls over SIP through jambonz |
 | `TELEGRAM_BOT_TOKEN` | | Telegram |
 | `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN` | | WhatsApp Cloud API |
 | `VPE_EMAIL_PROVIDER` | `smtp` | or `gmail` |
@@ -558,7 +560,18 @@ on the jambonz tile or set `VPE_JAMBONZ_SAMPLE_RATE=16000`; HD voice helps
 listening when your trunk carries G.722, Opus or wideband SIP), with keypad presses passed through and a
 one-time token in the stream's address. When the caller talks over the agent
 the engine sends `killAudio`; when the agent ends the call it sends
-`disconnect` and jambonz hangs up, or dials the person the step transfers to. Inbound calls only for now.
+`disconnect` and jambonz hangs up, or dials the person the step transfers to.
+
+Outbound calls (schedules and the API trigger) go out the same way, through
+your own carrier: on the jambonz tile, under "Outbound calls", add the API
+address (`https://api.jambonz.cloud` or your own jambonz), the account SID, an
+API key (Account → API keys), the application's SID and the number calls come
+from. The engine asks jambonz's REST API to place the call through that
+application, and tags it with the agent and the call's details; when the
+person answers, the application's calling webhook runs the agent as it does
+for inbound calls. Outbound has the same limits as Twilio and Telnyx: turned
+on under Automation, quiet hours, a daily cap, one contact per person every 10
+minutes.
 
 ### Transfer to a person
 

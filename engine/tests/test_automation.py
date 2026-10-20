@@ -49,6 +49,9 @@ class Fake:
         if url.startswith("https://sched.example.test/reminders"):
             assert request.headers["authorization"] == "Bearer sched-key-123456"
             return httpx.Response(200, json=[{"to": "77", "context": {"caller_name": "Lee"}}])
+        if url == "https://jambonz.example.test/v1/Accounts/acct-1/Calls":
+            assert request.headers["authorization"] == "Bearer jz-key-123456"
+            return httpx.Response(201, json={"sid": "jz-call-1"})
         if "api.twilio.com" in url:
             return httpx.Response(201, json={"sid": "CA123"})
         return httpx.Response(404)
@@ -199,6 +202,20 @@ async def test_outbound_call_with_twilio(setup):
     ctx = engine.automations.take_context(q["ctx"][0])
     assert ctx == {"caller_name": "Sam", "caller_phone": "+15550101234"}
     assert engine.automations.take_context(q["ctx"][0]) == {}          # once only
+
+
+async def test_outbound_call_through_jambonz(setup):
+    engine = setup([], jambonz_webhook_secret="wh-secret-123456", jambonz_api_url="https://jambonz.example.test/",
+                   jambonz_account_sid="acct-1", jambonz_api_key="jz-key-123456", jambonz_application_sid="app-1",
+                   jambonz_from_number="+15550009999")
+    assert engine.cfg.jambonz_outbound_ready and engine.cfg.describe()["outbound_call_ready"]
+    engine.public_url = "https://tunnel.example.test"
+    r = await engine.automations.outbound("parking", "call", "+1 555 010 1234", context={"caller_name": "Sam"})
+    assert r["ok"] and "jz-call-1" in r["detail"], r
+    body = json.loads(next(x for x in engine.fake.seen if "jambonz.example.test" in str(x.url)).content)
+    assert body["application_sid"] == "app-1" and body["from"] == "+15550009999"
+    assert body["to"] == {"type": "phone", "number": "+15550101234"} and body["tag"]["lampline_agent"] == "parking"
+    assert engine.automations.take_context(body["tag"]["lampline_ctx"]) == {"caller_name": "Sam", "caller_phone": "+15550101234"}
 
 
 async def test_schedule_api_trigger_and_endpoints(setup):

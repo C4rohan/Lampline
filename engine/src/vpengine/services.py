@@ -192,6 +192,11 @@ SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("telnyx_from_number", "TELNYX_FROM_NUMBER", "Telnyx number for outbound calls"),
     FieldSpec("jambonz_webhook_secret", "JAMBONZ_WEBHOOK_SECRET", "jambonz webhook secret", secret=True),
     FieldSpec("jambonz_sample_rate", "VPE_JAMBONZ_SAMPLE_RATE", "Call audio", choices=("8000", "16000")),
+    FieldSpec("jambonz_api_url", "JAMBONZ_API_URL", "jambonz API address"),
+    FieldSpec("jambonz_account_sid", "JAMBONZ_ACCOUNT_SID", "jambonz account SID"),
+    FieldSpec("jambonz_api_key", "JAMBONZ_API_KEY", "jambonz API key", secret=True),
+    FieldSpec("jambonz_application_sid", "JAMBONZ_APPLICATION_SID", "jambonz application SID"),
+    FieldSpec("jambonz_from_number", "JAMBONZ_FROM_NUMBER", "Number calls come from"),
     # messaging and email
     FieldSpec("telegram_bot_token", "TELEGRAM_BOT_TOKEN", "Telegram bot token", secret=True),
     FieldSpec("whatsapp_token", "WHATSAPP_ACCESS_TOKEN", "WhatsApp access token", secret=True),
@@ -291,6 +296,11 @@ class Config:
     telnyx_from_number: str = ""
     jambonz_webhook_secret: str = ""
     jambonz_sample_rate: str = "8000"   # 16000: HD voice, when the trunk or phone system carries wideband audio
+    jambonz_api_url: str = "https://api.jambonz.cloud"   # or your own jambonz's API server
+    jambonz_account_sid: str = ""
+    jambonz_api_key: str = ""
+    jambonz_application_sid: str = ""
+    jambonz_from_number: str = ""
     telegram_bot_token: str = ""
     whatsapp_token: str = ""
     whatsapp_phone_number_id: str = ""
@@ -357,6 +367,7 @@ class Config:
                 raise ConfigError(f"{label} must be a whole number from 1 to {hi}")
         for name, example in (("embeddings_url", "http://localhost:11434/v1"), ("ollama_url", "http://localhost:11434/v1"),
                               ("azure_endpoint", "https://my-resource.openai.azure.com"),
+                              ("jambonz_api_url", "https://api.jambonz.cloud"),
                               ("base_url", "https://api.openai.com/v1")):
             if values.get(name) and not re.match(r"^https?://[^\s/]+", values[name]):
                 raise ConfigError(f"{SPEC_BY_NAME[name].label} must be an http(s) address, like {example}")
@@ -460,11 +471,17 @@ class Config:
                 "jambonz_ready": bool(self.jambonz_webhook_secret),
                 "phone_ready": bool(self.twilio_auth_token or self.telnyx_public_key or self.jambonz_webhook_secret),
                 "outbound_call_ready": bool(self.twilio_auth_token and self.twilio_account_sid and self.twilio_from_number)
-                or bool(self.telnyx_api_key and self.telnyx_texml_app_id and self.telnyx_from_number),
+                or bool(self.telnyx_api_key and self.telnyx_texml_app_id and self.telnyx_from_number)
+                or self.jambonz_outbound_ready,
                 "telegram_ready": bool(self.telegram_bot_token),
                 "whatsapp_ready": bool(self.whatsapp_token and self.whatsapp_phone_number_id),
                 "email_ready": self.email_ready, "google_ready": self.google_ready,
                 "outbound": self.outbound}
+
+    @property
+    def jambonz_outbound_ready(self) -> bool:
+        return bool(self.jambonz_webhook_secret and self.jambonz_api_url and self.jambonz_account_sid
+                    and self.jambonz_api_key and self.jambonz_application_sid and self.jambonz_from_number)
 
     @property
     def google_ready(self) -> bool:
