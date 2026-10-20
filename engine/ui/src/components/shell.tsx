@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Home, Workflow, AudioLines, History, Plug, Phone, Database, BookOpen, Sun, Moon, Monitor, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Home, Workflow, AudioLines, History, Plug, Phone, Database, BookOpen, Users, Sun, Moon, Monitor, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useApp } from "@/lib/app";
 import { auth } from "@/lib/api";
 import { cn, local } from "@/lib/utils";
@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Menu, MenuContent, MenuItem, MenuTrigger, Tip } from "@/components/ui/menu";
 
-const NAV = [
+type NavItem = { id: string; label: string; icon: typeof Home; also?: string[]; admin?: boolean };
+const NAV: { group: string; items: NavItem[] }[] = [
   { group: "Build", items: [
     { id: "overview", label: "Overview", icon: Home },
     { id: "agents", label: "Voice agents", icon: Workflow, also: ["build"] },
@@ -22,6 +23,7 @@ const NAV = [
   { group: "Setup", items: [
     { id: "integrations", label: "Integrations", icon: Plug },
     { id: "phone", label: "Phone numbers", icon: Phone },
+    { id: "team", label: "Team", icon: Users, admin: true },
   ] },
 ];
 
@@ -76,7 +78,7 @@ function ThemeMenu({ compact }: { compact: boolean }) {
 }
 
 export function Shell({ page, children, narrow }: { page: string; children: ReactNode; narrow?: boolean }) {
-  const { health } = useApp();
+  const { health, me } = useApp();
   const [collapsed, setCollapsed] = useState(() => local.get("vpe-sidebar") === "collapsed");
   const compact = collapsed || !!narrow;
   const c = health?.config;
@@ -94,7 +96,7 @@ export function Shell({ page, children, narrow }: { page: string; children: Reac
           {NAV.map((g) => (
             <div key={g.group} className="contents md:block md:pt-3">
               <p className={cn("hidden px-2 pb-1.5 text-xs font-medium text-muted-foreground md:block", compact && "md:hidden")}>{g.group}</p>
-              {g.items.map((it) => {
+              {g.items.filter((it) => !it.admin || !me || me.role === "admin").map((it) => {
                 const active = page === it.id || (it.also || []).includes(page);
                 const link = (
                   <a key={it.id} href={`#/${it.id === "overview" ? "" : it.id}`} aria-current={active ? "page" : undefined}
@@ -116,6 +118,9 @@ export function Shell({ page, children, narrow }: { page: string; children: Reac
             </Tip>
             {!compact && <span className="truncate">{c ? (c.llm_ready ? `Engine running · ${c.model}` : "Engine running · no model key") : "Connecting…"}</span>}
           </div>
+          {me?.auth && !compact && (
+            <p className="truncate px-2.5 pb-1 text-xs text-muted-foreground">Signed in as <span className="font-medium text-foreground">{me.name}</span> · {me.role}</p>
+          )}
           <ThemeMenu compact={compact} />
           {!narrow && (
             <Button variant="ghost" size={compact ? "icon-sm" : "sm"} className={cn(!compact && "justify-start")} onClick={toggle}

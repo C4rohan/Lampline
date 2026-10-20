@@ -493,6 +493,7 @@ one container, built from the `Dockerfile` at the top of the repo:
 | `VPE_ICE_SERVERS` | none | comma-separated STUN/TURN URLs, only needed when the browser isn't on the same machine or network |
 | `BRAND_NAME` | Lampline | the workspace name |
 | `VPE_SETTINGS_FILE` | `~/.config/vpengine/settings.json` | where Integrations saves |
+| `VPE_REMOTE_EDITING` | off | `on` lets keys save agents, data and knowledge through an HTTPS proxy ([docs/HTTPS.md](../docs/HTTPS.md)) |
 | `VPE_CALL_HISTORY` | `on` | keep finished calls on the Calls page |
 | `VPE_CALL_HISTORY_DAYS` | 30 | then they're deleted, recordings included |
 | `VPE_CALL_RECORDINGS` | `off` | `on` saves voice calls as stereo WAV |
@@ -635,6 +636,25 @@ licence. It installs with the engine on Linux and on Apple-silicon Macs with
 macOS 15 or later (`pip install -e "engine[moonshine]"`; `scripts/engine-up.sh`
 and the Docker image include it); elsewhere the tile says it isn't available.
 
+## Users and roles
+
+The owner key (`VPE_API_KEY`) can do everything. To share the engine, sign in
+with it and open **Team** to make a key per person, with a role:
+
+| Role | Can |
+| --- | --- |
+| admin | everything: settings, integrations, keys, deleting call history |
+| builder | agents, data, knowledge, tests and triggers; not settings or keys |
+| viewer | read everything and run test calls and chats; change nothing |
+
+Keys start with `lpk_` and are shown once; only a SHA-256 fingerprint is kept
+(`keys.json` next to the settings file, mode 600). Revoking one takes effect
+at once. `GET /v1/me` says who a key is. By default, changes still have to
+come from this computer; behind an HTTPS proxy, `VPE_REMOTE_EDITING=on` lets
+keys save agents, data and knowledge through it, as their role allows.
+Settings, secrets, downloads, sign-ins and running triggers always stay
+local. See [docs/HTTPS.md](../docs/HTTPS.md) for Caddy and nginx setups.
+
 ## Call history
 
 Every finished call and chat is kept on the Calls page: when, which agent,
@@ -707,6 +727,8 @@ The folder runs as it is on disk: nothing to save or deploy first.
 | POST | `/v1/chat/sessions/{id}/end` | |
 | GET | `/v1/sessions/{id}` | steps visited, current step, collected values, events |
 | GET | `/v1/sessions/{id}/events` | the same events live (server-sent events) |
+| GET | `/v1/me` | who this key is, and its role |
+| GET, POST, DELETE | `/v1/keys`, `/v1/keys/{id}` | named keys with roles (admin) |
 | GET | `/v1/calls` | call history: `agent`, `channel`, `q`, `before`, `limit` |
 | GET | `/v1/calls/{id}` | one call: transcript, events, collected details |
 | GET | `/v1/calls/{id}/recording` | its recording (WAV), when recordings are on |

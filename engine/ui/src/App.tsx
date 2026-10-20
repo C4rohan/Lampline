@@ -12,6 +12,7 @@ import { PhoneNumbers } from "@/pages/Phone";
 import { DataPage } from "@/pages/Data";
 import { KnowledgePage } from "@/pages/Knowledge";
 import { CallsPage } from "@/pages/Calls";
+import { TeamPage } from "@/pages/Team";
 
 const Builder = lazy(() => import("@/builder/Builder"));
 
@@ -39,6 +40,7 @@ function Routes() {
         : page === "data" ? <DataPage />
         : page === "knowledge" ? <KnowledgePage />
         : page === "calls" ? <CallsPage />
+        : page === "team" ? <TeamPage />
         : <Overview />}
     </Shell>
   );
