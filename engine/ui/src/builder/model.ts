@@ -4,8 +4,13 @@ export type NodeType = "startCall" | "agentNode" | "endCall" | "globalNode";
 export type StepData = {
   name?: string; prompt?: string; greeting?: string; add_global_prompt?: boolean; allow_interrupt?: boolean;
   extraction_enabled?: boolean; extraction_prompt?: string; extraction_variables?: { name: string; type?: string; prompt?: string }[];
-  tools?: string[]; [k: string]: unknown;
+  tools?: string[];
+  transfer_to?: string; transfer_details?: string[]; transfer_uui?: string;   // end steps: hand the caller to a person
+  [k: string]: unknown;
 };
+
+/** A phone number (+15551234567) or a SIP address (sip:desk@pbx.example.com); {{variables}} allowed. */
+export const TRANSFER_TO = /^(\+[1-9]\d{6,14}|sips?:[^\s@<>"]+@[A-Za-z0-9.\-[\]:]+(;[^\s<>"]*)?|.*\{\{.+\}\}.*)$/;
 export type DefNode = { id: string; type: NodeType; position: { x: number; y: number }; data: StepData; [k: string]: unknown };
 export type EdgeData = { label?: string; condition?: string; transition_speech?: string; after_greeting?: boolean; [k: string]: unknown };
 export type DefEdge = { id: string; source: string; target: string; data: EdgeData; [k: string]: unknown };

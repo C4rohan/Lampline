@@ -558,7 +558,37 @@ on the jambonz tile or set `VPE_JAMBONZ_SAMPLE_RATE=16000`; HD voice helps
 listening when your trunk carries G.722, Opus or wideband SIP), with keypad presses passed through and a
 one-time token in the stream's address. When the caller talks over the agent
 the engine sends `killAudio`; when the agent ends the call it sends
-`disconnect` and jambonz hangs up. Inbound calls only for now.
+`disconnect` and jambonz hangs up, or dials the person the step transfers to. Inbound calls only for now.
+
+### Transfer to a person
+
+An End call step can hand the caller to a person instead of hanging up. In the
+builder, open the step and fill in **Transfer to a person**: a phone number
+(`+15551234567`) or a SIP address on your phone system or contact center
+(`sip:desk@pbx.example.com`); `{{variables}}` work, so a lookup can pick the
+desk. The agent says its line, then the carrier connects the caller.
+
+The person picking up gets what the agent collected. On a SIP address the
+details travel as SIP headers: `X-Lampline-Session` (the session ID, to look
+the call up afterwards) and `X-Lampline-<name>` for each detail, ASCII and at
+most 200 characters each. Choose which details to send, or leave the list
+empty to send everything this call collected. For Avaya and Cisco, the step
+can also send User-to-User data (`transfer_uui`, hex encoded as RFC 7433
+describes), which their screen pops read. A phone number on the public
+network can't carry headers; the details stay in the call's `transfer` event,
+and after-call triggers can send them on (`{{transferred_to}}`, `{{details}}`,
+`{{session_id}}`).
+
+| Carrier | How the transfer happens |
+| --- | --- |
+| Twilio | The stream's TwiML ends with a redirect to `/v1/twilio/after`, which answers `<Dial>` with the number or SIP address |
+| Telnyx | Call Control's transfer command (needs the API key on the Phone numbers page) |
+| jambonz | The `listen` verb's action hook (`/v1/jambonz/done`) answers with a `dial` verb |
+
+In text and browser calls, the Test call page shows where the caller would
+have gone and what would have been sent. `vk lint` checks the address
+(VK134). Dialogflow CX imports and exports map it to a live agent transfer
+(`telephonyTransferCall`).
 
 ### Moonshine: streaming speech to text
 

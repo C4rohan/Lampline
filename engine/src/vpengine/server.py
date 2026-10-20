@@ -54,13 +54,14 @@ from .services import Config, ConfigError, make_llm
 from .session import Session, TextSession, VoiceSession
 from . import builder, generate
 from . import moonshine_stt
+from .transfer import PendingTransfers
 from .builtin_speech import Downloads, warm
 from .fish import list_voices
 from .local_speech import LocalSpeech
 from .settings import SettingsStore, check, local_speech_problem, public_view
 from .tools import Tool, ToolError, ToolRunner, env_secrets
 from . import jambonz, telnyx
-from .twilio import StreamTokens, reject_twiml, stream_twiml, valid_signature
+from .twilio import StreamTokens, hangup_twiml, reject_twiml, stream_twiml, valid_signature
 
 log = logging.getLogger("vpengine.server")
 
@@ -130,6 +131,7 @@ class Engine:
         self.moonshine = moonshine_stt.Downloads()
         self.twilio_hang_up = twilio_hang_up            # end the phone call via Twilio's API on an end step
         self.stream_tokens = StreamTokens()
+        self.transfers = PendingTransfers()      # calls handed to a person, until the carrier asks what's next
         self.cfg = cfg
         self.api_key = api_key
         self.max_sessions = max_sessions
@@ -1012,7 +1014,7 @@ def create_app(engine: Engine) -> FastAPI:
             pass
         return None
 
-    async def _run_phone_call(websocket: WebSocket, pending, serializer, rate: int = 8000) -> None:
+    async def _run_phone_call(websocket: WebSocket, pending, serializer, rate: int = 8000, on_transfer=None) -> None:
         from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams, FastAPIWebsocketTransport
 
         agent = pending.agent
@@ -1034,6 +1036,8 @@ def create_app(engine: Engine) -> FastAPI:
             await websocket.close(code=1011)
             return
 
+        session.on_transfer = on_transfer
+
         @transport.event_handler("on_client_disconnected")
         async def _gone(t, client):
             await session.stop()
@@ -1044,6 +1048,13 @@ def create_app(engine: Engine) -> FastAPI:
             # Stopping the call after the caller hung up cancels the pipeline; that's a normal end.
             if not session.finished.is_set():
                 raise
+        finally:
+            if session.transfer_to is not None:
+                # The carrier carries on once the stream closes (Twilio's <Redirect>, jambonz's actionHook).
+                try:
+                    await websocket.close()
+                except Exception:  # noqa: BLE001 - already closed
+                    pass
 
     # Twilio
 
@@ -1062,7 +1073,19 @@ def create_app(engine: Engine) -> FastAPI:
             return _xml(reject_twiml("Sorry, this line can't take calls right now. Please try again later."))
         context, contact = _phone_context(form, request)
         token = engine.stream_tokens.issue(agent, form.get("CallSid", ""), context, contact)
-        return _xml(stream_twiml(_stream_url("/v1/twilio/stream"), token))
+        return _xml(stream_twiml(_stream_url("/v1/twilio/stream"), token, f"{engine.public_url}/v1/twilio/after"))
+
+    @app.post("/v1/twilio/after")
+    async def twilio_after(request: Request):
+        """Where Twilio goes once our stream closes: connect a transfer, or hang up."""
+        if not engine.twilio_auth_token or not engine.public_url:
+            raise HTTPException(503, "Twilio isn't set up")
+        form = dict(parse_qsl((await _webhook_body(request)).decode("utf-8", "replace"), keep_blank_values=True))
+        url = f"{engine.public_url}{request.url.path}" + (f"?{request.url.query}" if request.url.query else "")
+        if not valid_signature(engine.twilio_auth_token, url, form, request.headers.get("x-twilio-signature", "")):
+            raise HTTPException(403, "bad Twilio signature")
+        transfer = engine.transfers.pop(form.get("CallSid"))
+        return _xml(transfer.twiml() if transfer else hangup_twiml())
 
     @app.websocket("/v1/twilio/stream")
     async def twilio_stream(websocket: WebSocket):
@@ -1079,7 +1102,12 @@ def create_app(engine: Engine) -> FastAPI:
             stream_sid=start.get("streamSid", ""), call_sid=start.get("callSid"),
             account_sid=start.get("accountSid"), auth_token=engine.twilio_auth_token,
             params=TwilioFrameSerializer.InputParams(auto_hang_up=engine.twilio_hang_up))
-        await _run_phone_call(websocket, pending, serializer)
+
+        async def hand_off(transfer):
+            engine.transfers.add(start.get("callSid", ""), transfer)
+            serializer._params.auto_hang_up = False      # close the stream instead; Twilio then asks /v1/twilio/after
+
+        await _run_phone_call(websocket, pending, serializer, on_transfer=hand_off)
 
     # Telnyx
 
@@ -1122,7 +1150,20 @@ def create_app(engine: Engine) -> FastAPI:
             inbound_encoding="PCMU", call_control_id=call_control_id, api_key=api_key or None,
             params=TelnyxFrameSerializer.InputParams(
                 auto_hang_up=bool(api_key and call_control_id and engine.twilio_hang_up)))
-        await _run_phone_call(websocket, pending, serializer)
+
+        async def hand_off(transfer):
+            if not (api_key and call_control_id):
+                raise RuntimeError("Telnyx transfers need the Telnyx API key (Integrations → Telnyx)")
+            import httpx
+
+            async with httpx.AsyncClient(timeout=10) as http:
+                r = await http.post(f"{telnyx.API}/calls/{call_control_id}/actions/transfer",
+                                    headers={"Authorization": f"Bearer {api_key}"}, json=transfer.telnyx_body())
+            if r.status_code >= 300:
+                raise RuntimeError(f"Telnyx refused the transfer ({r.status_code})")
+            serializer._params.auto_hang_up = False      # the transfer has the call now
+
+        await _run_phone_call(websocket, pending, serializer, on_transfer=hand_off)
 
     # jambonz (SIP trunks, phone systems and SBCs)
 
@@ -1157,8 +1198,9 @@ def create_app(engine: Engine) -> FastAPI:
     @app.post("/v1/jambonz/done")
     async def jambonz_done(request: Request):
         """The listen verb's actionHook (the stream ended) and the application's call status webhook."""
-        await _jambonz_body(request)
-        return [{"verb": "hangup"}]
+        call = await _jambonz_body(request)
+        transfer = engine.transfers.pop(str(call.get("call_sid") or ""))
+        return transfer.jambonz_verbs() if transfer else [{"verb": "hangup"}]
 
     @app.websocket("/v1/jambonz/stream")
     async def jambonz_stream(websocket: WebSocket):
@@ -1183,7 +1225,10 @@ def create_app(engine: Engine) -> FastAPI:
         rate = rate if rate in jambonz.RATES else jambonz.SAMPLE_RATE
         serializer = jambonz.JambonzFrameSerializer(jambonz.JambonzFrameSerializer.InputParams(
             jambonz_sample_rate=rate, hang_up=engine.twilio_hang_up))
-        await _run_phone_call(websocket, pending, serializer, rate)
+        async def hand_off(transfer):
+            engine.transfers.add(str(sid or ""), transfer)   # the stream ends; jambonz asks /v1/jambonz/done
+
+        await _run_phone_call(websocket, pending, serializer, rate, on_transfer=hand_off)
 
     # -- automation: triggers, channels, outbound ------------------------------
 
@@ -1207,7 +1252,7 @@ def create_app(engine: Engine) -> FastAPI:
             sample = {"summary": "This is a test note: a caller asked to book a cleaning next Tuesday morning.",
                       "details": "preferred day: Tuesday\npreferred time: morning", "agent": a.name, "channel": "phone",
                       "contact": "+15550100000", "transcript": "(test)", "session_id": "test", "ended_reason": "completed",
-                      "duration_seconds": 0, "steps": "", "caller_name": "Test Caller", "caller_phone": "+15550100000"}
+                      "duration_seconds": 0, "steps": "", "transferred_to": "", "caller_name": "Test Caller", "caller_phone": "+15550100000"}
             return {"results": [await engine.automations._send(slug, tid, t["send"], sample, dry_run=dry)]}
         raise HTTPException(400, "message triggers run when someone writes in")
 

@@ -16,6 +16,9 @@ from xml.sax.saxutils import escape, quoteattr
 TOLERANCE = 300   # seconds, same as Telnyx's own SDK
 
 
+API = "https://api.telnyx.com/v2"
+
+
 def valid_signature(public_key_b64: str, timestamp: str, signature_b64: str, body: bytes,
                     *, now: float | None = None) -> bool:
     """Telnyx signs f"{timestamp}|{raw body}" with ed25519 (base64 key and signature)."""

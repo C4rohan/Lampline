@@ -343,6 +343,7 @@ class Automations:
         values = {**variables, "transcript": transcript[:20000], "details": details, "agent": session.graph.name,
                   "channel": meta.get("channel", "web"), "contact": meta.get("contact", ""),
                   "ended_reason": ended.get("reason", ""), "session_id": session.id,
+                  "transferred_to": (ended.get("transfer") or {}).get("to", ""),
                   "duration_seconds": int(time.time() - session.created),
                   "steps": ", ".join(session.graph.steps[i].name for i in session.flow.visited if i in session.graph.steps)}
         values["summary"] = await self._summary(session, transcript) if need_summary else ""

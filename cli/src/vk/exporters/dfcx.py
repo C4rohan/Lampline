@@ -65,6 +65,26 @@ def _msg(text: str | list[str], lang: str) -> dict:
     return {"messages": [{"text": {"text": [t]}, "languageCode": lang} for t in texts]}
 
 
+def _transfer_to(step, report: Report | None = None) -> str:
+    """The number or SIP address an End call step hands the caller to, when Dialogflow can dial it."""
+    to = str(step.data.get("transfer_to") or "").strip() if step.type == "endCall" else ""
+    if not to:
+        return ""
+    if "{{" in to:
+        if report:
+            report.note(f"{step.name}: transfers to {to}, which Dialogflow can't fill in from parameters; "
+                        "set the number on its Live agent transfer there.")
+        return ""
+    if report and (step.data.get("transfer_details") or step.data.get("transfer_uui")):
+        report.note(f"{step.name}: the details it sends with the transfer (SIP headers) aren't carried over; "
+                    "Dialogflow's phone gateway sends its own.")
+    return to
+
+
+def _transfer_msg(to: str) -> dict:
+    return {"telephonyTransferCall": {"sipUri" if to.startswith(("sip:", "sips:")) else "phoneNumber": to}}
+
+
 def _fname(name: str) -> str:
     """File names keep spaces; characters a file name can't hold are percent-encoded, as Dialogflow does."""
     return "".join(c if c.isalnum() or c in " ._-()" else f"%{ord(c):02x}" for c in name)
@@ -114,9 +134,13 @@ def build(agent: Agent, *, time_zone: str = "America/New_York", language: str = 
     flows = _Flows(plan, scripted, names, root, lang, report)
     files.update(flows.files())
 
+    # Transfers to a person: an End call step with one gets its own flow that ends with a live agent transfer.
+    for s in plan.steps.values():
+        _transfer_to(s, report)
+
     # Ending the conversation: playbooks hand over to this flow.
     ends = [plan.target(e) for s in steps + scripted for e in s.out
-            if plan.target(e).type == "endCall" and not plan.target(e).scripted]
+            if plan.target(e).type == "endCall" and not plan.target(e).scripted and not _transfer_to(plan.target(e))]
     if ends:
         goodbye = single_braces(ends[0].prompt) or "Thank you for calling. Goodbye."
         if any(single_braces(x.prompt) != goodbye for x in ends[1:]):
@@ -183,7 +207,7 @@ def build(agent: Agent, *, time_zone: str = "America/New_York", language: str = 
             cond = single_braces(rule_text(e, s)).rstrip(".")
             say = single_braces(str(d.get("transition_speech") or "").strip())
             first = f"say “{say}”, then " if say else ""
-            if t.type == "endCall" and t.scripted:
+            if t.type == "endCall" and (t.scripted or _transfer_to(t)):
                 out.append({"text": f"If {cond[:1].lower() + cond[1:]}: {first}go to ${{FLOW:{flows.end_flow(t)}}}."})
             elif t.type == "endCall":
                 out.append({"text": f"If {cond[:1].lower() + cond[1:]}: {first}{single_braces(t.prompt) or 'say goodbye'} "
@@ -320,6 +344,9 @@ class _Flows:
             route: dict[str, Any] = {"condition": "true", "targetPage": "END_SESSION"}
             if say:
                 route["triggerFulfillment"] = _msg(say, self.lang)
+            to = _transfer_to(step)
+            if to:
+                route.setdefault("triggerFulfillment", {"messages": []})["messages"].append(_transfer_msg(to))
             self._end_docs[name] = {"name": _id("flow", name), "displayName": name, "transitionRoutes": [route],
                                     "nluSettings": {"modelType": "MODEL_TYPE_STANDARD", "classificationThreshold": 0.3}}
         return self._ends[step.id]
@@ -333,11 +360,12 @@ class _Flows:
             return {"targetFlow": f}
         if t.type == "agentNode" and t.id in self.playbooks:
             return {"targetPlaybook": self.playbooks[t.id]}
-        if t.type == "endCall" and t.scripted:
+        if t.type == "endCall" and (t.scripted or _transfer_to(t)):
             say = single_braces(str(t.data.get("say") or "").strip())
             if say:
                 texts.append(say)
-            return {"targetPage": "END_SESSION"}
+            to = _transfer_to(t)
+            return {"targetPage": "END_SESSION", **({"_transfer": to} if to else {})}
         if t.type == "endCall":
             return {"targetFlow": END_FLOW}
         return None
@@ -420,10 +448,13 @@ class _Flows:
             if dest is None:
                 continue
             r: dict[str, Any] = dict(dest)
+            to = r.pop("_transfer", "")
             if str(ed.get("label") or "").strip():
                 r["description"] = str(ed["label"]).strip()[:500]
-            if texts:
+            if texts or to:
                 r["triggerFulfillment"] = _msg(texts, self.lang)
+            if to:
+                r["triggerFulfillment"]["messages"].append(_transfer_msg(to))
             if kind == "when":
                 try:
                     cond = pages.to_dialogflow(ed["when"])

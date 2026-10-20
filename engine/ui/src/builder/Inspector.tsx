@@ -9,9 +9,9 @@ import { Field } from "@/components/ui/label";
 import { Checkbox, Toggle } from "@/components/ui/switch";
 import type { BuilderApi } from "./useBuilder";
 import type { DefEdge, DefNode, Doc, NodeType, Param, Tool } from "./model";
-import { findingsFor, kindLabel, renameTool, rootId, text, TOOL_NAME, toolName, TYPES, usesTool, VAR_NAME } from "./model";
+import { findingsFor, kindLabel, renameTool, rootId, text, TOOL_NAME, toolName, TRANSFER_TO, TYPES, usesTool, VAR_NAME } from "./model";
 import { InsertChips, JsonField, PairsEditor, Section, TextField } from "./fields";
-import { FlowField, isScripted, ModeSwitch, RouteKind, routeKind, RULE_LABEL, ScriptEditor } from "./script";
+import { allVariables, FlowField, isScripted, ModeSwitch, RouteKind, routeKind, RULE_LABEL, ScriptEditor } from "./script";
 
 const ICONS: Record<NodeType, typeof Bot> = { startCall: Play, agentNode: Bot, endCall: CircleStop, globalNode: Globe };
 
@@ -40,6 +40,51 @@ function LinkRow({ main, sub, onClick, color }: { main: ReactNode; sub?: ReactNo
   );
 }
 
+/* ---------------------------------------------------------------- transfer to a person */
+
+function TransferSection({ b, n }: { b: BuilderApi; n: DefNode }) {
+  const doc = b.doc!;
+  const d = n.data;
+  const set = (fn: (x: DefNode) => void, key?: string) => b.update((dd) => { const x = dd.definition.nodes.find((y) => y.id === n.id); if (x) fn(x); }, { key: key && `n:${n.id}:${key}` });
+  const to = text(d.transfer_to).trim();
+  const consts = new Set(Object.keys(doc.context_variables));
+  const names = ["caller_phone", ...allVariables(doc).filter((v) => !consts.has(v) && v !== "caller_phone")];
+  const picked = Array.isArray(d.transfer_details) ? d.transfer_details : [];
+  const sip = /^sips?:/.test(to);
+  return (
+    <Section title="Transfer to a person">
+      <TextField label="Transfer the call to" value={text(d.transfer_to)} placeholder="+15551234567 or sip:desk@pbx.example.com" insert={Object.keys(doc.context_variables)}
+        invalid={!!to && !TRANSFER_TO.test(to)}
+        onChange={(v) => set((x) => { if (v.trim()) x.data.transfer_to = v.trim(); else { delete x.data.transfer_to; delete x.data.transfer_details; delete x.data.transfer_uui; } }, "tto")}
+        hint={!to ? "Empty: the call ends here. A phone number or SIP address: after this step speaks, the caller is connected there instead."
+          : sip ? "The details below go along as SIP headers (X-Lampline-…), with a session ID for the full record."
+          : "The phone network can't carry details, so they stay in this call's record and any after-call trigger. Use a SIP address to send them along."} />
+      {to && (
+        <>
+          <div className="grid gap-2">
+            <span className="text-[13px] font-medium">Details to send</span>
+            <div className="flex flex-wrap gap-x-4 gap-y-2">
+              {names.map((v) => (
+                <label key={v} className="flex items-center gap-2 font-mono text-[12.5px]">
+                  <Checkbox checked={picked.includes(v)} aria-label={`Send ${v}`} onCheckedChange={(on) => set((x) => {
+                    const cur = new Set(Array.isArray(x.data.transfer_details) ? x.data.transfer_details : []);
+                    if (on) cur.add(v); else cur.delete(v);
+                    if (cur.size) x.data.transfer_details = names.filter((nm) => cur.has(nm)); else delete x.data.transfer_details;
+                  })} />{v}
+                </label>
+              ))}
+            </div>
+            <p className="text-[12.5px] text-muted-foreground">{picked.length ? `${picked.length} selected.` : "None ticked: everything the call collected."}</p>
+          </div>
+          {sip && <TextField label="User-to-User data (optional)" value={text(d.transfer_uui)} insert={names} placeholder="e.g. {{account_id}}"
+            onChange={(v) => set((x) => { if (v.trim()) x.data.transfer_uui = v; else delete x.data.transfer_uui; }, "tuui")}
+            hint="For phone systems that read the User-to-User header, like Avaya and Cisco. Sent hex encoded." />}
+        </>
+      )}
+    </Section>
+  );
+}
+
 /* ---------------------------------------------------------------- steps */
 
 export function NodePanel({ b, n }: { b: BuilderApi; n: DefNode }) {
@@ -54,7 +99,8 @@ export function NodePanel({ b, n }: { b: BuilderApi; n: DefNode }) {
       : "Every call begins here. The greeting is spoken word for word, then the caller is transferred by what they say.",
     agentNode: isRoot ? "The root agent hears the caller first and transfers them to the right sub-agent."
       : "A sub-agent handles one job. It follows its instructions and transfers the caller when a condition is met.",
-    endCall: "Says a short goodbye, then hangs up.",
+    endCall: text(d.transfer_to) ? "Says its line, then connects the caller to a person, with the details collected."
+      : "Says a short goodbye, then hangs up. Or hand the caller to a person: see Transfer to a person.",
     globalNode: "Persona, tone and rules added to every step that includes global instructions.",
   }[n.type];
   const outs = doc.definition.edges.filter((e) => e.source === n.id);
@@ -80,6 +126,7 @@ export function NodePanel({ b, n }: { b: BuilderApi; n: DefNode }) {
           hint={n.type === "startCall" ? "Used if the model greets, or if Start transfers by what the caller says." : "Write {{name}} to insert a context variable."} />}
       </div>
       {isScripted(n) && <ScriptEditor b={b} n={n} />}
+      {n.type === "endCall" && <TransferSection b={b} n={n} />}
       {isScripted(n) && n.type !== "endCall" && (
         <Section title={`Transfers (${outs.length})`}>
           {outs.map((e) => <LinkRow key={e.id} main={<>{text(e.data.label) || "no label"}{routeKind(e) !== "ask" && <Badge variant="outline" className="ml-2">{RULE_LABEL[routeKind(e)]}</Badge>}</>}
