@@ -47,6 +47,7 @@ class Host(Protocol):
     async def announce(self, text: str) -> None: ...   # spoken, but not added to the model's context
     async def queue(self, frames: list) -> None: ...
     async def end(self, reason: str) -> None: ...
+    async def transfer(self, transfer) -> None: ...      # hand the caller to a person before the call ends
     def emit(self, event: dict) -> None: ...
 
 
@@ -567,11 +568,31 @@ class FlowController:
         if not self.awaiting_response and not self.running_tools:
             await self.check_rules()
 
+    def collected(self) -> list[str]:
+        """What this call gathered: everything but the agent's own unchanged constants."""
+        constants = self.graph.context
+        return [k for k, v in self.variables.items() if k not in constants or constants[k] != v]
+
     async def finish(self, reason: str) -> None:
         if self.ended:
             return
         self.ended = True
+        transfer = None
+        if reason == "end step reached" and self.current is not None:
+            from .transfer import build
+            try:
+                transfer = build(self.current, self.variables, getattr(self.host, "id", ""), render, self.collected())
+            except ValueError as exc:
+                self.host.emit({"type": "execution_error", "message": f"{exc}. Hanging up instead."})
+        if transfer is not None:
+            self.host.emit({"type": "transfer", "node_name": self.current.name, **transfer.event()})
+            try:
+                await self.host.transfer(transfer)
+            except Exception as exc:  # noqa: BLE001 - a failed hand-off still ends the call cleanly
+                self.host.emit({"type": "execution_error", "message": f"transfer to {transfer.to} failed: {exc}"})
+            reason = f"transferred to {transfer.to}"
         self.host.emit({"type": "call_ended", "reason": reason,
                         "node_name": self.current.name if self.current else None,
-                        "variables": dict(self.variables)})
+                        "variables": dict(self.variables),
+                        **({"transfer": transfer.event()} if transfer is not None else {})})
         await self.host.end(reason)

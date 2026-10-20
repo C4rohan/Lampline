@@ -195,6 +195,8 @@ class Session:
         self._runner_task: asyncio.Task | None = None
         self.finished = asyncio.Event()
         self.error: str | None = None
+        self.transfer_to = None                     # the Transfer, once the call is handed to a person
+        self.on_transfer = None                     # async (Transfer) -> None: set by the phone handlers
 
     # -- Host protocol for FlowController ---------------------------------
 
@@ -221,6 +223,12 @@ class Session:
 
     async def say(self, text: str) -> None:
         raise NotImplementedError
+
+    async def transfer(self, transfer) -> None:
+        """Remember the hand-off; a phone call's carrier acts on it (on_transfer), a test chat just reports it."""
+        self.transfer_to = transfer
+        if self.on_transfer is not None:
+            await self.on_transfer(transfer)
 
     # -- lifecycle ---------------------------------------------------------
 

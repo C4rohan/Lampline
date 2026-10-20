@@ -122,6 +122,11 @@ export function TestCall({ params }: { params: URLSearchParams }) {
       case "variables": setCollected((v) => ({ ...v, ...e.values })); break;
       case "turn_metrics": setTurns((t) => [...t, e as Turn]); break;
       case "execution_error": add({ kind: "sys", text: e.message, error: true }); break;
+      case "transfer": {
+        const sent = Object.keys(e.details || {});
+        add({ kind: "sys", text: `Handing the caller to ${e.to}${sent.length ? ` with ${sent.join(", ")}` : ""}. On a phone call they're connected now.` });
+        break;
+      }
       case "call_ended": add({ kind: "sys", text: `Call ended: ${e.reason}` }); finish(); break;
     }
   }

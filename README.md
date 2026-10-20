@@ -274,9 +274,10 @@ tools, data and knowledge: [engine/README.md](engine/README.md).
 - [x] Records and local RAG of its own ([engine/README.md](engine/README.md#data-and-knowledge))
 - [x] One Docker container for local and on-prem
 - [x] 20 model providers; SIP through jambonz
+- [x] Transfer to a person with the call's details as SIP headers ([engine/README.md](engine/README.md#transfer-to-a-person))
 - [ ] **Google Cloud deployment** (coming soon)
 - [ ] **Contact centers:** Genesys Cloud, Avaya, Cisco Webex Contact Center, Cisco UCCE, Amazon Connect, NICE CXone, Five9, Twilio Flex (coming soon)
-- [ ] Live-agent transfers, call recordings, published benchmarks
+- [ ] Call recordings, published benchmarks
 
 The full list: [docs/ROADMAP.md](docs/ROADMAP.md).
 
