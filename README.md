@@ -220,7 +220,7 @@ flowchart LR
   carriers --> engine
   engine --> agents[(agents/<br/>YAML + Markdown)]
   engine --> data[(Records and<br/>knowledge, SQLite)]
-  engine --> models{{Model and speech<br/>cloud APIs or local<br/>Whisper · Moonshine · Kokoro · Ollama}}
+  engine --> models{{Model and speech<br/>cloud APIs or local<br/>Whisper · Moonshine · Parakeet · Kokoro · Qwen3-TTS · Ollama}}
   engine -- tools --> hooks[Your APIs and<br/>MCP servers]
 ```
 

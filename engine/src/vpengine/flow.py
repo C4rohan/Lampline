@@ -114,6 +114,7 @@ class FlowController:
         self._ending = False
         self._final_started = False
         self.runner = tools or ToolRunner(mock=True)
+        self.extract_llm = None                     # a text model for extraction when self.llm only talks (speech to speech)
         self.step_tools: list[Tool] = []
         self.running_tools = 0
         self.page: PageState | None = None          # the scripted page being filled in
@@ -460,7 +461,7 @@ class FlowController:
         schema = {"type": "object", "additionalProperties": False, "required": ["route", "value"], "properties": {
             "route": {"type": "string", "enum": list(options) + ["none"]}, "value": {"type": ["string", "null"]}}}
         try:
-            out = parse_json_object(await asyncio.wait_for(self.llm.run_inference(
+            out = parse_json_object(await asyncio.wait_for((self.extract_llm or self.llm).run_inference(
                 LLMContext(messages=[{"role": "user", "content": text}]), max_tokens=200,
                 system_instruction="\n".join(lines), response_schema=schema), INTERPRET_TIMEOUT)) or {}
         except Exception as exc:  # noqa: BLE001 - fall back to the built-in parsers
@@ -537,7 +538,7 @@ class FlowController:
         started = time.monotonic()
         try:
             text = await asyncio.wait_for(
-                self.llm.run_inference(ctx, max_tokens=400, system_instruction=instruction,
+                (self.extract_llm or self.llm).run_inference(ctx, max_tokens=400, system_instruction=instruction,
                                        response_schema=extraction_schema(variables)),
                 EXTRACTION_TIMEOUT)
         except Exception as exc:  # noqa: BLE001 - extraction never blocks the call

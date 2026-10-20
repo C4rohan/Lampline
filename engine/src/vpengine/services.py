@@ -11,6 +11,7 @@ from or written to agent folders.
                       (LLM_PROVIDERS below; each runs through Pipecat's own service for it)
     Listening (STT):  deepgram | fish (Fish Audio) | whisper (built in, free) | whisper-server (an OpenAI-style server)
     Speaking (TTS):   deepgram | fish (Fish Audio) | kokoro (built in, free) | kokoro-server (Kokoro-FastAPI)
+                      | qwen3-tts (Qwen3-TTS served by vLLM-Omni, on a GPU)
 """
 
 from __future__ import annotations
@@ -158,16 +159,23 @@ SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("novita_key", "NOVITA_API_KEY", "Novita AI API key", secret=True),
     FieldSpec("ollama_url", "OLLAMA_BASE_URL", "Ollama address"),
     FieldSpec("temperature", "VPE_LLM_TEMPERATURE", "Temperature"),
-    FieldSpec("stt", "VPE_STT", "Speech to text", choices=("deepgram", "fish", "whisper", "moonshine", "whisper-server")),
+    FieldSpec("stt", "VPE_STT", "Speech to text", choices=("deepgram", "fish", "whisper", "moonshine", "parakeet", "whisper-server")),
     FieldSpec("deepgram_key", "DEEPGRAM_API_KEY", "Deepgram API key", secret=True),
     FieldSpec("stt_model", "VPE_STT_MODEL", "Deepgram model"),
     FieldSpec("whisper_url", "VPE_WHISPER_URL", "Whisper server URL"),
     FieldSpec("whisper_model", "VPE_WHISPER_MODEL", "Whisper server model"),
     FieldSpec("moonshine_model", "VPE_MOONSHINE_MODEL", "Moonshine model", choices=("small-streaming", "tiny-streaming")),
+    FieldSpec("parakeet_model", "VPE_PARAKEET_MODEL", "Parakeet model", choices=("parakeet-tdt-0.6b-v2", "parakeet-tdt-0.6b-v3")),
     FieldSpec("local_whisper_model", "VPE_LOCAL_WHISPER_MODEL", "Whisper model", choices=("tiny.en", "base.en", "small.en", "distil-small.en")),
+    FieldSpec("voice_mode", "VPE_VOICE_MODE", "How calls talk", choices=("chain", "speech-to-speech")),
+    FieldSpec("realtime_url", "VPE_REALTIME_URL", "Realtime server"),
+    FieldSpec("realtime_model", "VPE_REALTIME_MODEL", "Speech-to-speech model"),
+    FieldSpec("realtime_voice", "VPE_REALTIME_VOICE", "Voice"),
+    FieldSpec("realtime_key", "VPE_REALTIME_API_KEY", "API key for the realtime server", secret=True),
+    FieldSpec("realtime_turns", "VPE_REALTIME_TURNS", "Turn taking", choices=("semantic", "pause")),
     FieldSpec("turn_detection", "VPE_TURN_DETECTION", "How the agent knows the caller has finished", choices=("smart", "pause")),
     FieldSpec("turn_pause", "VPE_TURN_PAUSE", "Pause in seconds"),
-    FieldSpec("tts", "VPE_TTS", "Text to speech", choices=("deepgram", "fish", "kokoro", "kokoro-server")),
+    FieldSpec("tts", "VPE_TTS", "Text to speech", choices=("deepgram", "fish", "kokoro", "kokoro-server", "qwen3-tts")),
     FieldSpec("tts_voice", "VPE_TTS_VOICE", "Deepgram voice"),
     FieldSpec("fish_key", "FISH_API_KEY", "Fish Audio API key", secret=True),
     FieldSpec("fish_voice", "VPE_FISH_VOICE", "Fish Audio voice ID"),
@@ -183,6 +191,10 @@ SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("fish_stt_language", "VPE_FISH_STT_LANGUAGE", "Caller language"),
     FieldSpec("kokoro_url", "VPE_KOKORO_URL", "Kokoro server URL"),
     FieldSpec("kokoro_voice", "VPE_KOKORO_VOICE", "Kokoro voice"),
+    FieldSpec("qwen3_tts_url", "VPE_QWEN3_TTS_URL", "Qwen3-TTS server URL"),
+    FieldSpec("qwen3_tts_model", "VPE_QWEN3_TTS_MODEL", "Qwen3-TTS model"),
+    FieldSpec("qwen3_tts_voice", "VPE_QWEN3_TTS_VOICE", "Qwen3-TTS voice"),
+    FieldSpec("qwen3_tts_language", "VPE_QWEN3_TTS_LANGUAGE", "Qwen3-TTS language"),
     FieldSpec("twilio_auth_token", "TWILIO_AUTH_TOKEN", "Twilio auth token", secret=True),
     FieldSpec("telnyx_api_key", "TELNYX_API_KEY", "Telnyx API key", secret=True),
     FieldSpec("telnyx_public_key", "TELNYX_PUBLIC_KEY", "Telnyx public key"),
@@ -273,6 +285,13 @@ class Config:
     whisper_model: str = "Systran/faster-whisper-small"
     local_whisper_model: str = "base.en"
     moonshine_model: str = "small-streaming"
+    parakeet_model: str = "parakeet-tdt-0.6b-v2"   # v3: 25 European languages
+    voice_mode: str = "chain"           # speech-to-speech: one model listens and talks (experimental; realtime.py)
+    realtime_url: str = "wss://api.openai.com/v1/realtime"   # or any server that speaks the OpenAI Realtime protocol
+    realtime_model: str = "gpt-realtime"
+    realtime_voice: str = "marin"
+    realtime_key: str = ""              # empty: the OpenAI key, for OpenAI's own server
+    realtime_turns: str = "semantic"    # semantic: the model judges when the caller is done; pause: a fixed silence
     turn_detection: str = "smart"
     turn_pause: str = ""          # smart: longest pause before answering anyway (3s); pause: silence that ends a turn (0.8s)
     tts: str = "deepgram"
@@ -291,6 +310,10 @@ class Config:
     fish_stt_language: str = "en"
     kokoro_url: str = "http://localhost:8880/v1"
     kokoro_voice: str = "af_heart"
+    qwen3_tts_url: str = "http://localhost:8091/v1"     # vLLM-Omni serving Qwen3-TTS (a GPU machine)
+    qwen3_tts_model: str = "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
+    qwen3_tts_voice: str = "vivian"
+    qwen3_tts_language: str = "Auto"
     twilio_auth_token: str = ""
     telnyx_api_key: str = ""
     telnyx_public_key: str = ""
@@ -374,11 +397,14 @@ class Config:
             if values.get(name) and (not values[name].isdigit() or not 1 <= int(values[name]) <= hi):
                 raise ConfigError(f"{label} must be a whole number from 1 to {hi}")
         for name, example in (("embeddings_url", "http://localhost:11434/v1"), ("ollama_url", "http://localhost:11434/v1"),
+                              ("qwen3_tts_url", "http://gpu-box:8091/v1"),
                               ("azure_endpoint", "https://my-resource.openai.azure.com"),
                               ("jambonz_api_url", "https://api.jambonz.cloud"),
                               ("base_url", "https://api.openai.com/v1")):
             if values.get(name) and not re.match(r"^https?://[^\s/]+", values[name]):
                 raise ConfigError(f"{SPEC_BY_NAME[name].label} must be an http(s) address, like {example}")
+        if values.get("realtime_url") and not re.match(r"^wss?://[^\s/]+", values["realtime_url"]):
+            raise ConfigError("the realtime server must be a ws(s) address, like wss://api.openai.com/v1/realtime")
         if values.get("vertex_credentials"):
             import json as _json
             try:
@@ -446,6 +472,9 @@ class Config:
         if self.stt == "moonshine":
             from . import moonshine_stt
             return moonshine_stt.ready(self.moonshine_model)
+        if self.stt == "parakeet":
+            from . import parakeet_stt
+            return parakeet_stt.ready(self.parakeet_model)
         return bool(self.whisper_url)
 
     @property
@@ -460,20 +489,25 @@ class Config:
         return bool(self.kokoro_url)
 
     @property
+    def realtime_api_key(self) -> str:
+        return self.realtime_key or (self.openai_key if "api.openai.com" in self.realtime_url else "")
+
+    @property
     def voice_ready(self) -> bool:
         return self.stt_ready and self.tts_ready
 
     def describe(self) -> dict:
         """Safe to show: no keys."""
         voice = {"deepgram": self.tts_voice, "fish": f"{self.fish_model}, {self.fish_voice or 'default voice'}, {'live' if self.fish_connection == 'live' else 'HTTP'}", "kokoro": self.kokoro_voice,
-                 "kokoro-server": self.kokoro_voice}
+                 "kokoro-server": self.kokoro_voice, "qwen3-tts": f"{self.qwen3_tts_voice} ({self.qwen3_tts_model})"}
         return {"llm": self.llm, "llm_label": LLM_BY_NAME[self.llm].label, "model": self.model,
                 "base_url": self.base_url or None,
                 "llm_ready": self.llm_ready, "voice_ready": self.voice_ready,
                 "turn_detection": self.turn_detection,
                 "stt": self.stt, "stt_ready": self.stt_ready, "tts": self.tts, "tts_ready": self.tts_ready,
                 "stt_model": {"deepgram": self.stt_model, "whisper": self.local_whisper_model,
-                              "fish": self.fish_stt_model, "moonshine": self.moonshine_model}.get(self.stt, self.whisper_model),
+                              "fish": self.fish_stt_model, "moonshine": self.moonshine_model,
+                              "parakeet": self.parakeet_model}.get(self.stt, self.whisper_model),
                 "tts_voice": voice[self.tts], "twilio_ready": bool(self.twilio_auth_token),
                 "telnyx_ready": bool(self.telnyx_public_key),
                 "jambonz_ready": bool(self.jambonz_webhook_secret),
@@ -625,6 +659,13 @@ def make_stt(cfg: Config):
         if not moonshine_stt.ready(cfg.moonshine_model):
             raise ConfigError("the Moonshine model isn't downloaded yet: Integrations → Moonshine → Download")
         return moonshine_stt.MoonshineSTTService(model=cfg.moonshine_model)
+    if cfg.stt == "parakeet":
+        from . import parakeet_stt
+        if not parakeet_stt.installed():
+            raise ConfigError("onnx-asr isn't installed (pip install onnx-asr)")
+        if not parakeet_stt.ready(cfg.parakeet_model):
+            raise ConfigError("the Parakeet model isn't downloaded yet: Integrations → Parakeet → Download")
+        return parakeet_stt.ParakeetSTTService(model=cfg.parakeet_model)
     if cfg.stt == "whisper-server":
         if not cfg.whisper_url:
             raise ConfigError("no Whisper server URL")
@@ -677,6 +718,13 @@ def make_tts(cfg: Config, sample_rate: int | None = None):
         if not cfg.kokoro_url:
             raise ConfigError("no Kokoro server URL")
         return SpeechEndpointTTSService(base_url=cfg.kokoro_url, voice=cfg.kokoro_voice, model="kokoro")
+    if cfg.tts == "qwen3-tts":
+        if not cfg.qwen3_tts_url:
+            raise ConfigError("no Qwen3-TTS server URL")
+        # vLLM-Omni streams raw PCM as it's generated when asked to (stream + stream_format "audio").
+        return SpeechEndpointTTSService(base_url=cfg.qwen3_tts_url, voice=cfg.qwen3_tts_voice, model=cfg.qwen3_tts_model,
+                                        extra={"stream": True, "stream_format": "audio",
+                                               "language": cfg.qwen3_tts_language or "Auto"})
     if not cfg.deepgram_key:
         raise ConfigError("voice calls need a Deepgram API key, or Fish Audio / Kokoro for speaking")
     from pipecat.services.deepgram.tts import DeepgramTTSService
@@ -695,7 +743,7 @@ class SpeechEndpointTTSService(TTSService):
 
     RATE = 24000
 
-    def __init__(self, *, base_url: str, voice: str, model: str = "kokoro", **kwargs):
+    def __init__(self, *, base_url: str, voice: str, model: str = "kokoro", extra: dict | None = None, **kwargs):
         from pipecat.services.settings import TTSSettings
 
         super().__init__(sample_rate=self.RATE, push_start_frame=True, push_stop_frames=True,
@@ -703,6 +751,7 @@ class SpeechEndpointTTSService(TTSService):
         self._url = base_url.rstrip("/") + "/audio/speech"
         self._voice = voice
         self._model = model
+        self._extra = dict(extra or {})          # server-specific request fields (Qwen3-TTS streaming, language)
         self._http = None
 
     def can_generate_metrics(self) -> bool:
@@ -727,7 +776,7 @@ class SpeechEndpointTTSService(TTSService):
 
         if self._http is None:
             self._http = httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0))
-        body = {"model": self._model, "input": text, "voice": self._voice, "response_format": "pcm"}
+        body = {"model": self._model, "input": text, "voice": self._voice, "response_format": "pcm", **self._extra}
         try:
             async with self._http.stream("POST", self._url, json=body) as r:
                 if r.status_code != 200:

@@ -17,6 +17,7 @@ dependencies = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
     "pypdf>=6.0.0,<7",                               # reading PDFs into knowledge bases (BSD-3-Clause, pure Python)
+    "onnx-asr==0.12.0",                              # Parakeet speech to text on this computer (MIT; uses the onnxruntime Kokoro already needs)
 ]
 
 [project.optional-dependencies]

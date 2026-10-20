@@ -59,9 +59,10 @@ from .library import KINDS, Library, LibraryError
 from .connectors import ConnectorError, Connectors
 from .graph import Graph
 from .services import Config, ConfigError, make_llm
+from . import realtime
 from .session import Session, TextSession, VoiceSession
 from . import builder, generate
-from . import moonshine_stt
+from . import moonshine_stt, parakeet_stt
 from .transfer import PendingTransfers
 from .builtin_speech import Downloads, warm
 from .fish import list_voices
@@ -140,6 +141,7 @@ class Engine:
         self.local_speech = LocalSpeech(agents_dir)
         self.downloads = Downloads()
         self.moonshine = moonshine_stt.Downloads()
+        self.parakeet = parakeet_stt.Downloads()
         self.twilio_hang_up = twilio_hang_up            # end the phone call via Twilio's API on an end step
         self.stream_tokens = StreamTokens()
         self.transfers = PendingTransfers()      # calls handed to a person, until the carrier asks what's next
@@ -149,6 +151,7 @@ class Engine:
         self._message_starts: list[float] = []
         self.llm_factory = llm_factory          # tests inject fakes
         self.speech_factory = speech_factory    # () -> (stt, tts)
+        self.realtime_factory = None            # tests: () -> a fake speech-to-speech LLM service
         self.tool_transport = None              # tests: an httpx transport for tool calls
         self.sessions: dict[str, Session] = {}
         self.locks: dict[str, asyncio.Lock] = {}
@@ -187,6 +190,29 @@ class Engine:
     @property
     def voice_ready(self) -> bool:
         return self.cfg.voice_ready or self.speech_factory is not None
+
+    def speech_to_speech(self, graph) -> tuple[bool, str | None]:
+        """Whether this agent's calls use the speech-to-speech model, and why not when they can't."""
+        if self.cfg.voice_mode != "speech-to-speech" or graph is None:
+            return False, None
+        if self.realtime_factory is not None:
+            return True, None
+        why = realtime.problem(graph, self.cfg)
+        return why is None, why
+
+    def voice_session(self, graph, transport, *, rate: int | None = None, stt=None, tts=None, llm=None, **kwargs):
+        """A voice call: the speech-to-speech model when it's chosen and can run this agent, else the chain."""
+        s2s, why = self.speech_to_speech(graph)
+        if s2s:
+            session = realtime.RealtimeVoiceSession(
+                graph, self.cfg, transport, llm=self.realtime_factory() if self.realtime_factory else None,
+                extract_llm=llm, **kwargs)
+        else:
+            rates = {"audio_in_rate": rate, "audio_out_rate": rate} if rate else {}
+            session = VoiceSession(graph, self.cfg, transport, stt=stt, tts=tts, llm=llm, **rates, **kwargs)
+        if why:
+            session.emit({"type": "notice", "message": f"Using the normal voice chain: {why}."})
+        return session
 
     @property
     def llm_ready(self) -> bool:
@@ -266,7 +292,7 @@ class Engine:
             self._message_starts.append(now)
 
     def add(self, session: Session) -> Session:
-        if (isinstance(session, VoiceSession) and self.cfg.call_recordings == "on" and self.cfg.call_history != "off"
+        if (isinstance(session, (VoiceSession, realtime.RealtimeVoiceSession)) and self.cfg.call_recordings == "on" and self.cfg.call_history != "off"
                 and session.meta.get("agent")):
             session.record_to = self.history.recordings / f"{session.id}.wav"
         self.sessions[session.id] = session
@@ -349,6 +375,8 @@ def create_app(engine: Engine) -> FastAPI:
             asyncio.get_running_loop().run_in_executor(None, warm, engine.cfg.local_whisper_model)
         if engine.cfg.stt == "moonshine" and moonshine_stt.ready(engine.cfg.moonshine_model):
             asyncio.get_running_loop().run_in_executor(None, moonshine_stt.load, engine.cfg.moonshine_model)
+        if engine.cfg.stt == "parakeet" and parakeet_stt.ready(engine.cfg.parakeet_model):
+            asyncio.get_running_loop().run_in_executor(None, parakeet_stt.load, engine.cfg.parakeet_model)
         if engine.store is not None:            # tests drive triggers directly
             engine.automations.start()
         yield
@@ -521,6 +549,19 @@ def create_app(engine: Engine) -> FastAPI:
         except RuntimeError as exc:
             raise HTTPException(409, str(exc)) from exc
         return engine.moonshine.status(engine.cfg.moonshine_model)
+
+    @app.get("/v1/parakeet", dependencies=auth)
+    async def parakeet_status():
+        return engine.parakeet.status(engine.cfg.parakeet_model)
+
+    @app.post("/v1/parakeet/download", dependencies=auth)
+    async def parakeet_download(request: Request):
+        _local_only(request)
+        try:
+            engine.parakeet.start(engine.cfg.parakeet_model)
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return engine.parakeet.status(engine.cfg.parakeet_model)
 
     @app.get("/v1/local-speech", dependencies=auth)
     async def local_speech_status():
@@ -953,15 +994,16 @@ def create_app(engine: Engine) -> FastAPI:
         from pipecat.transports.smallwebrtc.request_handler import SmallWebRTCRequest
         from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 
-        if not engine.voice_ready:
+        graph = engine.load_agent(body.agent) if not body.pc_id else None
+        s2s = engine.speech_to_speech(graph)[0]
+        if not engine.voice_ready and not s2s:
             raise HTTPException(503, "voice calls need speech set up in Integrations (text chat works without it)")
-        if not engine.llm_ready:
+        if not engine.llm_ready and not s2s:
             raise HTTPException(503, "no model key set: add one in Integrations")
-        if engine.speech_factory is None and not body.pc_id:
+        if engine.speech_factory is None and not body.pc_id and not s2s:
             problem = await local_speech_problem(engine.cfg)
             if problem:
                 raise HTTPException(503, problem)
-        graph = engine.load_agent(body.agent) if not body.pc_id else None
         if graph is not None:
             engine._check_capacity()
         holder: dict[str, Session] = {}
@@ -970,7 +1012,7 @@ def create_app(engine: Engine) -> FastAPI:
             transport = SmallWebRTCTransport(connection, TransportParams(audio_in_enabled=True,
                                                                          audio_out_enabled=True))
             stt, tts = engine.speech_factory() if engine.speech_factory else (None, None)
-            session = engine.add(VoiceSession(graph, engine.cfg, transport, autostart=False, stt=stt, tts=tts,
+            session = engine.add(engine.voice_session(graph, transport, autostart=False, stt=stt, tts=tts,
                                               variables=body.context, llm=engine._make_llm(),
                                               tools=engine.tool_runner(mock=body.mock_tools),
                                               meta={"agent": body.agent, "channel": "web"}))
@@ -1014,10 +1056,12 @@ def create_app(engine: Engine) -> FastAPI:
     async def _refusal(agent: str) -> str | None:
         """Why this line can't take a call right now (logged; the caller hears a short apology)."""
         try:
-            engine.load_agent(agent)
+            graph = engine.load_agent(agent)
             engine._check_capacity()
         except HTTPException as exc:
             return str(exc.detail)
+        if engine.speech_to_speech(graph)[0]:
+            return None
         if not engine.voice_ready or not engine.llm_ready:
             return "model or speech isn't set up"
         if engine.speech_factory is None:
@@ -1060,7 +1104,7 @@ def create_app(engine: Engine) -> FastAPI:
             audio_in_enabled=True, audio_out_enabled=True, add_wav_header=False, serializer=serializer))
         stt, tts = engine.speech_factory() if engine.speech_factory else (None, None)
         try:
-            session = engine.add(VoiceSession(graph, engine.cfg, transport, audio_in_rate=rate, audio_out_rate=rate,
+            session = engine.add(engine.voice_session(graph, transport, rate=rate,
                                               stt=stt, tts=tts, llm=engine._make_llm(), variables=pending.context,
                                               tools=engine.tool_runner(channel={"kind": "phone", "to": pending.contact}),
                                               meta={"agent": agent, "channel": "phone", "contact": pending.contact}))

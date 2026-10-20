@@ -98,6 +98,33 @@ function BuiltinPanel({ onReady }: { onReady: () => void }) {
   );
 }
 
+function ParakeetPanel({ onReady }: { onReady: () => void }) {
+  const { data: st, setData, kick } = usePoll<Moon>("/v1/parakeet", (s) => s.state === "downloading");
+  const [was, setWas] = useState("");
+  useEffect(() => { if (st) { if (was === "downloading" && st.state !== "downloading") onReady(); setWas(st.state); } }, [st]); // eslint-disable-line
+  const lead = "Free and private: runs inside the engine. Transcribes each turn when the caller stops, in about a third of a second on a small CPU.";
+  if (!st) return <Panel lead={lead}><span className="text-sm text-muted-foreground">Checking…</span></Panel>;
+  const busy = st.state === "downloading";
+  return (
+    <Panel lead={lead}>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+        <span className="inline-flex items-center gap-2 text-sm"><Lamp on={st.ready} warn={busy} />Parakeet ({st.model.replace("parakeet-tdt-0.6b-", "")})
+          <span className="text-muted-foreground">{st.ready ? "ready" : busy ? "downloading" : "not downloaded"}</span></span>
+        <span className="ml-auto">
+          {!st.installed ? <span className="text-sm text-bad">onnx-asr isn't installed in this engine.</span>
+            : busy ? <Button size="sm" variant="outline" disabled>Downloading…</Button>
+            : st.ready ? <Badge variant="ok">Ready</Badge>
+            : <Button size="sm" variant="lamp" onClick={async () => {
+                try { setData(await api<Moon>("POST", "/v1/parakeet/download")); } catch (e) { setData({ ...st, state: "error", message: (e as Error).message }); }
+                kick();
+              }}>Download model (about {st.size_mb} MB, once)</Button>}
+        </span>
+      </div>
+      {(busy || st.state === "error") && st.message && <p className={cn("text-[13px]", st.state === "error" ? "text-bad" : "text-muted-foreground")}>{st.message}</p>}
+    </Panel>
+  );
+}
+
 function MoonshinePanel({ onReady }: { onReady: () => void }) {
   const { data: st, setData, kick } = usePoll<Moon>("/v1/moonshine", (s) => s.state === "downloading");
   const [was, setWas] = useState("");
@@ -315,6 +342,7 @@ export function Integrations() {
   const { data: settings, error, setData, reload } = useLoad(() => api<Settings>("GET", "/v1/settings"));
   const { data: builtin } = useLoad(() => api<{ whisper_ready: boolean; kokoro_ready: boolean }>("GET", "/v1/builtin-speech").catch(() => null));
   const { data: moon } = useLoad(() => api<Moon>("GET", "/v1/moonshine").catch(() => null));
+  const { data: para } = useLoad(() => api<Moon>("GET", "/v1/parakeet").catch(() => null));
   const { data: secrets } = useLoad(() => api<{ secrets: unknown[] }>("GET", "/v1/secrets").catch(() => ({ secrets: [] })));
   const { refresh, health } = useApp();
   const [open, setOpen] = useState<string | null>(null);
@@ -351,6 +379,20 @@ export function Integrations() {
         groups: [node(<MoonshinePanel onReady={afterDownload} />),
           f("moonshine_model", { labels: { "small-streaming": "Small: more accurate (140 MB)", "tiny-streaming": "Tiny: fastest, lightest on the CPU (46 MB)" },
             hint: "Save after changing it, then download. Each call uses about half a CPU core while the caller talks (tiny: a third)." })] },
+      { key: "s2s", icon: "s2s", name: "Speech to speech", tag: "Experimental", category: "listening",
+        label: fl.voice_mode?.value === "speech-to-speech" ? "On" : "Off", configured: fl.voice_mode?.value === "speech-to-speech",
+        blurb: "One model that listens and talks: no wait for a transcript or a voice, and it hears how things are said. OpenAI Realtime, or any server that speaks its protocol.",
+        groups: [f("voice_mode", { labels: { chain: "Off: speech to text, the model, then a voice (works with every agent)", "speech-to-speech": "On, for voice calls (experimental)" } }),
+          node(<p className="text-[12.5px] text-muted-foreground">Steps, transfers and tools work as before. Agents with scripted pages keep the normal chain, and lines the agent must say word for word are spoken by the model, so the wording can differ slightly. Collecting details still uses your text model.</p>),
+          f("realtime_url", { placeholder: "wss://api.openai.com/v1/realtime", hint: "OpenAI's server, or your own one that speaks the Realtime protocol." }),
+          row({ field: "realtime_model", opts: { placeholder: "gpt-realtime" } }, { field: "realtime_voice", opts: { placeholder: "marin", hint: "For OpenAI: marin, cedar, alloy, …" } }),
+          row({ field: "realtime_key", opts: { hint: "Leave empty to use your OpenAI key." } },
+              { field: "realtime_turns", opts: { labels: { semantic: "The model judges when the caller is done", pause: "A fixed pause (Turn taking setting)" } } })] },
+      { key: "stt-parakeet", icon: "parakeet", name: "Parakeet", tag: "On this computer · free · most accurate", category: "listening", chooser: "stt", value: "parakeet", check: "parakeet",
+        blurb: "NVIDIA's Parakeet TDT: the most accurate open model here, and faster than Whisper on a CPU.", configured: !!para?.ready,
+        groups: [node(<ParakeetPanel onReady={afterDownload} />),
+          f("parakeet_model", { labels: { "parakeet-tdt-0.6b-v2": "v2: English (661 MB)", "parakeet-tdt-0.6b-v3": "v3: 25 European languages, detected per turn (670 MB)" },
+            hint: "Save after changing it, then download." })] },
       { key: "stt-deepgram", icon: "deepgram", name: "Deepgram", tag: "Cloud", category: "listening", chooser: "stt", value: "deepgram", check: "deepgram",
         blurb: "Fast streaming speech to text. New accounts get free credit.", configured: set("deepgram_key"),
         groups: [f("deepgram_key", { hint: "New Deepgram accounts get free credit. The same key works for speaking." }), f("stt_model")] },
@@ -391,6 +433,13 @@ export function Integrations() {
       { key: "tts-kokoro-server", icon: "kokoro-server", name: "Kokoro server", tag: "Advanced · Docker", category: "speaking", chooser: "tts", value: "kokoro-server", check: "kokoro-server",
         blurb: "Kokoro in a separate container, or any compatible server.", configured: false,
         groups: [node(<LocalSpeechPanel lead="Runs Kokoro in Docker. Most people want Kokoro on this computer instead." />), row({ field: "kokoro_url" }, { field: "kokoro_voice", opts: { hint: "For example af_heart, af_bella or am_adam." } })] },
+      { key: "tts-qwen3", icon: "qwen3", name: "Qwen3-TTS", tag: "Your GPU server · natural voices", category: "speaking", chooser: "tts", value: "qwen3-tts", check: "qwen3-tts",
+        blurb: "Qwen's open voices, more natural than Kokoro, served by vLLM-Omni on a machine with an NVIDIA GPU.", configured: false,
+        groups: [node(<p className="text-[12.5px] text-muted-foreground">On the GPU machine: <code className="font-mono">vllm serve Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice --omni --port 8091 --trust-remote-code</code>. On a CPU it runs slower than real time, so it isn't offered on this computer.</p>),
+          f("qwen3_tts_url", { placeholder: "http://gpu-box:8091/v1" }),
+          row({ field: "qwen3_tts_voice", opts: { hint: "vivian, serena, ryan, aiden, dylan, eric, ono_anna, sohee or uncle_fu." } },
+              { field: "qwen3_tts_language", opts: { placeholder: "Auto", hint: "Auto, or English, Spanish, Chinese, …" } }),
+          f("qwen3_tts_model", { placeholder: "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice", hint: "The 1.7B model sounds a little better and needs more GPU." })] },
       { key: "twilio", icon: "twilio", name: "Twilio", tag: "Phone numbers", category: "phone", configured: set("twilio_auth_token"),
         blurb: "Answer calls to a Twilio number. Checks every webhook against your auth token.",
         groups: [f("twilio_auth_token", { hint: "Twilio Console → Account info → Auth token." }), node(<PhoneLink />),
