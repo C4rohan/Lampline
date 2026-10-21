@@ -163,6 +163,7 @@ Side by side
 | `bilingual-front-desk` | English and Spanish front desk that answers in the caller's language |
 | `appointment-finder` | Root agent with an HTTP tool that looks up open times (mock answers until you add a URL) |
 | `nurse-callback` | A scripted page that takes a callback request word for word: exact lines, a form, rule transfers, and no model calls at all |
+| `test-caller` | An AI caller with a persona and a goal, for testing another phone agent from your laptop ([docs/PHONE-TESTING.md](../docs/PHONE-TESTING.md)); its Start waits for the other side to speak first |
 
 Each comes with prompts, tests, a fictional business (Riverside Clinic) in
 `context_variables`, and `setup.real_data: false`. Edit the context variables

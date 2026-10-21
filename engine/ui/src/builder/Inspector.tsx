@@ -121,6 +121,11 @@ export function NodePanel({ b, n }: { b: BuilderApi; n: DefNode }) {
           <TextField label="Greeting" area rows={3} value={text(d.greeting)} insert={vars} onChange={(v) => set((x) => { x.data.greeting = v; }, "greeting")}
             hint="Spoken exactly as written. Leave it empty to let the model greet." />
         )}
+        {n.type === "startCall" && (
+          <Toggle id="listen-first" label="Wait for the other side to speak first"
+            hint="For a test caller: say nothing until the agent you're calling answers. With no greeting, the model replies to what it hears."
+            checked={!!d.listen_first} onCheckedChange={(v) => set((x) => { if (v) x.data.listen_first = true; else delete x.data.listen_first; }, "listen_first")} />
+        )}
         {!isScripted(n) && <TextField label={n.type === "globalNode" ? "Global instructions" : "Instructions"} area rows={n.type === "startCall" ? 4 : 9} value={text(d.prompt)} insert={vars}
           onChange={(v) => set((x) => { x.data.prompt = v; }, "prompt")}
           hint={n.type === "startCall" ? "Used if the model greets, or if Start transfers by what the caller says." : "Write {{name}} to insert a context variable."} />}
