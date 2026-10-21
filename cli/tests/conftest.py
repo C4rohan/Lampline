@@ -24,6 +24,8 @@ class FakeEngine:
         self.chats: dict[str, dict] = {}
         self.requests: list[tuple[str, str]] = []
         self.started: list[dict] = []
+        self.caller_script: list[str] = []      # what the "model" caller says, in order; then it's done
+        self.caller_asks: list[dict] = []
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.requests.append((request.method, request.url.path))
@@ -34,6 +36,10 @@ class FakeEngine:
         body = json.loads(request.content) if request.content else {}
         if request.method == "GET" and path == "/health":
             return httpx.Response(200, json={"ok": True, "config": {"llm": "fake", "model": "keywords"}})
+        if request.method == "POST" and path == "/tests/caller":
+            self.caller_asks.append(body)
+            line = self.caller_script.pop(0) if self.caller_script else None
+            return httpx.Response(200, json={"line": line, "done": line is None})
         if request.method == "POST" and path == "/chat/sessions":
             return httpx.Response(200, json=self._start(body))
         if parts[:2] == ["chat", "sessions"] and len(parts) == 4:

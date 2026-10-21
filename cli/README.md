@@ -83,6 +83,30 @@ FAIL  caller asks about Saturday hours  (1 turn(s), 1.9s)  Greeting → Router
            agent: ...
 ```
 
+### Let a model play the caller
+
+For conversations you don't want to script line by line, describe the caller
+and let a model play them. The engine's own model plays the caller, so `vk`
+needs no key of its own:
+
+```yaml
+name: impatient caller with a billing question
+caller:
+  persona: Sam, in a hurry, confused by a late fee on this month's bill
+  goal: get the fee explained or talk to someone in billing
+  opening: Hi, I've got a question about my bill.   # optional first line
+  max_turns: 8                                      # optional, 1 to 30 (default 8)
+expect:
+  reaches: Billing
+  not_says: [card number, social security]
+```
+
+The caller answers the agent's questions with made-up details and stops when
+its goal is met, the agent says goodbye, or `max_turns` runs out. It says
+something different every run, so keep `expect` to what any good conversation
+must do, and run it a few times after changing the agent. A file has either
+`turns` or a `caller`, not both.
+
 - Moving between steps is reported as a call to the transition's tool, named
   from its label (`hours or location` → `hours_or_location`).
 - LLMs phrase things differently every run: assert on where the call goes and on

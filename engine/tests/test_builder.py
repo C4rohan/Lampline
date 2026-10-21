@@ -184,3 +184,14 @@ async def test_save_keeps_triggers_and_hook_nodes(c):
     no_triggers = {k: v for k, v in back.items() if k != "triggers"}       # an older client keeps them
     assert (await c.put("/v1/agents/front-desk", json=no_triggers)).status_code == 200
     assert (await c.get("/v1/agents/front-desk")).json()["triggers"] == a["triggers"]
+
+
+async def test_a_model_plays_the_caller(c):
+    r = await c.post("/v1/tests/caller", json={"persona": "Sam, an impatient patient with a billing question",
+                                               "goal": "talk to billing",
+                                               "transcript": [{"who": "agent", "text": "Thanks for calling. How can I help?"}]})
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert set(out) == {"line", "done"} and isinstance(out["done"], bool)
+    assert (await c.post("/v1/tests/caller", json={"persona": ""})).status_code == 422
+    assert (await c.post("/v1/tests/caller", json={"persona": "Sam", "transcript": "nope"})).status_code == 422
