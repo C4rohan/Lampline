@@ -1,0 +1,3 @@
+# The committed UI build: never merge it line by line. When two branches both rebuilt it, git
+# reports a conflict; resolve it by running `npm run build` in engine/ui.
+engine/src/vpengine/static/** merge=binary -diff

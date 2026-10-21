@@ -489,6 +489,8 @@ def create_app(engine: Engine) -> FastAPI:
             if urlsplit(origin).netloc.lower() != (request.headers.get("host") or "").lower():
                 return JSONResponse({"detail": "cross-site request refused"}, status_code=403)
         response = await call_next(request)
+        if request.url.path.startswith("/static/"):
+            response.headers.setdefault("Cache-Control", "no-cache")   # file names don't change between versions
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("Referrer-Policy", "no-referrer")
