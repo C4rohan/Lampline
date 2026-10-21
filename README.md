@@ -284,6 +284,8 @@ tools, data and knowledge: [engine/README.md](engine/README.md).
 - [ ] **Contact centers:** Genesys Cloud, Avaya, Cisco Webex Contact Center, Cisco UCCE, Amazon Connect, NICE CXone, Five9, Twilio Flex (coming soon)
 - [x] Users and roles, and an HTTPS guide ([docs/HTTPS.md](docs/HTTPS.md))
 - [x] Test a phone agent for free from your laptop ([docs/PHONE-TESTING.md](docs/PHONE-TESTING.md))
+- [x] Evals: real phone calls through Google Voice, played by a Test Caller and graded ([docs/EVALS.md](docs/EVALS.md))
+- [ ] Evals placed by Lampline through Twilio, for unattended runs
 - [x] Call history and optional recordings, on this computer ([engine/README.md](engine/README.md#call-history))
 - [ ] Published benchmarks
 
@@ -293,7 +295,7 @@ The full list: [docs/ROADMAP.md](docs/ROADMAP.md).
 
 CI runs on every push and pull request to `dev`, `qa` and `prod`:
 - the `vk` CLI test suite
-- the engine test suite: flows, extraction, text chat, every model provider's setup, Twilio, Telnyx and jambonz calls, the voice pipeline and a real WebRTC handshake, on fake models
+- the engine test suite: flows, extraction, text chat, evals, every model provider's setup, Twilio, Telnyx and jambonz calls, the voice pipeline and a real WebRTC handshake, on fake models
 - the web app builds, and the committed build matches its source
 - the Docker image builds, starts as a non-root user, answers health and refuses requests without its key
 - shellcheck, and a check that `COSTS.md` matches the cost model

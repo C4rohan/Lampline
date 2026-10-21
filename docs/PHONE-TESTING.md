@@ -1,5 +1,8 @@
 # 📱 Test a phone agent from your laptop, for free
 
+> **Easier now:** the **Evals** tab does this with Google Voice in your browser, with no speakers or cables, and
+> grades each call. See [EVALS.md](EVALS.md). This page is the manual way, with a phone on speaker.
+
 Your laptop plays the caller and your phone carries the call. Lampline's
 **Test Caller** template is an AI caller with a persona and a goal. It talks
 through your laptop's speakers and listens with its microphone, while your
@@ -58,5 +61,6 @@ up as the "caller" side, because that's who the Test Caller heard.
 You get what was said, in both directions, and whether the call finished. You
 can't see the other agent's steps or tools: for those, test the agent directly
 (`vk test --target dfcx|ces` for Google agents). Each test call is manual and
-runs one at a time. For repeatable, unattended voice tests, the engine can place
-the call itself through a phone provider (coming next).
+runs one at a time. The **Evals** tab ([EVALS.md](EVALS.md)) keeps each call
+with a pass or fail; unattended runs placed through a phone provider are coming
+next.

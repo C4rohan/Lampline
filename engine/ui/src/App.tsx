@@ -13,6 +13,7 @@ import { DataPage } from "@/pages/Data";
 import { KnowledgePage } from "@/pages/Knowledge";
 import { CallsPage } from "@/pages/Calls";
 import { TeamPage } from "@/pages/Team";
+import { EvalsPage } from "@/pages/Evals";
 
 const Builder = lazy(() => import("@/builder/Builder"));
 
@@ -40,6 +41,7 @@ function Routes() {
         : page === "data" ? <DataPage />
         : page === "knowledge" ? <KnowledgePage />
         : page === "calls" ? <CallsPage />
+        : page === "evals" ? <EvalsPage />
         : page === "team" ? <TeamPage />
         : <Overview />}
     </Shell>

@@ -4,7 +4,7 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 
 ## Unreleased (on dev)
 
-
+- **Evals** tab: real phone calls to a voice agent, played by a Test Caller and graded against a goal and pass criteria. Through Google Voice in Chrome or Edge, the new **Lampline Phone Bridge** extension connects the call's audio to the Test Caller inside the browser (no speakers or cables, Windows or Mac); or with a phone on speaker, choosing the microphone and speaker. Runs are kept with their transcripts ([docs/EVALS.md](docs/EVALS.md)).
 - Test a phone agent for free from your laptop: the new Test Caller template plays a caller with a persona and a goal through the laptop's speakers and mic, with your phone on speaker carrying the call ([docs/PHONE-TESTING.md](docs/PHONE-TESTING.md)). Start steps can wait for the other side to speak first.
 
 ### Security and reliability (review of October 2026)

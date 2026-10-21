@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Home, Workflow, AudioLines, History, Plug, Phone, Database, BookOpen, Users, Sun, Moon, Monitor, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Home, Workflow, AudioLines, History, ClipboardCheck, Plug, Phone, Database, BookOpen, Users, Sun, Moon, Monitor, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useApp } from "@/lib/app";
 import { auth } from "@/lib/api";
 import { cn, local } from "@/lib/utils";
@@ -15,6 +15,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     { id: "agents", label: "Voice agents", icon: Workflow, also: ["build"] },
     { id: "test", label: "Test call", icon: AudioLines },
     { id: "calls", label: "Calls", icon: History },
+    { id: "evals", label: "Evals", icon: ClipboardCheck },
   ] },
   { group: "Data", items: [
     { id: "data", label: "Data", icon: Database },
