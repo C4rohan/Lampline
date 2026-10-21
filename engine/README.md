@@ -479,6 +479,7 @@ one container, built from the `Dockerfile` at the top of the repo:
 | `VPE_MOONSHINE_MODEL` | `small-streaming` | `tiny-streaming` for the fastest replies and the lightest CPU load |
 | `VPE_VOICE_MODE` | `chain` | `speech-to-speech`: one model listens and talks (experimental) |
 | `VPE_REALTIME_URL`, `VPE_REALTIME_MODEL`, `VPE_REALTIME_VOICE`, `VPE_REALTIME_API_KEY`, `VPE_REALTIME_TURNS` | `wss://api.openai.com/v1/realtime`, `gpt-realtime`, `marin`, the OpenAI key, `semantic` | the speech-to-speech server |
+| `VPE_REALTIME_PROVIDER` | `openai` | `gemini`: Gemini Live, with `VPE_GEMINI_LIVE_MODEL` and `VPE_GEMINI_LIVE_VOICE` (`Charon`) and your `GEMINI_API_KEY` |
 | `VPE_PARAKEET_MODEL` | `parakeet-tdt-0.6b-v2` | `parakeet-tdt-0.6b-v3` for 25 European languages |
 | `VPE_JAMBONZ_SAMPLE_RATE` | `8000` | `16000` for HD voice on SIP calls through jambonz |
 | `VPE_TURN_DETECTION` / `VPE_TURN_PAUSE` | `smart` / `3` (`0.8` with `pause`) | how a call decides the caller has finished: [Turn taking](#turn-taking-and-response-time) |
@@ -696,6 +697,18 @@ speaks the OpenAI Realtime protocol: OpenAI's `gpt-realtime` (your OpenAI key,
 or `VPE_REALTIME_API_KEY`), or one you host (`VPE_REALTIME_URL`, like
 `ws://gpu-box:8000/v1/realtime`). Steps, transfers and tools work as before:
 each step's instructions and tools go to the model as the call moves on.
+
+**Gemini Live.** Choose Gemini Live under the same card
+(`VPE_REALTIME_PROVIDER=gemini`) to run calls on Google's native-audio models
+with your Gemini API key (`GEMINI_API_KEY`); pick the model and voice with
+`VPE_GEMINI_LIVE_MODEL` (blank: Pipecat's default) and `VPE_GEMINI_LIVE_VOICE`
+(`Charon`, `Kore`, `Puck`, …). Gemini Live sets its instructions and tools once,
+when it connects, so Lampline connects with the call's first step and every
+step's tools, then gives the model each new step's instructions as a note from
+the call system: inside the route's result when the model moved the call, or
+as a turn of its own when a rule did. A tool the current step doesn't have is
+refused, and the model carries on. Try an agent on the Test call page before
+real calls.
 
 What's different, so it's off by default:
 

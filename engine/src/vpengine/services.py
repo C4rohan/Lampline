@@ -169,11 +169,14 @@ SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("parakeet_model", "VPE_PARAKEET_MODEL", "Parakeet model", choices=("parakeet-tdt-0.6b-v2", "parakeet-tdt-0.6b-v3")),
     FieldSpec("local_whisper_model", "VPE_LOCAL_WHISPER_MODEL", "Whisper model", choices=("tiny.en", "base.en", "small.en", "distil-small.en")),
     FieldSpec("voice_mode", "VPE_VOICE_MODE", "How calls talk", choices=("chain", "speech-to-speech")),
+    FieldSpec("realtime_provider", "VPE_REALTIME_PROVIDER", "Speech-to-speech model", choices=("openai", "gemini")),
     FieldSpec("realtime_url", "VPE_REALTIME_URL", "Realtime server"),
     FieldSpec("realtime_model", "VPE_REALTIME_MODEL", "Speech-to-speech model"),
     FieldSpec("realtime_voice", "VPE_REALTIME_VOICE", "Voice"),
     FieldSpec("realtime_key", "VPE_REALTIME_API_KEY", "API key for the realtime server", secret=True),
     FieldSpec("realtime_turns", "VPE_REALTIME_TURNS", "Turn taking", choices=("semantic", "pause")),
+    FieldSpec("gemini_live_model", "VPE_GEMINI_LIVE_MODEL", "Gemini Live model"),
+    FieldSpec("gemini_live_voice", "VPE_GEMINI_LIVE_VOICE", "Gemini Live voice"),
     FieldSpec("turn_detection", "VPE_TURN_DETECTION", "How the agent knows the caller has finished", choices=("smart", "pause")),
     FieldSpec("turn_pause", "VPE_TURN_PAUSE", "Pause in seconds"),
     FieldSpec("tts", "VPE_TTS", "Text to speech", choices=("deepgram", "fish", "kokoro", "kokoro-server", "qwen3-tts")),
@@ -311,6 +314,9 @@ class Config:
     realtime_voice: str = "marin"
     realtime_key: str = ""              # empty: the OpenAI key, for OpenAI's own server
     realtime_turns: str = "semantic"    # semantic: the model judges when the caller is done; pause: a fixed silence
+    realtime_provider: str = "openai"   # openai: the OpenAI Realtime protocol (realtime_url); gemini: Gemini Live
+    gemini_live_model: str = ""         # empty: Pipecat's default Gemini Live model
+    gemini_live_voice: str = "Charon"
     turn_detection: str = "smart"
     turn_pause: str = ""          # smart: longest pause before answering anyway (3s); pause: silence that ends a turn (0.8s)
     tts: str = "deepgram"
@@ -434,6 +440,9 @@ class Config:
                 raise ConfigError("the realtime server must be a ws(s) address, like wss://api.openai.com/v1/realtime")
             if u.scheme == "ws" and not _private_host(u.hostname):
                 raise ConfigError("use wss:// for a realtime server beyond your own network (ws:// sends audio and keys unencrypted)")
+        for name in ("gemini_live_model", "gemini_live_voice"):
+            if values.get(name) and not re.fullmatch(r"[A-Za-z0-9._/-]{1,100}", values[name]):
+                raise ConfigError(f"{SPEC_BY_NAME[name].label} is a name like gemini-live-model or Charon")
         if values.get("vertex_credentials"):
             import json as _json
             try:

@@ -16,6 +16,9 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 - **Replay:** run a failed eval again, replay exactly what its caller said, or turn a real call on the Calls page into an eval with **Replay as a test**.
 - The eval history file upgrades in place (schema 3).
 
+### Speech to speech
+- **Gemini Live** next to OpenAI Realtime (Integrations → Speech to speech → Gemini Live; `VPE_REALTIME_PROVIDER=gemini`, `VPE_GEMINI_LIVE_MODEL`, `VPE_GEMINI_LIVE_VOICE`), with your Gemini API key. Gemini Live can't change its instructions mid-call, so Lampline connects with the first step's instructions and every step's tools, and hands each new step's instructions to the model as a note from the call system (in the route's result when the model moved the call). Experimental: test an agent before real calls.
+
 ## v0.3.0
 
 Test real phone calls, graded: an Evals tab, test scripts that turn into test cases, and Google agents side by side.
