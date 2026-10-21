@@ -4,7 +4,7 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 
 ## Unreleased (on dev)
 
-Nothing yet.
+- `vk test` can let a model play the caller: describe who is calling and what they want (`caller:` in a test file), and the engine's model talks to your agent until the goal is met.
 
 ## v0.2.0
 

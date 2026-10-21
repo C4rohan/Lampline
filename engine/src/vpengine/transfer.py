@@ -35,6 +35,7 @@ SIP = re.compile(r"^sips?:[^\s@<>\"]+@[A-Za-z0-9.\-\[\]:]+(;[^\s<>\"]*)?$")
 HEADER_PREFIX = "X-Lampline-"
 MAX_VALUE = 200
 MAX_HEADERS = 12
+TARGET_UNSAFE = re.compile(r"[^0-9A-Za-z+*#._\-]")
 
 
 def valid_target(to: str) -> bool:
@@ -123,7 +124,12 @@ def build(step, variables: dict[str, Any], session_id: str, render, collected: l
     raw = str(step.data.get("transfer_to") or "").strip() if step.kind == "end" else ""
     if not raw:
         return None
-    to = render(raw, variables).strip()
+    if re.fullmatch(r"\{\{\s*[A-Za-z_]\w*\s*\}\}", raw):
+        to = render(raw, variables).strip()          # the whole address from one variable (a lookup): checked below
+    else:
+        # A variable inside an address ("sip:{{extension}}@pbx...") is filled with address characters only, so a
+        # value the caller influenced can't add SIP parameters or headers (;transport=, ?X-...=) or another host.
+        to = render(raw, {k: TARGET_UNSAFE.sub("", str(v)) for k, v in variables.items()}).strip()
     if not valid_target(to):
         raise ValueError(f"{step.name}: “{to}” isn't a phone number like +15551234567 or a SIP address like sip:desk@pbx.example.com")
     wanted = step.data.get("transfer_details")

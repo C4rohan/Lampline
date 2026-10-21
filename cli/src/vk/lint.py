@@ -352,6 +352,9 @@ def lint(agent: Agent, folder: str | Path | None = None) -> list[Finding]:
                         f"tool {tool.get('name')}"))
 
     # --- VK134 transfers to a person ------------------------------------------------
+    caller_said = {str(v.get("name")) for n in nodes for v in ((n.get("data") or {}).get("extraction_variables") or [])
+                   if isinstance(v, dict)} | {str(f.get("name")) for n in nodes for f in ((n.get("data") or {}).get("form") or [])
+                                             if isinstance(f, dict)}
     for node in nodes:
         data = node.get("data") or {}
         to = data.get("transfer_to")
@@ -369,6 +372,10 @@ def lint(agent: Agent, folder: str | Path | None = None) -> list[Finding]:
             continue
         for var in sorted(template_variables(to) - provided - SYSTEM_VARIABLES):
             add(Finding("VK134", "warning", f"transfer_to uses {{{{{var}}}}} but nothing provides it", where))
+        for var in sorted(template_variables(to) & caller_said):
+            add(Finding("VK134", "warning", f"transfer_to uses {{{{{var}}}}}, which comes from what the caller says: "
+                                            "a caller could choose where they're transferred. Look the address up "
+                                            "with a tool instead", where))
         details = data.get("transfer_details")
         if details is not None and not (isinstance(details, list) and all(isinstance(d, str) for d in details)):
             add(Finding("VK134", "error", "transfer_details must be a list of variable names", where))

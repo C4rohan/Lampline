@@ -216,7 +216,9 @@ def cmd_export(args) -> int:
 def _print_result(r: scenario.Result, verbose: bool) -> None:
     mark = "PASS" if r.passed else "FAIL"
     steps = " → ".join(n["name"] or n["id"] for n in r.transcript.nodes) or "no steps"
-    _out(f"{mark}  {r.scenario.name}  ({len(r.scenario.turns)} turn(s), {r.seconds:.1f}s)  {steps}")
+    turns = sum(1 for who, _ in r.transcript.lines if who == "caller") if r.scenario.caller else len(r.scenario.turns)
+    kind = ", model caller" if r.scenario.caller else ""
+    _out(f"{mark}  {r.scenario.name}  ({turns} turn(s){kind}, {r.seconds:.1f}s)  {steps}")
     for f in r.failures:
         _out(f"      - {f}")
     if verbose or not r.passed:

@@ -289,12 +289,20 @@ def test_dfcx_transfers_to_a_person():
 def test_dfcx_scripted_transfer_round_trip():
     a = scripted_agent()
     person = next(n for n in a.definition["nodes"] if n["id"] == "person")
-    person["data"]["transfer_to"] = "sip:desk@pbx.example.test"
+    person["data"]["transfer_to"] = "+15551230000"
     files, _ = build(a, "dfcx")
     page = json.loads(files["flows/Booking/pages/Intake.json"])
     msgs = [m for r in page["transitionRoutes"] for m in (r.get("triggerFulfillment") or {}).get("messages", [])]
-    assert {"telephonyTransferCall": {"sipUri": "sip:desk@pbx.example.test"}} in msgs
+    assert {"telephonyTransferCall": {"phoneNumber": "+15551230000"}} in msgs
     b, _ = convert(export(a, "dfcx")[0])
     ends = [n for n in b.definition["nodes"] if n["type"] == "endCall" and n["data"].get("transfer_to")]
-    assert [n["data"]["transfer_to"] for n in ends] == ["sip:desk@pbx.example.test"]
+    assert [n["data"]["transfer_to"] for n in ends] == ["+15551230000"]
     assert [f.message for f in lint(b) if f.severity == "error"] == []
+
+
+def test_dfcx_has_no_sip_transfers():
+    """Found in review: Dialogflow CX's telephonyTransferCall has a phoneNumber only, so SIP targets get a note."""
+    a = scripted_agent()
+    next(n for n in a.definition["nodes"] if n["id"] == "person")["data"]["transfer_to"] = "sip:desk@pbx.example.test"
+    files, report = build(a, "dfcx")
+    assert "telephonyTransferCall" not in json.dumps(files) and any("phone numbers only" in n for n in report.notes)

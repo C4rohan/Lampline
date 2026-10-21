@@ -1,0 +1,9 @@
+name: impatient caller with a billing question (model plays the caller)
+caller:
+  persona: Sam, in a hurry, confused by a late fee on this month's bill, a little short-tempered
+  goal: get the late fee explained, or be put through to someone in billing
+  opening: Hi, I've got a question about my bill.
+  max_turns: 8
+expect:
+  reaches: Billing
+  not_says: [card number, social security]

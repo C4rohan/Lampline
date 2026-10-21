@@ -85,13 +85,16 @@ The Phone numbers page shows them.
 
 ## Good to know
 
-- **Changes through the proxy are opt-in.** By default, anything that saves
-  (agents, data, knowledge) only works from the machine itself. Set
-  `VPE_REMOTE_EDITING=on` to let keys make those changes through the proxy,
-  as their role allows.
-- **Settings stay local.** Settings, secrets, model downloads, sign-ins, MCP
-  and connector tests, and running triggers never work through a proxy or
-  tunnel, whatever the key or setting. Make those changes on the machine
+- **Changes through the proxy are opt-in.** By default, saving agents, data
+  and knowledge, and reading call history and records, only work from the
+  machine itself. Set `VPE_REMOTE_EDITING=on` to allow them through the proxy,
+  as each key's role allows.
+- **Some things stay local regardless.** Settings, secrets, model downloads,
+  sign-ins, imports, trying a tool, MCP and connector tests, and running
+  triggers never work through a proxy or tunnel, whatever the key or setting.
+  Saving an agent through the proxy can change its steps and prompts but not
+  its tools, triggers or webhooks, because those can use your secrets and
+  contact people. Make those changes on the machine
   itself, or over `ssh -L 7860:127.0.0.1:7860`.
 - **Docker.** `docker-up.sh` publishes the engine on `127.0.0.1:7860` with a
   key (`VPE_DOCKER_API_KEY`); point the proxy at that, and set

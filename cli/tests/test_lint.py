@@ -1,4 +1,6 @@
 from conftest import load_fixture
+from importlib import resources
+
 from vk import agentfs
 from vk.lint import has_errors, lint, template_variables
 
@@ -134,3 +136,13 @@ def test_ignore_by_code_and_by_node():
     assert "VK105" not in codes(lint(agent(d, lint_cfg={"ignore": ["VK105"]})))
     assert "VK105" not in codes(lint(agent(d, lint_cfg={"ignore": ["VK105:2"]})))
     assert "VK105" in codes(lint(agent(d, lint_cfg={"ignore": ["VK105:3"]})))
+
+
+def test_transfer_to_what_the_caller_said_is_flagged():
+    from vk.lint import lint
+    a = agentfs.load(resources.files("vk") / "templates" / "front-desk")
+    staff = next(n for n in a.definition["nodes"] if n["data"]["name"] == "Transfer to staff")
+    appt = next(n for n in a.definition["nodes"] if (n["data"].get("extraction_variables") or []))
+    var = appt["data"]["extraction_variables"][0]["name"]
+    staff["data"]["transfer_to"] = "{{" + var + "}}"
+    assert any(f.code == "VK134" and "caller says" in f.message for f in lint(a))

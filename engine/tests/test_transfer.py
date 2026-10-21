@@ -196,7 +196,8 @@ def test_telnyx_asks_call_control_to_transfer(cfg, agents_dir, handoff_agent, mo
     sent = []
 
     async def fake_post(self, url, **kw):
-        sent.append((url, kw.get("json"), kw.get("headers")))
+        finished = any(s.finished.is_set() for s in engine.sessions.values())
+        sent.append((url, kw.get("json"), kw.get("headers"), finished))
         return httpx.Response(200, json={"data": {"result": "ok"}})
 
     monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
@@ -213,10 +214,23 @@ def test_telnyx_asks_call_control_to_transfer(cfg, agents_dir, handoff_agent, mo
             ws.send_text(json.dumps({"event": "connected", "version": "1.0.0"}))
             ws.send_text(json.dumps(start))
             wait_for(lambda: any(s.finished.is_set() for s in engine.sessions.values()))
+            wait_for(lambda: any(s[0].endswith("/actions/transfer") for s in sent))
     transfers = [s for s in sent if s[0].endswith("/actions/transfer")]
     assert transfers, sent
-    url, payload, headers = transfers[0]
+    url, payload, headers, after_the_call = transfers[0]
+    assert after_the_call                       # found in review: only once the agent's last line has played
     assert url == "https://api.telnyx.com/v2/calls/v3:ctl/actions/transfer" and headers["Authorization"] == "Bearer KEY_test"
     assert payload["to"] == "sip:desk@pbx.example.com"
     assert {"name": "X-Lampline-caller_phone", "value": "+15550100"} in payload["custom_headers"]
     assert not [s for s in sent if s[0].endswith("/actions/hangup")]     # the transfer has the call, no hang-up
+
+
+def test_a_variable_inside_an_address_cant_add_parameters_or_hosts():
+    from types import SimpleNamespace
+    from vpengine import transfer
+    from vpengine.graph import render
+    step = SimpleNamespace(kind="end", name="Desk", data={"transfer_to": "sip:{{ext}}@pbx.example.com"})
+    t = transfer.build(step, {"ext": "1000;transport=tcp?X-Lampline-Session=forged&Foo=bar@evil.example"}, "sid", render)
+    assert t.to == "sip:1000transporttcpX-Lampline-SessionforgedFoobarevil.example@pbx.example.com"
+    whole = SimpleNamespace(kind="end", name="Desk", data={"transfer_to": "{{desk}}"})
+    assert transfer.build(whole, {"desk": "sip:billing@pbx.example.com"}, "sid", render).to == "sip:billing@pbx.example.com"

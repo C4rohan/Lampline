@@ -75,6 +75,12 @@ def _transfer_to(step, report: Report | None = None) -> str:
             report.note(f"{step.name}: transfers to {to}, which Dialogflow can't fill in from parameters; "
                         "set the number on its Live agent transfer there.")
         return ""
+    if to.startswith(("sip:", "sips:")):
+        # Dialogflow CX's live agent transfer takes a phone number only (telephonyTransferCall.phoneNumber).
+        if report:
+            report.note(f"{step.name}: transfers to {to}; Dialogflow CX's phone gateway transfers to phone numbers "
+                        "only, so set this transfer up on your telephony integration there.")
+        return ""
     if report and (step.data.get("transfer_details") or step.data.get("transfer_uui")):
         report.note(f"{step.name}: the details it sends with the transfer (SIP headers) aren't carried over; "
                     "Dialogflow's phone gateway sends its own.")
@@ -82,7 +88,7 @@ def _transfer_to(step, report: Report | None = None) -> str:
 
 
 def _transfer_msg(to: str) -> dict:
-    return {"telephonyTransferCall": {"sipUri" if to.startswith(("sip:", "sips:")) else "phoneNumber": to}}
+    return {"telephonyTransferCall": {"phoneNumber": to}}
 
 
 def _fname(name: str) -> str:
