@@ -39,7 +39,6 @@ from .session import Session, _BotTap, _CallerTap, _LatencyTap, _recorder
 log = logging.getLogger("vpengine.realtime")
 
 RATE = 24000                   # the Realtime protocol's audio: 16-bit PCM at 24 kHz
-READY_WAIT = 10.0              # seconds to wait for the model's session before the first line
 
 
 def problem(graph: Graph, cfg: Config) -> str | None:
@@ -57,14 +56,106 @@ def make_realtime_llm(cfg: Config):
     from pipecat.services.openai.realtime import events
     from pipecat.services.openai.realtime.llm import OpenAIRealtimeLLMService
 
+    class LamplineRealtime(OpenAIRealtimeLLMService):
+        """Pipecat's OpenAI Realtime service, run one response at a time for a flow of steps.
+
+        The Realtime API rejects a new response while one is playing, but a step change can ask for two in a
+        row (a transition's line, then the next step's turn). So responses we start wait their turn here, and
+        each is tagged ("say", "run" or "auto" when the server answered the caller itself), so the call only
+        ends after the end step's own reply, not after a line said on the way to it.
+        """
+
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.lp_busy = False
+            self.lp_kind = "auto"
+            self._lp_waiting: list[tuple[str, str]] = []
+            self.lp_run_pending = False
+
+        async def _lp_begin(self, kind: str, text: str = "") -> None:
+            if self.lp_busy or not self._api_session_ready:
+                self._lp_waiting.append((kind, text))
+                return
+            self.lp_busy, self.lp_kind = True, kind
+            if kind == "say":
+                await self.send_client_event(events.ResponseCreateEvent(response=events.ResponseProperties(
+                    instructions=f"Say exactly this, word for word, and nothing else: {text}")))
+            else:
+                await super()._create_response()
+
+        async def _lp_drain(self) -> None:
+            if self._lp_waiting and not self.lp_busy:
+                kind, text = self._lp_waiting.pop(0)
+                await self._lp_begin(kind, text)
+
+        async def say_exactly(self, text: str) -> None:
+            await self._lp_begin("say", text)
+
+        async def _create_response(self):
+            await self._lp_begin("run")
+
+        async def _handle_context(self, context):
+            # A step change asks the model to go on (LLMRunFrame). Pipecat answers only when a new tool result
+            # went out with it; entering a step by a rule or after a greeting has none, so start the turn here.
+            before = len(self._completed_tool_calls)
+            await super()._handle_context(context)
+            if self.lp_run_pending and len(self._completed_tool_calls) == before:
+                await self._lp_begin("run")
+            self.lp_run_pending = False
+
+        async def _handle_evt_conversation_item_added(self, evt):
+            if getattr(evt.item, "role", None) == "assistant" and not self.lp_busy:
+                self.lp_busy, self.lp_kind = True, "auto"            # the server answered the caller on its own
+            await super()._handle_evt_conversation_item_added(evt)
+
+        async def _handle_evt_session_updated(self, evt):
+            await super()._handle_evt_session_updated(evt)
+            await self._lp_drain()
+
+        async def send_client_event(self, event):
+            # A step without tools must clear the last step's: Pipecat leaves tools out of the update when
+            # the list is empty, and the server then keeps the old ones.
+            if isinstance(event, events.SessionUpdateEvent) and self._context is not None and event.session.tools is None:
+                event.session.tools = []
+            await super().send_client_event(event)
+
+        async def _handle_evt_response_done(self, evt):
+            await super()._handle_evt_response_done(evt)
+            self.lp_busy = False
+            await self._lp_drain()
+
     turn = (events.SemanticTurnDetection(eagerness="auto") if cfg.realtime_turns == "semantic"
             else events.TurnDetection(silence_duration_ms=int(float(cfg.turn_pause or 0.5) * 1000)))
     props = events.SessionProperties(audio=events.AudioConfiguration(
         input=events.AudioInput(transcription=events.InputAudioTranscription(), turn_detection=turn),
         output=events.AudioOutput(voice=cfg.realtime_voice or None)))
-    return OpenAIRealtimeLLMService(
+    return LamplineRealtime(
         api_key=cfg.realtime_api_key or "none", base_url=cfg.realtime_url,
         settings=OpenAIRealtimeLLMService.Settings(model=cfg.realtime_model, session_properties=props))
+
+
+class _RealtimeBotTap(_BotTap):
+    """Lines said word for word ("say") are reported, but only the model's own turns count as replies,
+    so a transition's line into an end step doesn't end the call before the goodbye."""
+
+    async def process_frame(self, frame, direction):
+        from pipecat.frames.frames import LLMFullResponseEndFrame, LLMFullResponseStartFrame
+        from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+
+        llm = self._session.llm
+        if direction == FrameDirection.DOWNSTREAM and getattr(llm, "lp_kind", "run") == "say" \
+                and isinstance(frame, (LLMFullResponseStartFrame, LLMFullResponseEndFrame)):
+            await FrameProcessor.process_frame(self, frame, direction)
+            if isinstance(frame, LLMFullResponseStartFrame):
+                self._parts = []
+            else:
+                text = "".join(self._parts).strip()
+                self._parts = []
+                if text:
+                    self._session.emit({"type": "bot_speech", "text": text, "node_name": self._session.flow.current.name})
+            await self.push_frame(frame, direction)
+            return
+        await super().process_frame(frame, direction)
 
 
 class RealtimeVoiceSession(Session):
@@ -100,6 +191,7 @@ class RealtimeVoiceSession(Session):
             # taken, so give it the (still empty) context now: that route's result then reaches the model.
             if getattr(self.llm, "_context", False) is None:
                 self.llm._context = self.context
+                self.llm._llm_needs_conversation_setup = False     # and it has nothing earlier to replay
             await self.flow.start()
 
     def task_params(self) -> PipelineParams:
@@ -111,30 +203,26 @@ class RealtimeVoiceSession(Session):
             self.aggregators.user(),
             _CallerTap(self),                  # the model's transcript of the caller comes back upstream from it
             self.llm,
-            _BotTap(self),
+            _RealtimeBotTap(self),
             self.transport.output(),
             *([_recorder(self.record_to)] if self.record_to else []),
             _LatencyTap(self),
             self.aggregators.assistant(),
         ])
 
-    async def _ready(self) -> bool:
-        for _ in range(int(READY_WAIT / 0.05)):
-            if getattr(self.llm, "_api_session_ready", True):
-                return True
-            await asyncio.sleep(0.05)
-        return False
+    async def queue(self, frames: list) -> None:
+        from pipecat.frames.frames import LLMRunFrame
+
+        if any(isinstance(f, LLMRunFrame) for f in frames) and hasattr(self.llm, "lp_run_pending"):
+            self.llm.lp_run_pending = True
+        await super().queue(frames)
 
     async def _speak(self, text: str) -> None:
-        from pipecat.services.openai.realtime import events
-
-        if not text.strip() or not await self._ready():
-            return
-        await self.llm.send_client_event(events.ResponseCreateEvent(response=events.ResponseProperties(
-            instructions=f"Say exactly this, word for word, and nothing else: {text}")))
+        if text.strip():
+            await self.llm.say_exactly(text)
 
     async def say(self, text: str) -> None:
-        # bot_speech comes from the model's own transcript of what it said (_BotTap)
+        # bot_speech comes from the model's own transcript of what it said (_RealtimeBotTap)
         await self._speak(text)
 
     async def announce(self, text: str) -> None:

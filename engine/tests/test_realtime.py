@@ -95,3 +95,90 @@ def test_settings_validation():
     cfg = s.update({"voice_mode": "speech-to-speech", "realtime_url": "wss://api.openai.com/v1/realtime"})
     assert cfg.voice_mode == "speech-to-speech" and Config(openai_key="k").realtime_api_key == "k"
     assert Config(openai_key="k", realtime_url="ws://box:8000/v1/realtime").realtime_api_key == ""
+
+
+def test_without_a_greeting_the_model_speaks_first_and_nothing_is_replayed(cfg, agents_dir, tmp_path):
+    """Found in review: entering a step with no tool result (no greeting) left the model silent; and at the
+    first tool result Pipecat replayed the whole conversation as one message."""
+    from vk import agentfs
+    a = agentfs.load(agents_dir / "front-desk")
+    start = next(n for n in a.definition["nodes"] if n["type"] == "startCall")
+    start["data"]["greeting"] = ""
+    agentfs.write(a, agents_dir / "front-desk")
+    fake = FakeRealtime(reply="Hi, how can I help?")
+    c = dataclasses.replace(cfg, jambonz_webhook_secret=SECRET, voice_mode="speech-to-speech", realtime_url=fake.url,
+                            realtime_key="test-key-123456")
+    engine = Engine(agents_dir, c, public_url=PUBLIC, twilio_hang_up=True, data_dir=tmp_path / "data")
+    graph = engine.load_agent("front-desk")
+    fake.caller_turn = ("I'd like to book a cleaning.", graph.start.routes[0].tool_name)
+    with TestClient(create_app(engine), base_url=PUBLIC) as client:
+        token = _ring(client).json()[0]["url"].split("?t=", 1)[1]
+        with client.websocket_connect(f"/v1/jambonz/stream?t={token}", subprotocols=["audio.jambonz.org"]) as ws:
+            ws.send_text(json.dumps({"callSid": "jz-7", "sampleRate": 8000, "metadata": {"t": token}}))
+            got = None
+            end = time.time() + 15
+            while time.time() < end and got is None:
+                got = ws.receive().get("bytes")
+            assert got, "the model should open the call itself"
+            for _ in range(40):
+                ws.send_bytes(b"\x00\x00" * 160)
+            assert _wait(lambda: len(fake.of("response.create")) >= 2)
+        first = fake.of("response.create")[0]
+        assert "Say exactly" not in json.dumps(first)                     # the model's own turn, not a scripted line
+        replayed = [e for e in fake.of("conversation.item.create") if (e.get("item") or {}).get("type") == "message"]
+        assert replayed == []
+        assert all("tools" in (e.get("session") or {}) for e in fake.of("session.update")[1:])   # once a context exists
+
+
+async def test_a_step_without_tools_clears_them():
+    from pipecat.adapters.schemas.tools_schema import ToolsSchema
+    from pipecat.processors.aggregators.llm_context import LLMContext
+    llm = realtime.make_realtime_llm(Config(openai_key="k"))
+    sent = []
+
+    async def capture(raw):
+        sent.append(raw)
+    llm._ws_send = capture
+    ctx = LLMContext()
+    ctx.set_tools(ToolsSchema(standard_tools=[]))
+    llm._context = ctx
+    await llm._send_session_update()
+    assert sent[-1]["session"]["tools"] == []
+
+
+END_DEF = {"nodes": [
+    {"id": "1", "type": "startCall", "data": {"name": "Start", "prompt": "Greet.", "greeting": "Hi there."}},
+    {"id": "3", "type": "endCall", "data": {"name": "Bye", "prompt": "Say goodbye.", "transfer_to": "+15551234567"}}],
+    "edges": [{"id": "b", "source": "1", "target": "3",
+               "data": {"label": "goodbye", "condition": "caller is finished", "transition_speech": "Connecting you now."}}]}
+
+
+def test_the_goodbye_plays_before_the_transfer(cfg, tmp_path):
+    """Found in review: a transition's line into an end step ended the call before the end step's own reply."""
+    from conftest import write_agent
+    fake = FakeRealtime(reply="Goodbye, take care.")
+    d = tmp_path / "agents"
+    d.mkdir()
+    write_agent(d / "mini", END_DEF)
+    c = dataclasses.replace(cfg, jambonz_webhook_secret=SECRET, voice_mode="speech-to-speech", realtime_url=fake.url,
+                            realtime_key="test-key-123456")
+    engine = Engine(d, c, public_url=PUBLIC, twilio_hang_up=True, data_dir=tmp_path / "data")
+    fake.caller_turn = ("that's all", engine.load_agent("mini").start.routes[0].tool_name)
+    with TestClient(create_app(engine), base_url=PUBLIC) as client:
+        token = _ring(client, "mini").json()[0]["url"].split("?t=", 1)[1]
+        with client.websocket_connect(f"/v1/jambonz/stream?t={token}", subprotocols=["audio.jambonz.org"]) as ws:
+            ws.send_text(json.dumps({"callSid": "jz-7", "sampleRate": 8000, "metadata": {"t": token}}))
+            time.sleep(1)
+            for _ in range(40):
+                try:
+                    ws.send_bytes(b"\x00\x00" * 160)
+                except Exception:  # noqa: BLE001 - the call may have ended
+                    break
+            session = next(iter(engine.sessions.values()))
+            assert _wait(lambda: any(e["type"] == "call_ended" for e in session.events))
+    said = [e["text"] for e in session.events if e["type"] == "bot_speech"]
+    order = [e["type"] for e in session.events if e["type"] in ("bot_speech", "transfer", "call_ended")]
+    assert said == ["Hi there.", "Connecting you now.", "Goodbye, take care."]
+    assert order[-2:] == ["transfer", "call_ended"]
+    kinds = [(e.get("response") or {}).get("instructions", "(model)") for e in fake.of("response.create")]
+    assert kinds[-1] == "(model)" and "Connecting you now." in kinds[-2]

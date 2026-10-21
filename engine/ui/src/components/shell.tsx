@@ -96,7 +96,7 @@ export function Shell({ page, children, narrow }: { page: string; children: Reac
           {NAV.map((g) => (
             <div key={g.group} className="contents md:block md:pt-3">
               <p className={cn("hidden px-2 pb-1.5 text-xs font-medium text-muted-foreground md:block", compact && "md:hidden")}>{g.group}</p>
-              {g.items.filter((it) => !it.admin || !me || me.role === "admin").map((it) => {
+              {g.items.filter((it) => !it.admin || me?.role === "admin").map((it) => {
                 const active = page === it.id || (it.also || []).includes(page);
                 const link = (
                   <a key={it.id} href={`#/${it.id === "overview" ? "" : it.id}`} aria-current={active ? "page" : undefined}

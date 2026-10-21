@@ -379,7 +379,19 @@ def create_app(engine: Engine) -> FastAPI:
             asyncio.get_running_loop().run_in_executor(None, parakeet_stt.load, engine.cfg.parakeet_model)
         if engine.store is not None:            # tests drive triggers directly
             engine.automations.start()
+
+        async def prune_history():
+            # Old calls go even when no new calls come in: at start, then every few hours.
+            while True:
+                try:
+                    await asyncio.to_thread(engine.history.prune, int(engine.cfg.call_history_days or 30))
+                except Exception:  # noqa: BLE001 - try again next time
+                    log.exception("pruning the call history failed")
+                await asyncio.sleep(6 * 3600)
+
+        pruner = asyncio.create_task(prune_history())
         yield
+        pruner.cancel()
         await engine.automations.stop()
         await engine.shutdown()
 
@@ -1248,19 +1260,27 @@ def create_app(engine: Engine) -> FastAPI:
             params=TelnyxFrameSerializer.InputParams(
                 auto_hang_up=bool(api_key and call_control_id and engine.twilio_hang_up)))
 
+        handed: list = []
+
         async def hand_off(transfer):
             if not (api_key and call_control_id):
                 raise RuntimeError("Telnyx transfers need the Telnyx API key (Integrations → Telnyx)")
-            import httpx
-
-            async with httpx.AsyncClient(timeout=10) as http:
-                r = await http.post(f"{telnyx.API}/calls/{call_control_id}/actions/transfer",
-                                    headers={"Authorization": f"Bearer {api_key}"}, json=transfer.telnyx_body())
-            if r.status_code >= 300:
-                raise RuntimeError(f"Telnyx refused the transfer ({r.status_code})")
-            serializer._params.auto_hang_up = False      # the transfer has the call now
+            handed.append(transfer)
+            serializer._params.auto_hang_up = False      # the transfer takes the call once the agent has finished
 
         await _run_phone_call(websocket, pending, serializer, on_transfer=hand_off)
+        if handed:
+            # Only now: the agent's last line has played (the call's pipeline ended after it), so the caller
+            # hears it before Telnyx connects them.
+            import httpx
+
+            async with httpx.AsyncClient(timeout=10, transport=engine.automations.phone_transport) as http:
+                url = f"{telnyx.API}/calls/{call_control_id}/actions"
+                r = await http.post(f"{url}/transfer", headers={"Authorization": f"Bearer {api_key}"},
+                                    json=handed[0].telnyx_body())
+                if r.status_code >= 300:
+                    log.error("Telnyx refused the transfer to %s (%s); hanging up", handed[0].to, r.status_code)
+                    await http.post(f"{url}/hangup", headers={"Authorization": f"Bearer {api_key}"}, json={})
 
     # jambonz (SIP trunks, phone systems and SBCs)
 
