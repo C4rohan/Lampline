@@ -800,6 +800,10 @@ The folder runs as it is on disk: nothing to save or deploy first.
 | POST | `/v1/chat/sessions/{id}/end` | |
 | GET | `/v1/sessions/{id}` | steps visited, current step, collected values, events (the key that started it, or an admin) |
 | GET | `/v1/sessions/{id}/events?token=` | the same events live (server-sent events); `token` is the `events_token` returned when the conversation started, so no key goes in the URL |
+| GET / POST | `/v1/evals` | eval runs (newest first, `limit`, `before`); start one: `{caller_agent, method: google_voice\|speaker, number, persona, goal, criteria[], max_minutes}` ([docs/EVALS.md](../docs/EVALS.md)) |
+| GET / DELETE | `/v1/evals/{id}` | one run: status, transcript, graded results (and `live` session while the call is on) |
+| POST | `/v1/evals/{id}/offer`, `/v1/evals/{id}/stop` | the phone-on-speaker call's WebRTC offer; stop a run |
+| POST | `/v1/evals/bridge/offer` | the Lampline Phone Bridge extension's WebRTC offer, with its one-call token in `X-Lampline-Bridge` |
 | POST | `/v1/tests/caller` | `{persona, goal, transcript}`: what a model-played test caller says next (`vk test`) |
 | GET | `/v1/me` | who this key is, and its role |
 | GET, POST, DELETE | `/v1/keys`, `/v1/keys/{id}` | named keys with roles (admin) |
