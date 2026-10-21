@@ -62,7 +62,8 @@ from . import evals as evals_module
 from .library import KINDS, Library, LibraryError
 from .connectors import ConnectorError, Connectors
 from .graph import Graph
-from .services import Config, ConfigError, make_llm
+from .services import Config, ConfigError, default_model, make_llm
+from . import pricing
 from . import realtime
 from .session import Session, TextSession, VoiceSession
 from . import builder, generate
@@ -164,6 +165,7 @@ class Engine:
         self.library = Library(data_dir, self._embedder(cfg))          # records and knowledge, opened on first use
         self.history = CallHistory(self.library.folder)                 # finished calls, next to records
         self.evals = evals_module.EvalStore(self.library.folder)         # eval runs, next to the calls
+        self._grading = asyncio.Semaphore(2)                             # real calls graded at once (model tokens)
         self.eval_live: dict[str, Session] = {}                          # run id -> its conversation, while live
         self.keys = keys_module.KeyStore(store.path.parent / "keys.json" if store else None)   # named keys and roles
         self.connectors.library = self.library
@@ -313,16 +315,54 @@ class Engine:
         """When a conversation ends, keep it in the call history and run the agent's after-call triggers."""
         await session.finished.wait()
         if session.meta.get("agent") and self.cfg.call_history != "off":
+            saved = None
             try:
-                await asyncio.to_thread(self.history.save, session)
+                saved = await asyncio.to_thread(self.history.save, session, self._cost(session))
                 await asyncio.to_thread(self.history.prune, int(self.cfg.call_history_days or 30))
             except Exception:  # noqa: BLE001
                 log.exception("saving the call history failed")
+            if saved and saved["turns"]:
+                checks = await asyncio.to_thread(self.history.checks, session.meta["agent"])
+                if checks and checks[0]["enabled"]:
+                    await self.grade_call(saved["id"], checks[0])
         if session.meta.get("agent"):
             try:
                 await self.automations.after_call(session)
             except Exception:  # noqa: BLE001
                 log.exception("after-call triggers failed")
+
+    def _cost(self, session: Session) -> dict | None:
+        """The call's cost estimate from what it used (pricing.py); None if it can't be worked out."""
+        try:
+            s2s = isinstance(session, realtime.RealtimeVoiceSession)
+            voice = s2s or isinstance(session, VoiceSession)
+            model = self.cfg.realtime_model if s2s else (self.cfg.model or default_model(self.cfg.llm))
+            meta = session.meta or {}
+            from .history import _channel
+            return pricing.estimate(getattr(session, "usage", None), cfg=self.cfg, minutes=(time.time() - session.created) / 60,
+                                    channel=_channel(session, meta), voice=voice, speech_to_speech=s2s, model=model)
+        except Exception:  # noqa: BLE001
+            log.exception("estimating the call's cost failed")
+            return None
+
+    async def grade_call(self, call_id: str, checks: dict) -> dict | None:
+        """Grade a kept call against an agent's checks with the engine's model; the result is stored on the call."""
+        call = await asyncio.to_thread(self.history.get, call_id)
+        if call is None:
+            return None
+        run = {"goal": checks.get("goal") or "The caller's request is handled correctly, or they are passed to a person.",
+               "criteria": list(checks.get("criteria") or [])}
+        async with self._grading:
+            try:
+                llm = self._make_llm() or make_llm(self.cfg)
+                results = await evals_module.grade(llm, run, call["transcript"])
+                grade = evals_module.verdict(results)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("grading call %s failed: %s", call_id, exc)
+                grade, results = "error", {"summary": f"Couldn't grade: {str(exc)[:200]}", "criteria": [], "goal_met": False}
+        results = {**results, "goal": run["goal"]}
+        await asyncio.to_thread(self.history.set_grade, call_id, grade, results)
+        return {"grade": grade, "grade_results": results}
 
     def get(self, sid: str) -> Session:
         s = self.sessions.get(sid)
@@ -1719,12 +1759,62 @@ def create_app(engine: Engine) -> FastAPI:
 
     @app.get("/v1/calls", dependencies=auth)
     async def list_calls(request: Request, agent: str = "", channel: str = "", q: str = "", before: float | None = None,
-                         limit: int = 50):
+                         limit: int = 50, grade: str = ""):
         _local_only(request)            # callers' details, like records: this computer (or VPE_REMOTE_EDITING)
         calls = await asyncio.to_thread(engine.history.list, agent=agent, channel=channel, query=q[:100],
-                                        before=before, limit=limit)
+                                        before=before, limit=limit, grade=grade)
         return {"calls": calls, "keeping": engine.cfg.call_history != "off",
                 "days": int(engine.cfg.call_history_days or 30), "recordings": engine.cfg.call_recordings == "on"}
+
+    @app.get("/v1/calls/summary", dependencies=auth)
+    async def calls_summary(request: Request, agent: str = "", days: int = 7):
+        _local_only(request)
+        return await asyncio.to_thread(engine.history.summary, agent=agent, days=max(1, min(days, 3650)))
+
+    @app.get("/v1/call-checks", dependencies=auth)
+    async def list_call_checks(request: Request):
+        _local_only(request)
+        return {"checks": await asyncio.to_thread(engine.history.checks)}
+
+    @app.put("/v1/call-checks/{agent}", dependencies=auth)
+    async def save_call_checks(agent: str, request: Request, body: dict[str, Any]):
+        _local_only(request)
+        if not _SLUG.match(agent or "") or not (engine.agents_dir / agent / "agent.yaml").is_file():
+            raise HTTPException(404, f"no agent folder named {agent!r}")
+        crit = body.get("criteria") or []
+        if not isinstance(crit, list):
+            raise HTTPException(422, "criteria must be a list")
+        try:
+            return await asyncio.to_thread(engine.history.save_checks, agent, goal=str(body.get("goal") or ""),
+                                           criteria=[str(c) for c in crit], enabled=body.get("enabled") is True,
+                                           by=(getattr(request.state, "who", None) or {}).get("name", ""))
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.delete("/v1/call-checks/{agent}", dependencies=auth)
+    async def delete_call_checks(agent: str, request: Request):
+        _local_only(request)
+        if not await asyncio.to_thread(engine.history.delete_checks, agent):
+            raise HTTPException(404, "this agent has no checks")
+        return {"deleted": agent}
+
+    @app.post("/v1/calls/{call_id}/grade", dependencies=auth)
+    async def grade_call(call_id: str, request: Request, body: dict[str, Any] | None = None):
+        """Grade (or re-grade) one kept call: against the given checks, else the agent's."""
+        _local_only(request)
+        call = await asyncio.to_thread(engine.history.get, call_id)
+        if call is None:
+            raise HTTPException(404, "no such call")
+        checks = body if body and (body.get("goal") or body.get("criteria")) else None
+        if checks is None:
+            found = await asyncio.to_thread(engine.history.checks, call["agent"])
+            if not found:
+                raise HTTPException(409, "this agent has no checks yet: add them on the Calls page")
+            checks = found[0]
+        if not isinstance(checks.get("criteria") or [], list):
+            raise HTTPException(422, "criteria must be a list")
+        return await engine.grade_call(call_id, {"goal": str(checks.get("goal") or "")[:500],
+                                                 "criteria": [str(c)[:300] for c in checks.get("criteria") or []][:12]})
 
     @app.get("/v1/calls/{call_id}", dependencies=auth)
     async def get_call(call_id: str, request: Request):

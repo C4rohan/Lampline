@@ -195,7 +195,8 @@ class RealtimeVoiceSession(Session):
             await self.flow.start()
 
     def task_params(self) -> PipelineParams:
-        return PipelineParams(audio_in_sample_rate=RATE, audio_out_sample_rate=RATE, enable_metrics=True)
+        return PipelineParams(audio_in_sample_rate=RATE, audio_out_sample_rate=RATE, enable_metrics=True,
+                              enable_usage_metrics=True)
 
     def build(self) -> Pipeline:
         return Pipeline([

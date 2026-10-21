@@ -29,7 +29,8 @@ from pipecat.frames.frames import (
     TTSSpeakFrame,
     VADUserStoppedSpeakingFrame,
 )
-from pipecat.metrics.metrics import ProcessingMetricsData, TTFBMetricsData, TurnMetricsData
+from pipecat.metrics.metrics import (LLMUsageMetricsData, ProcessingMetricsData, STTUsageMetricsData, TTFBMetricsData,
+                                     TTSUsageMetricsData, TurnMetricsData)
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.workers.runner import WorkerRunner
@@ -39,6 +40,7 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from .flow import FlowController
 from .graph import Graph
+from .pricing import new_usage
 from .services import Config, make_llm, make_stt, make_tts, make_turn_strategies
 
 log = logging.getLogger("vpengine.session")
@@ -124,7 +126,16 @@ class _LatencyTap(FrameProcessor):
         await super().process_frame(frame, direction)
         if isinstance(frame, MetricsFrame):
             for d in frame.data:
-                if isinstance(d, TurnMetricsData):
+                if isinstance(d, LLMUsageMetricsData):
+                    u, v = self._session.usage, d.value
+                    u["llm_in"] += v.prompt_tokens or 0
+                    u["llm_out"] += v.completion_tokens or 0
+                    u["llm_cached"] += v.cache_read_input_tokens or 0
+                elif isinstance(d, TTSUsageMetricsData):
+                    self._session.usage["tts_chars"] += d.value or 0
+                elif isinstance(d, STTUsageMetricsData):
+                    self._session.usage["stt_seconds"] += d.value.audio_seconds or 0
+                elif isinstance(d, TurnMetricsData):
                     self._parts["turn_ms"] = round(d.e2e_processing_time_ms)
                 elif isinstance(d, (TTFBMetricsData, ProcessingMetricsData)) and d.value > 0:
                     kind = self._kind(d.processor)
@@ -223,6 +234,7 @@ class Session:
         self.cfg = cfg
         self.created = time.time()
         self.events: list[dict] = []
+        self.usage = new_usage()                        # what this call used, for its cost estimate
         self._listeners: list[Callable[[dict], None]] = [on_event] if on_event else []
         self.llm = llm or make_llm(cfg)
         self.context = LLMContext()
@@ -332,7 +344,7 @@ class TextSession(Session):
         self._started = asyncio.Event()
 
     def task_params(self) -> PipelineParams:
-        return PipelineParams(enable_metrics=True)
+        return PipelineParams(enable_metrics=True, enable_usage_metrics=True)
 
     def build(self) -> Pipeline:
         return Pipeline([self.aggregators.user(), _ScriptGate(self), self.llm, _BotTap(self), _LatencyTap(self),
@@ -437,7 +449,7 @@ class VoiceSession(Session):
 
     def task_params(self) -> PipelineParams:
         return PipelineParams(audio_in_sample_rate=self.audio_in_rate, audio_out_sample_rate=self.audio_out_rate,
-                              enable_metrics=True)
+                              enable_metrics=True, enable_usage_metrics=True)
 
     def build(self) -> Pipeline:
         return Pipeline([
