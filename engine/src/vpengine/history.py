@@ -13,7 +13,8 @@ Recordings are off by default. With VPE_CALL_RECORDINGS=on, voice calls are
 also saved as stereo WAV files (caller left, agent right) in recordings/.
 
 Everything older than VPE_CALL_HISTORY_DAYS (30) is deleted, recordings
-included; VPE_CALL_HISTORY=off keeps nothing. This is the engine's own record,
+included, checked at start and every six hours. VPE_CALL_HISTORY=off keeps no
+new calls; calls already kept stay until they age out or you delete them. This is the engine's own record,
 on the machine it runs on: use synthetic test data, not real callers'
 personal or health information, unless that machine is set up for it.
 """
@@ -108,15 +109,17 @@ class CallHistory:
         meta = getattr(session, "meta", {}) or {}
         events = [e for e in session.events if e.get("type") not in SKIP][-MAX_EVENTS:]
         ended = next((e for e in reversed(events) if e.get("type") == "call_ended"), {})
-        constants = set((session.graph.context or {}).keys())
-        collected = {k: _jsonable(v) for k, v in session.flow.variables.items()
-                     if k not in constants and k not in ("channel", "contact") and v not in (None, "", [], {})}
+        names = session.flow.collected()            # what this call gathered, as transfers send it
+        collected = {k: _jsonable(session.flow.variables[k]) for k in names
+                     if k not in ("channel", "contact") and session.flow.variables.get(k) not in (None, "", [], {})}
         metrics = [e["response_ms"] for e in events if e.get("type") == "turn_metrics" and isinstance(e.get("response_ms"), (int, float))]
         steps = [session.graph.steps[i].name for i in session.flow.visited if i in session.graph.steps]
         row = {
             "id": session.id, "agent": meta.get("agent", ""), "agent_name": session.graph.name,
             "channel": _channel(session, meta), "contact": str(meta.get("contact", "") or ""),
-            "started": session.created, "ended": time.time(), "outcome": str(ended.get("reason", "") or ("error" if session.error else "")),
+            "started": session.created, "ended": time.time(),
+            "outcome": ("error" if session.error and ended.get("reason") in (None, "", "disconnected")
+                        else str(ended.get("reason", "") or "")),
             "transferred_to": str((ended.get("transfer") or {}).get("to", "")),
             "steps": json.dumps(steps), "collected": json.dumps(_short(collected)),
             "events": json.dumps([_short(_jsonable(e)) for e in events]),

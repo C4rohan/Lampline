@@ -379,7 +379,19 @@ def create_app(engine: Engine) -> FastAPI:
             asyncio.get_running_loop().run_in_executor(None, parakeet_stt.load, engine.cfg.parakeet_model)
         if engine.store is not None:            # tests drive triggers directly
             engine.automations.start()
+
+        async def prune_history():
+            # Old calls go even when no new calls come in: at start, then every few hours.
+            while True:
+                try:
+                    await asyncio.to_thread(engine.history.prune, int(engine.cfg.call_history_days or 30))
+                except Exception:  # noqa: BLE001 - try again next time
+                    log.exception("pruning the call history failed")
+                await asyncio.sleep(6 * 3600)
+
+        pruner = asyncio.create_task(prune_history())
         yield
+        pruner.cancel()
         await engine.automations.stop()
         await engine.shutdown()
 
@@ -618,10 +630,30 @@ def create_app(engine: Engine) -> FastAPI:
     @app.put("/v1/agents/{slug}", dependencies=auth)
     async def save_agent(slug: str, body: dict[str, Any], request: Request):
         _local_only(request)
+        if not _is_local(request):
+            _same_reach(_folder(slug), body)
         try:
             return builder.save(_folder(slug), body)
         except (builder.BuilderError, agentfs.FolderError) as exc:
             raise HTTPException(422, str(exc)) from exc
+
+    def _reach(doc: dict) -> str:
+        """What in an agent can use your secrets or contact people: tools, triggers, and webhook/trigger nodes."""
+        nodes = [n for n in ((doc.get("definition") or {}).get("nodes") or [])
+                 if isinstance(n, dict) and n.get("type") in ("trigger", "webhook", "qa")]
+        return json.dumps({"tools": doc.get("tools") or [], "triggers": doc.get("triggers") or [], "nodes": nodes},
+                          sort_keys=True, default=str)
+
+    def _same_reach(folder: Path, body: dict) -> None:
+        """Saved from elsewhere (VPE_REMOTE_EDITING): steps, prompts and data may change, but not what can use
+        secrets or contact people. A tool or trigger pointed at another address could send them anywhere."""
+        try:
+            current = builder.read(folder) if folder.exists() else {}
+        except (builder.BuilderError, agentfs.FolderError):
+            current = {}
+        if _reach(current) != _reach(body):
+            raise HTTPException(403, "tools, triggers and webhooks can only be changed on this computer: they can "
+                                     "use your secrets and contact people")
 
     @app.post("/v1/agents/{slug}/check", dependencies=auth)
     async def check_agent(slug: str, body: dict[str, Any]):
@@ -1228,19 +1260,27 @@ def create_app(engine: Engine) -> FastAPI:
             params=TelnyxFrameSerializer.InputParams(
                 auto_hang_up=bool(api_key and call_control_id and engine.twilio_hang_up)))
 
+        handed: list = []
+
         async def hand_off(transfer):
             if not (api_key and call_control_id):
                 raise RuntimeError("Telnyx transfers need the Telnyx API key (Integrations → Telnyx)")
-            import httpx
-
-            async with httpx.AsyncClient(timeout=10) as http:
-                r = await http.post(f"{telnyx.API}/calls/{call_control_id}/actions/transfer",
-                                    headers={"Authorization": f"Bearer {api_key}"}, json=transfer.telnyx_body())
-            if r.status_code >= 300:
-                raise RuntimeError(f"Telnyx refused the transfer ({r.status_code})")
-            serializer._params.auto_hang_up = False      # the transfer has the call now
+            handed.append(transfer)
+            serializer._params.auto_hang_up = False      # the transfer takes the call once the agent has finished
 
         await _run_phone_call(websocket, pending, serializer, on_transfer=hand_off)
+        if handed:
+            # Only now: the agent's last line has played (the call's pipeline ended after it), so the caller
+            # hears it before Telnyx connects them.
+            import httpx
+
+            async with httpx.AsyncClient(timeout=10, transport=engine.automations.phone_transport) as http:
+                url = f"{telnyx.API}/calls/{call_control_id}/actions"
+                r = await http.post(f"{url}/transfer", headers={"Authorization": f"Bearer {api_key}"},
+                                    json=handed[0].telnyx_body())
+                if r.status_code >= 300:
+                    log.error("Telnyx refused the transfer to %s (%s); hanging up", handed[0].to, r.status_code)
+                    await http.post(f"{url}/hangup", headers={"Authorization": f"Bearer {api_key}"}, json={})
 
     # jambonz (SIP trunks, phone systems and SBCs)
 
@@ -1339,21 +1379,25 @@ def create_app(engine: Engine) -> FastAPI:
     # -- call history --------------------------------------------------------
 
     @app.get("/v1/calls", dependencies=auth)
-    async def list_calls(agent: str = "", channel: str = "", q: str = "", before: float | None = None, limit: int = 50):
+    async def list_calls(request: Request, agent: str = "", channel: str = "", q: str = "", before: float | None = None,
+                         limit: int = 50):
+        _local_only(request)            # callers' details, like records: this computer (or VPE_REMOTE_EDITING)
         calls = await asyncio.to_thread(engine.history.list, agent=agent, channel=channel, query=q[:100],
                                         before=before, limit=limit)
         return {"calls": calls, "keeping": engine.cfg.call_history != "off",
                 "days": int(engine.cfg.call_history_days or 30), "recordings": engine.cfg.call_recordings == "on"}
 
     @app.get("/v1/calls/{call_id}", dependencies=auth)
-    async def get_call(call_id: str):
+    async def get_call(call_id: str, request: Request):
+        _local_only(request)
         call = await asyncio.to_thread(engine.history.get, call_id)
         if call is None:
             raise HTTPException(404, "no such call (calls older than the history setting are deleted)")
         return call
 
     @app.get("/v1/calls/{call_id}/recording", dependencies=auth)
-    async def call_recording(call_id: str):
+    async def call_recording(call_id: str, request: Request):
+        _local_only(request)
         path = engine.history.recording_path(call_id)
         if path is None:
             raise HTTPException(404, "this call has no recording")
@@ -1361,7 +1405,8 @@ def create_app(engine: Engine) -> FastAPI:
                             headers={"Cache-Control": "no-store"})
 
     @app.delete("/v1/calls/{call_id}", dependencies=auth)
-    async def delete_call(call_id: str):
+    async def delete_call(call_id: str, request: Request):
+        _local_only(request)
         if not await asyncio.to_thread(engine.history.delete, call_id):
             raise HTTPException(404, "no such call")
         return {"deleted": call_id}

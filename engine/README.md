@@ -41,9 +41,9 @@ installs by itself.
 
 | Tools | HTTP requests a step can make during a call (look up open times, book one). The model fills the parameters, the engine makes the request with your secrets, and the answer goes back to the model. See [Tools](#tools). |
 
-Not yet: live-agent transfers, contact-center connections (Genesys Cloud,
-Avaya, Cisco, Amazon Connect, NICE CXone, Five9, Twilio Flex: coming soon), and
-recordings.
+Not yet: contact-center connections (Genesys Cloud, Avaya, Cisco, Amazon
+Connect, NICE CXone, Five9, Twilio Flex: coming soon). Transfers to a person
+already reach their phone systems over SIP ([Transfer to a person](#transfer-to-a-person)).
 
 ## Scripted pages and flows
 
@@ -700,6 +700,7 @@ What's different, so it's off by default:
   running" lines) are spoken by the model, so the wording can differ slightly.
 - Agents with scripted pages keep the normal chain; the call page says so.
 - Collecting details still uses your text model, so keep its key set.
+- The Test call page doesn't show response times for it yet.
 - Calls cost what the realtime model costs, per minute of audio.
 
 Text chats always use the text model.
@@ -717,11 +718,13 @@ with it and open **Team** to make a key per person, with a role:
 
 Keys start with `lpk_` and are shown once; only a SHA-256 fingerprint is kept
 (`keys.json` next to the settings file, mode 600). Revoking one takes effect
-at once. `GET /v1/me` says who a key is. By default, changes still have to
-come from this computer; behind an HTTPS proxy, `VPE_REMOTE_EDITING=on` lets
-keys save agents, data and knowledge through it, as their role allows.
-Settings, secrets, downloads, sign-ins and running triggers always stay
-local. See [docs/HTTPS.md](../docs/HTTPS.md) for Caddy and nginx setups.
+at once. `GET /v1/me` says who a key is. By default, changes, records and
+call history still have to come from this computer; behind an HTTPS proxy,
+`VPE_REMOTE_EDITING=on` allows them through it, as each key's role allows.
+Settings, secrets, downloads, sign-ins, imports, trying tools and running
+triggers always stay local, and an agent saved through the proxy can't
+change its tools, triggers or webhooks (they can use your secrets and
+contact people). See [docs/HTTPS.md](../docs/HTTPS.md) for Caddy and nginx setups.
 
 ## Call history
 
@@ -804,6 +807,7 @@ The folder runs as it is on disk: nothing to save or deploy first.
 | POST / PATCH | `/v1/calls/webrtc/offer` | browser call signalling |
 | POST | `/v1/twilio/voice?agent=<folder>` | Twilio's incoming-call webhook (signed) |
 | WebSocket | `/v1/twilio/stream` | Twilio media stream (one-time token) |
+| POST | `/v1/twilio/after` | where Twilio goes when the stream closes: dials the transfer, or hangs up (signed) |
 | POST | `/v1/telnyx/voice?agent=<folder>` | Telnyx TeXML voice URL (signed) |
 | WebSocket | `/v1/telnyx/stream` | Telnyx media stream (one-time token) |
 | POST | `/v1/jambonz/call?agent=<folder>` | jambonz calling webhook (signed); answers with a `listen` verb |
@@ -812,7 +816,8 @@ The folder runs as it is on disk: nothing to save or deploy first.
 | GET | `/v1/fish/voices` | your Fish Audio voices and popular English ones |
 
 Events: `node_transition`, `bot_speech`, `user_speech`, `tool_call_started`,
-`tool_call_result`, `variables`, `execution_error`, `call_ended`.
+`tool_call_result`, `variables`, `transfer`, `turn_metrics`, `notice`,
+`execution_error`, `call_ended`.
 
 ## Develop
 

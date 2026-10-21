@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { History, Phone, PhoneForwarded, Search, Trash2, MessageSquare, Globe, Download } from "lucide-react";
 import { toast } from "sonner";
 import { api, blobUrl, download } from "@/lib/api";
-import { useLoad } from "@/lib/app";
+import { useApp, useLoad } from "@/lib/app";
 import { cn } from "@/lib/utils";
 import { Notice, Page } from "@/components/shell";
 import { Badge } from "@/components/ui/badge";
@@ -106,6 +106,7 @@ export function CallsPage() {
 }
 
 function CallView({ id, onDeleted }: { id: string; onDeleted: () => void }) {
+  const { me } = useApp();
   const { data: c, error } = useLoad(() => api<CallDetail>("GET", `/v1/calls/${id}`), [id]);
   const [audio, setAudio] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
@@ -132,7 +133,7 @@ function CallView({ id, onDeleted }: { id: string; onDeleted: () => void }) {
         </div>
         <div className="ml-auto flex items-center gap-2">
           <Outcome c={c} />
-          <Button size="sm" variant="outline" onClick={() => setConfirm(true)} aria-label="Delete this call"><Trash2 /></Button>
+          {me?.role === "admin" && <Button size="sm" variant="outline" onClick={() => setConfirm(true)} aria-label="Delete this call"><Trash2 /></Button>}
         </div>
       </header>
       <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">

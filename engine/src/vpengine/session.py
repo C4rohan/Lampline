@@ -260,6 +260,11 @@ class Session:
     async def say(self, text: str) -> None:
         raise NotImplementedError
 
+    @property
+    def can_transfer(self) -> bool:
+        """Calls (and test chats on the Test call page) can hand over; Telegram, WhatsApp and email can't."""
+        return (self.meta or {}).get("channel") not in ("telegram", "whatsapp", "email")
+
     async def transfer(self, transfer) -> None:
         """Remember the hand-off; a phone call's carrier acts on it (on_transfer), a test chat just reports it."""
         self.transfer_to = transfer

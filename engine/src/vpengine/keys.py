@@ -54,9 +54,11 @@ VIEWER_ACTIONS = (
 
 
 # What stays on this computer even with VPE_REMOTE_EDITING=on: settings and secrets, downloads,
-# sign-ins, anything that fetches an address it's given, and running triggers (they contact people).
+# sign-ins, anything that fetches an address it's given (trying a tool, listing an MCP server), imports
+# (they bring tools), and running triggers (they contact people). Saving an agent from elsewhere may not
+# change its tools, triggers or webhooks either (server.py _same_reach).
 ALWAYS_LOCAL = re.compile(r"^/v1/(settings|secrets|builtin-speech|moonshine|parakeet|local-speech|embeddings/download|oauth|"
-                          r"connectors|tools/mcp|agents/[^/]+/triggers)")
+                          r"connectors|tools/mcp|tools/try|agents/import|agents/[^/]+/triggers)")
 
 
 def always_local(method: str, path: str) -> bool:

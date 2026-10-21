@@ -234,7 +234,7 @@ in the notes.
 | VK131 | error / warning | a rule that can't be read or uses a variable nothing provides; otherwise / no match from an LLM step; a rule on Start |
 | VK132 | warning | a scripted page that never moves on once its form is complete, or reads answers exactly but has transfers for the model |
 | VK133 | error / warning | a page's `on_entry` / `on_done` names a tool that doesn't exist, or one whose arguments no variable provides |
-| VK134 | error / warning | a transfer to a person: only on End call steps, to a phone number (E.164) or SIP address; details and variables it sends must exist |
+| VK134 | error / warning | a transfer to a person: only on End call steps, to a phone number (E.164) or SIP address; details and variables it sends must exist; warns when the address comes from what the caller said |
 | VK201 / 202 / 206 | error | looks like an SSN, a Luhn-valid card number, a medical record or member ID |
 | VK203 / 204 / 205 | warning | full date, phone number, email |
 
