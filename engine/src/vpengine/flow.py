@@ -592,7 +592,8 @@ class FlowController:
         if reason == "end step reached" and self.current is not None:
             from .transfer import build
             try:
-                transfer = build(self.current, self.variables, getattr(self.host, "id", ""), render, self.collected())
+                transfer = build(self.current, self.variables, getattr(self.host, "id", ""), render, self.collected(),
+                                 constants=self.graph.context)
             except ValueError as exc:
                 self.host.emit({"type": "execution_error", "message": f"{exc}. Hanging up instead."})
         if transfer is not None and not getattr(self.host, "can_transfer", True):

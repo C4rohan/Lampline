@@ -116,5 +116,5 @@ def test_a_recorded_phone_call(cfg, agents_dir, tmp_path):
         assert path is not None and row["recording"]
         with wave.open(str(path)) as w:
             assert w.getnchannels() == 2 and w.getframerate() == 16000 and w.getnframes() > 0
-        audio = client.get(f"/v1/calls/{session.id}/recording")
+        audio = client.get(f"/v1/calls/{session.id}/recording", headers={"Host": "127.0.0.1"})   # on this computer
         assert audio.status_code == 200 and audio.headers["content-type"] == "audio/wav"
