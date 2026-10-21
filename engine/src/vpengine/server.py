@@ -1274,13 +1274,59 @@ def create_app(engine: Engine) -> FastAPI:
                                       goal=str(body.get("goal") or ""),
                                       criteria=body.get("criteria") if isinstance(body.get("criteria"), list) else [],
                                       max_minutes=body.get("max_minutes") if isinstance(body.get("max_minutes"), int) else 5,
-                                      by=str((getattr(request.state, "who", None) or {}).get("name") or ""))
+                                      by=str((getattr(request.state, "who", None) or {}).get("name") or ""),
+                                      case_id=str(body.get("case_id") or ""))
         except evals_module.EvalError as exc:
             raise HTTPException(422, str(exc)) from exc
         if run["method"] == "google_voice":
             run["bridge"] = {"token": engine.evals.bridge_token(run["id"]),
                              "open_url": evals_module.google_voice_url(run["number"])}
         return run
+
+    @app.get("/v1/evals/cases", dependencies=auth)
+    async def list_cases(request: Request):
+        _local_only(request)
+        return {"cases": engine.evals.cases()}
+
+    @app.post("/v1/evals/cases", dependencies=auth)
+    async def save_cases(body: dict[str, Any], request: Request):
+        _local_only(request)
+        cases = body.get("cases")
+        if not isinstance(cases, list) or not cases:
+            raise HTTPException(422, "give cases: a list of test cases")
+        try:
+            return {"cases": engine.evals.save_cases(cases, str(body.get("source") or ""))}
+        except evals_module.EvalError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.post("/v1/evals/cases/convert", dependencies=auth)
+    async def convert_cases(body: dict[str, Any], request: Request):
+        """Read test cases out of a test script (Hammer, Cyara, a spreadsheet, notes) with the engine's model.
+        Nothing is saved: the page shows them and the person keeps the ones they want."""
+        _local_only(request)
+        filename = str(body.get("filename") or "")[:200]
+        try:
+            text = evals_module.script_text(str(body.get("text") or ""), filename)
+        except evals_module.EvalError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        try:
+            llm = engine._make_llm() or make_llm(engine.cfg)
+        except ConfigError as exc:
+            raise HTTPException(503, str(exc)) from exc
+        try:
+            return {"cases": await evals_module.convert_script(llm, text, filename)}
+        except evals_module.EvalError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001 - shown on the page
+            log.exception("converting a test script failed")
+            raise HTTPException(502, f"the model couldn't read the script ({exc.__class__.__name__}); try a smaller part") from exc
+
+    @app.delete("/v1/evals/cases/{cid}", dependencies=auth)
+    async def delete_case(cid: str, request: Request):
+        _local_only(request)
+        if not engine.evals.delete_case(cid):
+            raise HTTPException(404, "no such test case")
+        return {"deleted": cid}
 
     @app.post(BRIDGE_PATH)
     async def eval_bridge_offer(body: dict[str, Any], request: Request):

@@ -803,6 +803,9 @@ The folder runs as it is on disk: nothing to save or deploy first.
 | GET / POST | `/v1/evals` | eval runs (newest first, `limit`, `before`); start one: `{caller_agent, method: google_voice\|speaker, number, persona, goal, criteria[], max_minutes}` ([docs/EVALS.md](../docs/EVALS.md)) |
 | GET / DELETE | `/v1/evals/{id}` | one run: status, transcript, graded results (and `live` session while the call is on) |
 | POST | `/v1/evals/{id}/offer`, `/v1/evals/{id}/stop` | the phone-on-speaker call's WebRTC offer; stop a run |
+| GET / POST | `/v1/evals/cases` | saved test cases; save `{cases: [{name, persona, goal, criteria, number, notes}], source}` |
+| POST | `/v1/evals/cases/convert` | `{text, filename}`: test cases read from a test script (Hammer, Cyara, CSV, notes) by your model; nothing is saved |
+| DELETE | `/v1/evals/cases/{id}` | delete a test case |
 | POST | `/v1/evals/bridge/offer` | the Lampline Phone Bridge extension's WebRTC offer, with its one-call token in `X-Lampline-Bridge` |
 | POST | `/v1/tests/caller` | `{persona, goal, transcript}`: what a model-played test caller says next (`vk test`) |
 | GET | `/v1/me` | who this key is, and its role |

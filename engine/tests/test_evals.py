@@ -151,3 +151,83 @@ def test_the_store_has_a_schema_version(tmp_path):
     store.close()
     with pytest.raises(RuntimeError, match="newer Lampline"):
         evals.EvalStore(tmp_path).db()
+
+
+# -- test cases imported from test scripts ---------------------------------------------------------------
+
+SCRIPT = """TEST CASE TC-01  Balance by phone   (made-up sample)
+1. DIAL +1 555 010 2000
+2. WAIT FOR PROMPT "Thanks for calling. Say or enter your account number."
+3. SEND DTMF 44721#
+4. WAIT FOR PROMPT "Your balance is"
+5. HANG UP
+EXPECTED: balance is read back
+"""
+
+
+class ScriptedLLM:
+    """Answers the converter with fixed JSON, the way a model with structured output would."""
+    def __init__(self, reply):
+        self.reply, self.asked = reply, []
+
+    async def run_inference(self, ctx, **kw):
+        self.asked.append((ctx, kw))
+        return self.reply
+
+
+async def test_a_test_script_becomes_test_cases():
+    import json
+    llm = ScriptedLLM(json.dumps({"cases": [
+        {"name": "TC-01 Balance by phone", "persona": "A customer checking a balance. When asked for the account "
+         "number, say 4 4 7 2 1.", "goal": "hear the account balance",
+         "criteria": ["The system asks for the account number", "The system reads back a balance", "  "],
+         "number": "+1 555 010 2000", "notes": "The script presses keys; the caller says the digits instead."},
+        {"name": "", "persona": "x", "goal": "y", "criteria": [], "number": "", "notes": ""}]}))
+    cases = await evals.convert_script(llm, evals.script_text(SCRIPT), "balance.txt")
+    assert len(cases) == 1 and cases[0]["criteria"] == ["The system asks for the account number",
+                                                         "The system reads back a balance"]
+    assert "balance.txt" in llm.asked[0][0].messages[0]["content"] and llm.asked[0][1]["response_schema"]
+    with pytest.raises(evals.EvalError):
+        await evals.convert_script(ScriptedLLM("not json"), "TC-02 something")
+
+
+def test_script_text_refuses_binaries_and_huge_files():
+    assert evals.script_text(b"\xef\xbb\xbfTC-01 ok") == "TC-01 ok"
+    with pytest.raises(evals.EvalError, match="isn't text"):
+        evals.script_text(b"PK\x03\x04\x00\x00binary")
+    with pytest.raises(evals.EvalError, match="too long"):
+        evals.script_text("x" * (evals.MAX_SCRIPT + 1))
+
+
+async def test_cases_are_saved_listed_used_and_deleted(setup):
+    engine, c = setup
+    r = await c.post("/v1/evals/cases", json={"source": "balance.txt", "cases": [
+        {"name": "TC-01", "persona": "A customer", "goal": "hear the balance", "criteria": ["Reads a balance"],
+         "number": "+1 555 010 2000"}]})
+    assert r.status_code == 200, r.text
+    case = r.json()["cases"][0]
+    assert case["id"].startswith("tc_") and case["number"] == "+15550102000" and case["source"] == "balance.txt"
+    assert (await c.get("/v1/evals/cases")).json()["cases"][0]["id"] == case["id"]
+    bad = await c.post("/v1/evals/cases", json={"cases": [{"name": "x", "persona": "", "goal": "y"}]})
+    assert bad.status_code == 422
+    run = (await c.post("/v1/evals", json={**RUN, "case_id": case["id"]})).json()
+    assert run["case_id"] == case["id"]
+    assert (await c.delete(f"/v1/evals/cases/{case['id']}")).json() == {"deleted": case["id"]}
+    assert (await c.get("/v1/evals/cases")).json()["cases"] == []
+
+
+def test_a_version_1_store_is_upgraded(tmp_path):
+    import sqlite3
+    db = sqlite3.connect(tmp_path / "evals.sqlite3")
+    db.executescript("""CREATE TABLE runs (id TEXT PRIMARY KEY, created REAL NOT NULL, caller_agent TEXT NOT NULL,
+        method TEXT NOT NULL, number TEXT NOT NULL, persona TEXT NOT NULL, goal TEXT NOT NULL, criteria TEXT NOT NULL,
+        max_minutes INTEGER NOT NULL, status TEXT NOT NULL, session_id TEXT, started REAL, ended REAL,
+        ended_reason TEXT, transcript TEXT, results TEXT, summary TEXT, error TEXT, by TEXT);
+        INSERT INTO runs (id, created, caller_agent, method, number, persona, goal, criteria, max_minutes, status)
+        VALUES ('ev_oldrun12345', 1, 'test-caller', 'speaker', '+15550101234', 'p', 'g', '[]', 5, 'passed');
+        PRAGMA user_version = 1;""")
+    db.close()
+    store = evals.EvalStore(tmp_path)
+    assert store.get("ev_oldrun12345")["status"] == "passed"                  # old runs survive
+    assert store.db().execute("PRAGMA user_version").fetchone()[0] == 2
+    assert store.cases() == []

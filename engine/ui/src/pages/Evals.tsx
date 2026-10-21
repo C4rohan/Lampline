@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CheckCircle2, CircleSlash, ClipboardCheck, Headphones, Loader2, Phone, PhoneOff, Plus, Puzzle, Trash2, XCircle } from "lucide-react";
+import { CheckCircle2, CircleSlash, ClipboardCheck, FileUp, Headphones, ListChecks, Loader2, Phone, PhoneOff, Plus, Puzzle, Trash2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { api, type AgentSummary } from "@/lib/api";
 import { useLoad } from "@/lib/app";
@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input, NativeSelect, Textarea } from "@/components/ui/input";
 import { Field } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import { Checkbox, Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 type Method = "google_voice" | "speaker";
 type Said = { who: "agent" | "caller"; text: string; t?: number };
@@ -22,6 +23,85 @@ type Run = {
   live?: { session_id: string; events_token: string }; bridge?: { token: string; open_url: string };
 };
 type Bridge = { found: boolean; version?: string };
+type Case = { id?: string; name: string; persona: string; goal: string; criteria: string[]; number: string; notes: string; source?: string };
+
+const EXAMPLE = {
+  persona: "Sam Rivera, a patient who wants to move a dental cleaning. Polite, a little rushed.",
+  goal: "Move the cleaning to Friday morning",
+  criteria: "The agent asks for the caller's name\nThe agent offers a Friday morning time\nThe agent confirms the change before hanging up",
+};
+
+/* Import test scripts (Hammer, Cyara, spreadsheets, notes): the engine's model reads them into test cases. */
+function ImportScripts({ open, onOpenChange, onSaved }: { open: boolean; onOpenChange: (v: boolean) => void; onSaved: () => void }) {
+  const [text, setText] = useState(""), [name, setName] = useState(""), [busy, setBusy] = useState(false);
+  const [found, setFound] = useState<Case[] | null>(null), [keep, setKeep] = useState<boolean[]>([]);
+  const reset = () => { setText(""); setName(""); setFound(null); setKeep([]); };
+  async function file(f: File | undefined) {
+    if (!f) return;
+    if (f.size > 2_000_000) return toast.error("That file is too big; export the tests you need as text, CSV, XML or JSON.");
+    setName(f.name); setText(await f.text());
+  }
+  async function convert() {
+    setBusy(true);
+    try {
+      const r = await api<{ cases: Case[] }>("POST", "/v1/evals/cases/convert", { text, filename: name });
+      setFound(r.cases); setKeep(r.cases.map(() => true));
+    } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
+  }
+  async function save() {
+    const cases = (found || []).filter((_, i) => keep[i]);
+    if (!cases.length) return;
+    setBusy(true);
+    try {
+      await api("POST", "/v1/evals/cases", { cases, source: name || "pasted script" });
+      toast.success(`Saved ${cases.length} test case${cases.length === 1 ? "" : "s"}`);
+      reset(); onOpenChange(false); onSaved();
+    } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
+  }
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Import test scripts</DialogTitle>
+          <DialogDescription>Paste or upload test scripts from Hammer, Cyara, a spreadsheet or your own notes (text, CSV, XML or JSON).
+            Your model turns each test into a case the Test Caller can play: what to say, and what has to happen. Use made-up test data.</DialogDescription>
+        </DialogHeader>
+        {!found ? (
+          <div className="grid gap-3">
+            <label className="flex w-fit cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm hover:bg-muted/50">
+              <FileUp className="size-4" />Choose a file
+              <input type="file" className="sr-only" accept=".txt,.csv,.tsv,.xml,.json,.md,.log,.hmr,.scr" onChange={(e) => file(e.target.files?.[0])} />
+            </label>
+            {name && <p className="text-[13px] text-muted-foreground">{name}</p>}
+            <Textarea aria-label="Test script" rows={12} className="font-mono text-xs" value={text} onChange={(e) => setText(e.target.value)}
+              placeholder={"TEST CASE TC-01  Balance by phone\n1. DIAL +1 555 010 2000\n2. WAIT FOR PROMPT \"Say or enter your account number\"\n3. SEND DTMF 44721#\n4. WAIT FOR PROMPT \"Your balance is\"\n5. HANG UP"} />
+          </div>
+        ) : (
+          <div className="grid max-h-[55vh] gap-2 overflow-y-auto">
+            {found.map((c, i) => (
+              <label key={i} className="flex gap-3 rounded-lg border p-3">
+                <Checkbox checked={keep[i]} onCheckedChange={(v) => setKeep((k) => k.map((x, j) => (j === i ? !!v : x)))} aria-label={`Keep ${c.name}`} />
+                <span className="grid gap-1 text-sm">
+                  <span className="font-medium">{c.name}</span>
+                  <span className="text-muted-foreground"><strong className="font-medium text-foreground">Wants:</strong> {c.goal}</span>
+                  <span className="text-muted-foreground"><strong className="font-medium text-foreground">Says:</strong> {c.persona}</span>
+                  {c.criteria.length > 0 && <span className="text-muted-foreground"><strong className="font-medium text-foreground">Checks:</strong> {c.criteria.join("; ")}</span>}
+                  {c.notes && <span className="text-[12.5px] text-warn">{c.notes}</span>}
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
+        <DialogFooter>
+          {found
+            ? <><Button variant="outline" onClick={() => setFound(null)} disabled={busy}>Back</Button>
+                <Button onClick={save} disabled={busy || !keep.some(Boolean)}>{busy && <Loader2 className="animate-spin" />}Save {keep.filter(Boolean).length} test cases</Button></>
+            : <Button onClick={convert} disabled={busy || !text.trim()}>{busy && <Loader2 className="animate-spin" />}{busy ? "Reading the script…" : "Convert to test cases"}</Button>}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 const DONE = ["passed", "failed", "error", "cancelled"];
 const STATUS: Record<string, string> = {
@@ -90,6 +170,8 @@ export function EvalsPage() {
   const [said, setSaid] = useState<Said[]>([]);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const cases = useLoad(() => api<{ cases: Case[] }>("GET", "/v1/evals/cases"));
+  const [importing, setImporting] = useState(false);
   const rt = useRef<{ es?: EventSource; pc?: RTCPeerConnection; mic?: MediaStream; poll?: number; runId?: string }>({});
   const logRef = useRef<HTMLDivElement>(null);
 
@@ -154,7 +236,7 @@ export function EvalsPage() {
       const criteria = field("criteria").split("\n").map((c) => c.trim()).filter(Boolean);
       const r = await api<Run>("POST", "/v1/evals", {
         caller_agent: callerSlug, method, number: field("number"), persona: field("persona"), goal: field("goal"),
-        criteria, max_minutes: Number(field("minutes", "5")),
+        criteria, max_minutes: Number(field("minutes", "5")), case_id: field("case") || undefined,
       });
       setRun(r);
       if (method === "google_voice") {
@@ -220,8 +302,21 @@ export function EvalsPage() {
   }
 
   const live = run && !DONE.includes(run.status);
-  const ready = callerSlug && field("number").trim() && field("persona").trim() && field("goal").trim()
-    && (method !== "google_voice" || bridge.found);
+  const missing = [
+    !callerSlug && "a caller", !field("number").trim() && "the number to call", !field("persona").trim() && "who is calling",
+    !field("goal").trim() && "what they want", method === "google_voice" && !bridge.found && "the Phone Bridge extension",
+  ].filter(Boolean) as string[];
+  const ready = missing.length === 0;
+  function loadCase(c: Case) {
+    setForm((f) => {
+      const n = { ...f, persona: c.persona, goal: c.goal, criteria: c.criteria.join("\n"), case: c.id || "", ...(c.number ? { number: c.number } : {}) };
+      local.set("vpe-eval-form", JSON.stringify(n)); return n;
+    });
+    toast.success(`Loaded “${c.name}”. Check the number, then Start eval.`);
+  }
+  async function removeCase(id: string) {
+    try { await api("DELETE", `/v1/evals/cases/${id}`); cases.reload(); } catch (e) { toast.error((e as Error).message); }
+  }
 
   return (
     <Page wide title="Evals" description="Real phone calls to a voice agent: a Test Caller plays the caller, and the call is graded against what should happen.">
@@ -302,6 +397,14 @@ export function EvalsPage() {
           {live
             ? <Button variant="destructive" onClick={stop}><PhoneOff />Stop the eval</Button>
             : <Button onClick={start} disabled={busy || !ready}>{busy ? <Loader2 className="animate-spin" /> : <ClipboardCheck />}Start eval</Button>}
+          {!live && !ready && (
+            <p className="-mt-2 text-[12.5px] text-muted-foreground" role="status">
+              To start, add {missing.join(", ")}.
+              {(!field("persona").trim() || !field("goal").trim()) && <> <button type="button" className="underline" onClick={() => {
+                (["persona", "goal", "criteria"] as const).forEach((k) => { if (!field(k).trim()) set(k, EXAMPLE[k]); });
+              }}>Use the example</button></>}
+            </p>
+          )}
         </Card>
 
         <div className="grid content-start gap-6">
@@ -344,6 +447,30 @@ export function EvalsPage() {
               </div>
             )}
           </Card>
+
+          <Card className="overflow-hidden">
+            <div className="flex items-center gap-2 border-b px-4 py-3">
+              <h3 className="flex items-center gap-2 text-sm font-semibold"><ListChecks className="size-4 text-muted-foreground" />Test cases</h3>
+              <Button size="sm" variant="outline" className="ml-auto" onClick={() => setImporting(true)}><FileUp />Import test scripts</Button>
+            </div>
+            {!cases.data?.cases.length
+              ? <p className="p-4 text-sm text-muted-foreground">Import test scripts from Hammer, Cyara, a spreadsheet or notes, and each test becomes a case you can run here.</p>
+              : (
+                <ul className="max-h-72 divide-y overflow-y-auto">
+                  {cases.data.cases.map((c) => (
+                    <li key={c.id} className={cn("flex items-center gap-3 px-4 py-2.5 text-sm", field("case") === c.id && "bg-muted/50")}>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-medium">{c.name}</span>
+                        <span className="block truncate text-[12.5px] text-muted-foreground">{c.goal}{c.criteria.length ? ` · ${c.criteria.length} check${c.criteria.length === 1 ? "" : "s"}` : ""}{c.notes ? " · see note" : ""}</span>
+                      </span>
+                      <Button size="sm" variant="outline" disabled={!!live} onClick={() => loadCase(c)}>Use</Button>
+                      <Button size="icon-sm" variant="ghost" aria-label={`Delete ${c.name}`} onClick={() => removeCase(c.id!)}><Trash2 /></Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+          </Card>
+          <ImportScripts open={importing} onOpenChange={setImporting} onSaved={cases.reload} />
 
           <Card className="overflow-hidden">
             <div className="border-b px-4 py-3"><h3 className="text-sm font-semibold">Past evals</h3></div>
