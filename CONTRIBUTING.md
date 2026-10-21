@@ -27,6 +27,10 @@ pip install -e "cli[dev]" -e "engine[dev,moonshine]" && pytest -q cli/tests engi
 python3 costs/cost_model.py > costs/COSTS.md   # commit the regenerated file if you changed prices or assumptions
 ```
 
+The built UI in `engine/src/vpengine/static` has fixed file names. If a merge
+(or GitHub's **Update branch**) reports a conflict there, don't pick a side:
+run `(cd engine/ui && npm ci && npm run build)` and commit the result.
+
 Price changes need a source link in the PR description.
 
 ## Dependency updates
