@@ -146,6 +146,11 @@ class LamplineGeminiLive(GeminiLiveLLMService):
             self.lp_busy, self.lp_kind = True, "auto"
         await super()._handle_msg_output_transcription(message)
 
+    async def push_frame(self, frame, *args, **kwargs):
+        from .realtime import stamp
+        stamp(frame, self.lp_kind)
+        await super().push_frame(frame, *args, **kwargs)
+
     async def _handle_msg_turn_complete(self, message):
         await super()._handle_msg_turn_complete(message)
         self.lp_busy = False

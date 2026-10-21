@@ -126,6 +126,10 @@ def make_realtime_llm(cfg: Config):
                 event.session.tools = []
             await super().send_client_event(event)
 
+        async def push_frame(self, frame, *args, **kwargs):
+            stamp(frame, self.lp_kind)
+            await super().push_frame(frame, *args, **kwargs)
+
         async def _handle_evt_response_done(self, evt):
             await super()._handle_evt_response_done(evt)
             self.lp_busy = False
@@ -141,6 +145,15 @@ def make_realtime_llm(cfg: Config):
         settings=OpenAIRealtimeLLMService.Settings(model=cfg.realtime_model, session_properties=props))
 
 
+def stamp(frame, kind: str) -> None:
+    """Tag a response's start and end frames with what kind of response it was ("say", "run" or "auto") as they
+    leave the model. Read later, downstream, the model may already be on its next response."""
+    from pipecat.frames.frames import LLMFullResponseEndFrame, LLMFullResponseStartFrame
+
+    if isinstance(frame, (LLMFullResponseStartFrame, LLMFullResponseEndFrame)):
+        frame.lp_kind = kind
+
+
 class _RealtimeBotTap(_BotTap):
     """Lines said word for word ("say") are reported, but only the model's own turns count as replies,
     so a transition's line into an end step doesn't end the call before the goodbye."""
@@ -150,7 +163,8 @@ class _RealtimeBotTap(_BotTap):
         from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
         llm = self._session.llm
-        if direction == FrameDirection.DOWNSTREAM and getattr(llm, "lp_kind", "run") == "say" \
+        kind = getattr(frame, "lp_kind", None) or getattr(llm, "lp_kind", "run")   # as it left the model
+        if direction == FrameDirection.DOWNSTREAM and kind == "say" \
                 and isinstance(frame, (LLMFullResponseStartFrame, LLMFullResponseEndFrame)):
             await FrameProcessor.process_frame(self, frame, direction)
             if isinstance(frame, LLMFullResponseStartFrame):
