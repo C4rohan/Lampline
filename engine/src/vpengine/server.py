@@ -29,12 +29,14 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import hmac
 import html
 import json
 import logging
 import os
 import re
+import secrets as _secrets
 import sys
 import time
 from contextlib import asynccontextmanager
@@ -363,6 +365,48 @@ class Engine:
         self.history.close()
 
 
+TRANSFER_FIELDS = ("transfer_to", "transfer_details", "transfer_uui")
+PROXY_HEADERS = ("cf-connecting-ip", "x-forwarded-for", "forwarded", "x-real-ip", "x-forwarded-host", "via")
+LOCAL_NAMES = ("127.0.0.1", "::1", "localhost", "testclient", "testserver")
+EVENTS_PATH = re.compile(r"/v1/sessions/([A-Za-z0-9_-]{1,64})/events")
+
+
+def _flag(value: Any, *, default: bool) -> bool:
+    """A JSON true/false. Strings like "false" are refused rather than read as true."""
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    raise HTTPException(422, "dry_run must be true or false")
+
+
+class IdempotencyKeys:
+    """Results of state-changing API requests by their Idempotency-Key, for a day, so a retry gets the first
+    answer instead of a second call."""
+
+    TTL = 86400.0
+    MAX = 5000
+
+    def __init__(self):
+        self._items: dict[str, tuple[float, dict]] = {}
+
+    def get(self, key: str) -> dict | None:
+        now = time.time()
+        item = self._items.get(key)
+        return item[1] if item and item[0] > now else None
+
+    def put(self, key: str, value: dict) -> None:
+        now = time.time()
+        if len(self._items) >= self.MAX:
+            self._items = {k: v for k, v in self._items.items() if v[0] > now}
+            while len(self._items) >= self.MAX:
+                self._items.pop(next(iter(self._items)))
+        self._items[key] = (now + self.TTL, value)
+
+    def drop(self, key: str) -> None:
+        self._items.pop(key, None)
+
+
 def chat_payload(session: Session, events: list[dict]) -> dict:
     return {"session_id": session.id, "ended": session.flow.ended, "events": events, **{
         k: v for k, v in session.summary().items() if k in ("current_step", "steps", "variables")}}
@@ -396,7 +440,8 @@ def create_app(engine: Engine) -> FastAPI:
         await engine.automations.stop()
         await engine.shutdown()
 
-    app = FastAPI(title="Voice engine", version=__version__, docs_url=None, redoc_url=None, lifespan=lifespan)
+    app = FastAPI(title="Voice engine", version=__version__, docs_url=None, redoc_url=None, openapi_url=None,
+                  lifespan=lifespan)
 
     def require_key(request: Request) -> None:
         """The owner key (VPE_API_KEY) or a named key; a named key's role limits what it may change."""
@@ -404,8 +449,17 @@ def create_app(engine: Engine) -> FastAPI:
         if not engine.api_key:
             return
         given = request.headers.get("x-api-key") or ""
-        if not given and request.method == "GET" and request.url.path.endswith("/events"):
-            given = request.query_params.get("key") or ""      # EventSource can't send headers
+        m = EVENTS_PATH.fullmatch(request.url.path)
+        if not given and request.method == "GET" and m and request.query_params.get("token"):
+            # EventSource can't send headers: it gets a token for this one session instead of the API key,
+            # so no key ever sits in a URL (proxy access logs keep URLs).
+            s = engine.sessions.get(m.group(1))
+            want = str((getattr(s, "meta", None) or {}).get("events_token") or "") if s is not None else ""
+            if want and hmac.compare_digest(request.query_params["token"].encode(), want.encode()):
+                request.state.who = (s.meta or {}).get("by") or keys_module.describe(None)
+                request.state.events_token = True
+                return
+            raise HTTPException(401, "missing or wrong events token")
         if hmac.compare_digest(given.encode(), engine.api_key.encode()):
             return
         rec = engine.keys.match(given)
@@ -416,6 +470,7 @@ def create_app(engine: Engine) -> FastAPI:
             raise HTTPException(403, f"your key ({rec['name']}) is a {rec['role']} key, which can't do this; ask an admin")
 
     auth = [Depends(require_key)]
+    idempotent = IdempotencyKeys()
 
     @app.middleware("http")
     async def same_site_only(request: Request, call_next):
@@ -478,10 +533,19 @@ def create_app(engine: Engine) -> FastAPI:
     async def call_page():
         return RedirectResponse("/#/test")
 
+    def _signed_in(request: Request) -> bool:
+        if not engine.api_key:
+            return True
+        given = request.headers.get("x-api-key") or ""
+        return hmac.compare_digest(given.encode(), engine.api_key.encode()) or engine.keys.match(given) is not None
+
     @app.get("/v1/health")
-    async def health():
-        return {"ok": True, "version": __version__, "auth_required": bool(engine.api_key), "container": engine.container,
-                "brand": (engine.cfg.brand_name or "Lampline")[:32],
+    async def health(request: Request):
+        basic = {"ok": True, "version": __version__, "auth_required": bool(engine.api_key), "container": engine.container,
+                 "brand": (engine.cfg.brand_name or "Lampline")[:32]}
+        if not _signed_in(request):
+            return basic                 # anyone who can reach the address: no setup details
+        return {**basic,
                 "phone_webhook": f"{engine.public_url}/v1/twilio/voice" if engine.public_url else None,
                 "telnyx_webhook": f"{engine.public_url}/v1/telnyx/voice" if engine.public_url else None,
                 "jambonz_webhook": f"{engine.public_url}/v1/jambonz/call" if engine.public_url else None,
@@ -491,17 +555,23 @@ def create_app(engine: Engine) -> FastAPI:
     # -- integrations --------------------------------------------------------
 
     def _is_local(request: Request) -> bool:
-        """A browser or script on this computer, not through the tunnel or the network."""
-        proxied = any(request.headers.get(h) for h in ("cf-connecting-ip", "x-forwarded-for", "forwarded"))
-        if proxied:
+        """A browser or script on this computer, not through the tunnel or the network.
+
+        Fails closed: any proxy header, or a Host that isn't this computer's own name, means "not local". A proxy
+        can still rewrite Host and send no forwarding header (a bare nginx proxy_pass, an SSH tunnel), so once the
+        engine has a public address or runs in Docker, a local-only change also needs the owner key."""
+        if any(request.headers.get(h) for h in PROXY_HEADERS):
             return False
-        host = request.client.host if request.client else ""
-        if host in ("127.0.0.1", "::1", "localhost", "testclient"):
-            return True
-        if engine.container and engine.api_key:      # Docker: the port mapping hides the address; the key doesn't
+        named = urlsplit("//" + (request.headers.get("host") or "")).hostname or ""
+        if named not in LOCAL_NAMES:
+            return False
+        client = request.client.host if request.client else ""
+        if client not in LOCAL_NAMES and not (engine.container and engine.api_key):
+            return False                                 # Docker's port mapping hides the address; the key doesn't
+        if (engine.container or engine.public_url) and engine.api_key:
             given = request.headers.get("x-api-key") or ""
             return hmac.compare_digest(given.encode(), engine.api_key.encode())
-        return False
+        return True
 
     def _local_only(request: Request) -> None:
         if engine.remote_editing and not keys_module.always_local(request.method, request.url.path):
@@ -639,11 +709,19 @@ def create_app(engine: Engine) -> FastAPI:
             raise HTTPException(422, str(exc)) from exc
 
     def _reach(doc: dict) -> str:
-        """What in an agent can use your secrets or contact people: tools, triggers, and webhook/trigger nodes."""
-        nodes = [n for n in ((doc.get("definition") or {}).get("nodes") or [])
-                 if isinstance(n, dict) and n.get("type") in ("trigger", "webhook", "qa")]
-        return json.dumps({"tools": doc.get("tools") or [], "triggers": doc.get("triggers") or [], "nodes": nodes},
-                          sort_keys=True, default=str)
+        """What in an agent can use your secrets or contact people: tools, triggers, webhook/trigger nodes, where
+        end steps transfer calls (and what they send), and the agent's own values those addresses use."""
+        all_nodes = [n for n in ((doc.get("definition") or {}).get("nodes") or []) if isinstance(n, dict)]
+        nodes = [n for n in all_nodes if n.get("type") in ("trigger", "webhook", "qa")]
+        transfers = sorted((str(n.get("id")), {k: (n.get("data") or {}).get(k) for k in TRANSFER_FIELDS})
+                           for n in all_nodes if n.get("type") == "endCall" and isinstance(n.get("data"), dict)
+                           and any((n.get("data") or {}).get(k) for k in TRANSFER_FIELDS))
+        reach = {"tools": doc.get("tools") or [], "triggers": doc.get("triggers") or [], "nodes": nodes,
+                 "transfers": transfers}
+        used = set(re.findall(r"\{\{\s*([A-Za-z_]\w*)\s*\}\}", json.dumps(reach, default=str)))
+        constants = doc.get("context_variables") or {}
+        reach["values"] = {k: constants.get(k) for k in sorted(used) if isinstance(constants, dict) and k in constants}
+        return json.dumps(reach, sort_keys=True, default=str)
 
     def _same_reach(folder: Path, body: dict) -> None:
         """Saved from elsewhere (VPE_REMOTE_EDITING): steps, prompts and data may change, but not what can use
@@ -952,24 +1030,45 @@ def create_app(engine: Engine) -> FastAPI:
         # Tools sent inline by someone not on this computer never see your secrets and never call out.
         trusted = not body.tools or _is_local(request)
         session = engine.new_text(graph, body.context, mock_tools=body.mock_tools or not trusted, trusted=trusted,
-                                  meta={"agent": body.agent, "channel": "web"} if body.agent else None)
+                                  meta={**({"agent": body.agent, "channel": "web"} if body.agent else {}),
+                                        **_owned(request)})
         async with engine.locks[session.id]:
             try:
                 events = await session.open()
             except Exception as exc:  # noqa: BLE001
                 await session.close()
                 raise HTTPException(502, f"could not start: {exc}") from exc
-        return chat_payload(session, events)
+        return {**chat_payload(session, events), "events_token": session.meta["events_token"]}
 
-    def _text(sid: str) -> TextSession:
+    def _owned(request: Request) -> dict:
+        """Who started a conversation (it's theirs to watch), and a token for its live events."""
+        return {"by": getattr(request.state, "who", None) or keys_module.describe(None),
+                "events_token": _secrets.token_urlsafe(18)}
+
+    def _session(sid: str, request: Request) -> Session:
+        """A live conversation, for the key that started it (or an admin). Phone and message conversations
+        carry callers' details, like call history: this computer only (or VPE_REMOTE_EDITING)."""
         s = engine.get(sid)
+        if getattr(request.state, "events_token", False):
+            return s                                   # the token was checked against this very session
+        who = getattr(request.state, "who", None) or keys_module.describe(None)
+        by = (s.meta or {}).get("by")
+        if by is None:
+            _local_only(request)
+            return s
+        if who.get("role") != "admin" and who.get("name") != by.get("name"):
+            raise HTTPException(403, "this conversation was started by someone else")
+        return s
+
+    def _text(sid: str, request: Request) -> TextSession:
+        s = _session(sid, request)
         if not isinstance(s, TextSession):
             raise HTTPException(400, "not a text chat session")
         return s
 
     @app.post("/v1/chat/sessions/{sid}/messages", dependencies=auth)
-    async def chat_send(sid: str, body: ChatMessage):
-        s = _text(sid)
+    async def chat_send(sid: str, body: ChatMessage, request: Request):
+        s = _text(sid, request)
         async with engine.locks[sid]:
             if s.flow.ended:
                 raise HTTPException(409, "the conversation has ended")
@@ -977,21 +1076,21 @@ def create_app(engine: Engine) -> FastAPI:
         return chat_payload(s, events)
 
     @app.post("/v1/chat/sessions/{sid}/end", dependencies=auth)
-    async def chat_end(sid: str):
-        s = _text(sid)
+    async def chat_end(sid: str, request: Request):
+        s = _text(sid, request)
         if not s.flow.ended:
             await s.flow.finish("ended by client")
         await s.close()
         return chat_payload(s, [])
 
     @app.get("/v1/sessions/{sid}", dependencies=auth)
-    async def session_info(sid: str):
-        s = engine.get(sid)
+    async def session_info(sid: str, request: Request):
+        s = _session(sid, request)
         return {**s.summary(), "events": s.events}
 
     @app.get("/v1/sessions/{sid}/events", dependencies=auth)
     async def session_events(sid: str, request: Request):
-        s = engine.get(sid)
+        s = _session(sid, request)
         queue: asyncio.Queue = asyncio.Queue()
         backlog = list(s.events)
         unsubscribe = s.subscribe(queue.put_nowait)
@@ -1000,6 +1099,8 @@ def create_app(engine: Engine) -> FastAPI:
             try:
                 for e in backlog:
                     yield f"data: {json.dumps(e)}\n\n"
+                if s.finished.is_set() and queue.empty():
+                    return                                 # an ended conversation: the backlog is all there is
                 while True:
                     if await request.is_disconnected():
                         break
@@ -1022,7 +1123,7 @@ def create_app(engine: Engine) -> FastAPI:
     # -- browser calls (WebRTC) ----------------------------------------------
 
     @app.post("/v1/calls/webrtc/offer", dependencies=auth)
-    async def webrtc_offer(body: WebRTCOffer):
+    async def webrtc_offer(body: WebRTCOffer, request: Request):
         from pipecat.transports.base_transport import TransportParams
         from pipecat.transports.smallwebrtc.request_handler import SmallWebRTCRequest
         from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
@@ -1040,6 +1141,7 @@ def create_app(engine: Engine) -> FastAPI:
         if graph is not None:
             engine._check_capacity()
         holder: dict[str, Session] = {}
+        owner = _owned(request)
 
         async def on_connection(connection):
             transport = SmallWebRTCTransport(connection, TransportParams(audio_in_enabled=True,
@@ -1048,7 +1150,7 @@ def create_app(engine: Engine) -> FastAPI:
             session = engine.add(engine.voice_session(graph, transport, autostart=False, stt=stt, tts=tts,
                                               variables=body.context, llm=engine._make_llm(),
                                               tools=engine.tool_runner(mock=body.mock_tools),
-                                              meta={"agent": body.agent, "channel": "web"}))
+                                              meta={"agent": body.agent, "channel": "web", **owner}))
             holder["s"] = session
 
             @transport.event_handler("on_client_connected")
@@ -1070,7 +1172,7 @@ def create_app(engine: Engine) -> FastAPI:
         if graph is not None and "s" not in holder:
             raise HTTPException(500, "the call could not be set up; see the engine log")
         if "s" in holder:
-            answer = {**answer, "session_id": holder["s"].id}
+            answer = {**answer, "session_id": holder["s"].id, "events_token": owner["events_token"]}
         return answer
 
     @app.patch("/v1/calls/webrtc/offer", dependencies=auth)
@@ -1194,7 +1296,7 @@ def create_app(engine: Engine) -> FastAPI:
         url = f"{engine.public_url}{request.url.path}" + (f"?{request.url.query}" if request.url.query else "")
         if not valid_signature(engine.twilio_auth_token, url, form, request.headers.get("x-twilio-signature", "")):
             raise HTTPException(403, "bad Twilio signature")
-        transfer = engine.transfers.pop(form.get("CallSid"))
+        transfer = engine.transfers.get(form.get("CallSid"))
         return _xml(transfer.twiml() if transfer else hangup_twiml())
 
     @app.websocket("/v1/twilio/stream")
@@ -1319,7 +1421,7 @@ def create_app(engine: Engine) -> FastAPI:
     async def jambonz_done(request: Request):
         """The listen verb's actionHook (the stream ended) and the application's call status webhook."""
         call = await _jambonz_body(request)
-        transfer = engine.transfers.pop(str(call.get("call_sid") or ""))
+        transfer = engine.transfers.get(str(call.get("call_sid") or ""))
         return transfer.jambonz_verbs() if transfer else [{"verb": "hangup"}]
 
     @app.websocket("/v1/jambonz/stream")
@@ -1472,7 +1574,7 @@ def create_app(engine: Engine) -> FastAPI:
         t = next((x for x in (a.triggers if a else []) if x["id"] == tid), None)
         if t is None:
             raise HTTPException(404, f"no working trigger {tid!r} in {slug} (save it, and check `vk lint`)")
-        dry = bool((body or {}).get("dry_run", True))
+        dry = _flag((body or {}).get("dry_run"), default=True)
         if t["type"] == "schedule":
             return {"results": await engine.automations.run_schedule(slug, t, dry_run=dry)}
         if t["type"] == "after_call":
@@ -1499,9 +1601,35 @@ def create_app(engine: Engine) -> FastAPI:
         if not to:
             raise HTTPException(422, "give phone_number (for a call) or channel and to (for a message)")
         context = body.get("initial_context") if isinstance(body.get("initial_context"), dict) else {}
-        result = await engine.automations.outbound(slug, "call" if channel == "call" else "message", to, channel=channel,
-                                                   context=context, text=str(body.get("text") or ""), source=f"api {path}",
-                                                   dry_run=bool(body.get("dry_run")))
+        dry_run = _flag(body.get("dry_run"), default=False)
+        key = (request.headers.get("idempotency-key") or "").strip()
+        if len(key) > 128:
+            raise HTTPException(422, "Idempotency-Key is at most 128 characters")
+        fingerprint = hashlib.sha256(json.dumps([path, body], sort_keys=True, default=str).encode()).hexdigest()
+        if key and not dry_run:
+            seen = idempotent.get(key)
+            if seen is not None:
+                if seen["fingerprint"] != fingerprint:
+                    raise HTTPException(422, "this Idempotency-Key was already used for a different request")
+                if seen["result"] is None:
+                    raise HTTPException(409, "a request with this Idempotency-Key is still in progress")
+                return _trigger_reply(seen["result"])
+            idempotent.put(key, {"fingerprint": fingerprint, "result": None})
+        try:
+            result = await engine.automations.outbound(slug, "call" if channel == "call" else "message", to,
+                                                       channel=channel, context=context, text=str(body.get("text") or ""),
+                                                       source=f"api {path}", dry_run=dry_run)
+        except BaseException:
+            if key and not dry_run:
+                idempotent.drop(key)
+            raise
+        if key and not dry_run:
+            idempotent.put(key, {"fingerprint": fingerprint, "result": result})
+        return _trigger_reply(result)
+
+    def _trigger_reply(result: dict):
+        if result.get("unknown"):
+            raise HTTPException(504, result["detail"])          # outcome unknown: don't retry blindly
         if not result["ok"]:
             raise HTTPException(409, result["detail"])
         return result

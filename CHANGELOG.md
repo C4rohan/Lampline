@@ -4,6 +4,17 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 
 ## Unreleased (on dev)
 
+### Security and reliability (review of October 2026)
+
+- Saving an agent can no longer write a prompt file outside its folder: step and transfer ids are checked, and file names are always slugs.
+- A remote save (`VPE_REMOTE_EDITING`) can't change where end steps transfer calls, what they send, or the agent's values those addresses use; and call context from the API trigger can't override the agent's own transfer or recipient addresses.
+- Outbound calls never ring twice: a contact is counted before the call, a timed-out request (the phone may be ringing) answers 504 and keeps the 10-minute guard, and the API trigger takes an `Idempotency-Key`. `dry_run` must be a real true/false.
+- The API key never goes in a URL: live events use a per-conversation `events_token`.
+- "Only on this computer" fails closed: proxy headers or a public Host mean remote, and with a public address local-only changes also need the owner key.
+- Carriers' redelivered webhooks still connect transfers and keep an outbound call's context; WhatsApp payloads are parsed defensively and each message is answered once.
+- A live conversation can be watched only by the key that started it (or an admin); phone and message conversations follow the call-history rule.
+- The public health check no longer shows setup details to callers without a key, and `/openapi.json` isn't served.
+
 - `vk test --target dfcx|ces`: run the same test files against your live Dialogflow CX agent or CX Agent Studio app (text), or side by side with the engine (`--target engine,dfcx`).
 - `vk test` can let a model play the caller: describe who is calling and what they want (`caller:` in a test file), and the engine's model talks to your agent until the goal is met.
 

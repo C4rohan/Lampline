@@ -42,6 +42,10 @@ def read(folder: Path) -> dict:
             "findings": findings(agent, folder)}
 
 
+# Step and transfer ids: what the builder, templates and importers make. Never a path.
+SAFE_ID = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:-]{0,79}")
+
+
 def _clean_definition(definition: Any) -> dict:
     """Accept what the builder sends, but only well-formed nodes and edges."""
     if not isinstance(definition, dict):
@@ -56,6 +60,8 @@ def _clean_definition(definition: Any) -> dict:
         nid = str(n.get("id") or "")
         if not nid or nid in ids:
             raise BuilderError("every step needs a unique id")
+        if not SAFE_ID.fullmatch(nid):
+            raise BuilderError(f"step id {nid[:40]!r} may only use letters, digits, - _ . and :")
         ids.add(nid)
         n["id"] = nid
         pos = n.get("position") or {}
@@ -74,6 +80,8 @@ def _clean_definition(definition: Any) -> dict:
         eid = str(e.get("id") or "")
         if not eid or eid in eids:
             raise BuilderError("every transfer needs a unique id")
+        if not SAFE_ID.fullmatch(eid):
+            raise BuilderError(f"transfer id {eid[:40]!r} may only use letters, digits, - _ . and :")
         eids.add(eid)
         e["id"], e["source"], e["target"] = eid, str(e.get("source")), str(e.get("target"))
         d = e["data"]

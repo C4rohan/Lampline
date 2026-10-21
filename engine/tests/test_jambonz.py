@@ -176,7 +176,7 @@ def test_a_call_we_placed_runs_its_agent_with_its_context(client, engine):
     token = r.json()[0]["url"].split("t=", 1)[1]
     pending = engine.stream_tokens.redeem(token, "jz-1")
     assert pending is not None and pending.context["caller_name"] == "Sam" and pending.contact == "+15550101234"
-    assert "tok" not in engine.automations.contexts                  # used once
+    assert "tok" in engine.automations.contexts                      # kept for a redelivery; expires in 10 minutes
 
 
 def test_an_inbound_call_cant_pick_its_agent(client):

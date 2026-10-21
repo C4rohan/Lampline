@@ -276,7 +276,9 @@ replies, so an outbound message's answer continues the same conversation.
 **Outbound calls and messages are off** until you turn them on in
 Integrations → Automation. Then they're kept out of quiet hours (default
 21:00 to 08:00), to a daily limit per agent (default 50), and to one contact
-per person per agent every 10 minutes; only contacts that went out count.
+per person per agent every 10 minutes. A contact is counted as it starts and
+given back only when the provider certainly refused it, so a call whose answer
+timed out (it may be ringing) can't be placed twice.
 Every attempt is logged (recipients masked) under Automation → Recent
 activity. Outbound calls need Twilio (account SID, auth token and a number),
 Telnyx (API key, TeXML application and a number) or jambonz (API key, account
@@ -784,7 +786,7 @@ The folder runs as it is on disk: nothing to save or deploy first.
 | GET | `/v1/agents/{folder}/export?target=ces\|dfcx` | the agent as a CX Agent Studio app or a Dialogflow CX agent (zip) |
 | POST | `/v1/agents/{folder}/triggers/{id}/run` | `{"dry_run": true}`: run a schedule or after-call trigger now (this computer only) |
 | GET | `/v1/automation` | channels and which agent answers each, outbound limits, recent activity |
-| POST | `/v1/public/agent/{path}` | The API trigger: `{phone_number}` or `{channel, to, text}`, plus `initial_context`, `dry_run` |
+| POST | `/v1/public/agent/{path}` | The API trigger: `{phone_number}` or `{channel, to, text}`, plus `initial_context`, `dry_run` (true/false). Send an `Idempotency-Key` header to retry safely: the same key gets the first answer for a day. 409: refused; 504: the phone provider didn't answer in time and the call may still ring (don't retry) |
 | GET / POST | `/v1/whatsapp/webhook` | Meta's verification and messages (signed) |
 | POST | `/v1/oauth/google/start` | starts **Connect Google account**; Google returns to `/v1/oauth/google/callback` |
 | POST | `/v1/tools/mcp/list` | `{"mcp": {url, headers}}`: an MCP server's tools (this computer only) |
@@ -796,8 +798,8 @@ The folder runs as it is on disk: nothing to save or deploy first.
 | POST | `/v1/chat/sessions` | `{"agent": "front-desk"}` or `{"name", "definition", "context_variables", "tools"}`, plus optional `context` and `mock_tools` |
 | POST | `/v1/chat/sessions/{id}/messages` | `{"text": "..."}`; returns when the agent has finished replying |
 | POST | `/v1/chat/sessions/{id}/end` | |
-| GET | `/v1/sessions/{id}` | steps visited, current step, collected values, events |
-| GET | `/v1/sessions/{id}/events` | the same events live (server-sent events) |
+| GET | `/v1/sessions/{id}` | steps visited, current step, collected values, events (the key that started it, or an admin) |
+| GET | `/v1/sessions/{id}/events?token=` | the same events live (server-sent events); `token` is the `events_token` returned when the conversation started, so no key goes in the URL |
 | POST | `/v1/tests/caller` | `{persona, goal, transcript}`: what a model-played test caller says next (`vk test`) |
 | GET | `/v1/me` | who this key is, and its role |
 | GET, POST, DELETE | `/v1/keys`, `/v1/keys/{id}` | named keys with roles (admin) |
