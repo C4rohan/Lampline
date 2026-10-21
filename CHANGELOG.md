@@ -10,6 +10,12 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 - **Cost per call (estimate):** speech to text, model tokens, characters spoken and phone minutes, times your rates (Integrations → Call history) or a list price Lampline knows. Local services cost nothing; parts without a rate are named.
 - The call history file upgrades in place.
 
+### A tougher Test Caller
+- **Make the caller tougher** on the Evals page: background noise (busy room, street, car) at three levels, another voice for an accent, a speaking style (hesitant, terse, rambling, English as a second language), cutting in on the agent, and long pauses. Planned from a seed the run keeps, so a replay plays the same way ([docs/EVALS.md](docs/EVALS.md#make-the-caller-tougher)).
+- Every eval times the agent from the caller's side, phone line included: p50, p95 and the slowest response.
+- **Replay:** run a failed eval again, replay exactly what its caller said, or turn a real call on the Calls page into an eval with **Replay as a test**.
+- The eval history file upgrades in place (schema 3).
+
 ## v0.3.0
 
 Test real phone calls, graded: an Evals tab, test scripts that turn into test cases, and Google agents side by side.

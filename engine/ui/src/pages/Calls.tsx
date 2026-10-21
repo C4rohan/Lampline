@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { History, Phone, PhoneForwarded, Search, Trash2, MessageSquare, Globe, Download, ClipboardCheck, RefreshCw } from "lucide-react";
+import { History, Phone, PhoneForwarded, Search, Trash2, MessageSquare, Globe, Download, ClipboardCheck, RefreshCw, Repeat } from "lucide-react";
 import { toast } from "sonner";
 import { api, blobUrl, download, type AgentSummary } from "@/lib/api";
 import { useApp, useLoad } from "@/lib/app";
-import { cn } from "@/lib/utils";
+import { cn, local } from "@/lib/utils";
+import { go } from "@/lib/route";
 import { Notice, Page } from "@/components/shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -161,6 +162,12 @@ function CallView({ id, onDeleted }: { id: string; onDeleted: () => void }) {
     catch (x) { toast.error((x as Error).message); }
     finally { setGrading(false); }
   }
+  async function replay() {
+    try {
+      local.set("vpe-eval-draft", JSON.stringify(await api("POST", "/v1/evals/replay", { call_id: id })));
+      go("#/evals");
+    } catch (x) { toast.error((x as Error).message); }
+  }
   async function remove() {
     try { await api("DELETE", `/v1/calls/${id}`); toast.success("Call deleted"); onDeleted(); }
     catch (x) { toast.error((x as Error).message); }
@@ -193,7 +200,9 @@ function CallView({ id, onDeleted }: { id: string; onDeleted: () => void }) {
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-medium">Checks</h3>
           <Grade g={c.grade} />
-          <Button size="sm" variant="outline" className="ml-auto" onClick={grade} disabled={grading || !c.transcript.length}>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={replay} disabled={!c.transcript.some((t) => t.who === "caller")}
+            title="A Test Caller phones the agent and says what this caller said"><Repeat />Replay as a test</Button>
+          <Button size="sm" variant="outline" onClick={grade} disabled={grading || !c.transcript.length}>
             <RefreshCw className={cn(grading && "animate-spin")} />{c.grade ? "Grade again" : "Grade now"}
           </Button>
         </div>

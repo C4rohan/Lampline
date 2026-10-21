@@ -28,9 +28,11 @@ import time
 from pathlib import Path
 from typing import Any
 
+from .pricing import percentile
+
 log = logging.getLogger("vpengine.evals")
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 METHODS = ("google_voice", "speaker")
 BRIDGE_TTL = 20 * 60                    # a bridge token is good for 20 minutes, until its call starts
 MAX_CRITERIA = 12
@@ -82,7 +84,8 @@ def transcript(events: list[dict]) -> list[dict]:
         if e.get("type") == "user_speech" and e.get("text"):
             out.append({"who": "agent", "text": str(e["text"]), "t": e.get("t")})
         elif e.get("type") == "bot_speech" and e.get("text") and not e.get("filler"):
-            out.append({"who": "caller", "text": str(e["text"]), "t": e.get("t")})
+            out.append({"who": "caller", "text": str(e["text"]), "t": e.get("t"),
+                        **({"interruption": True} if e.get("interruption") else {})})
     return out
 
 
@@ -129,6 +132,13 @@ class EvalStore:
                         ALTER TABLE runs ADD COLUMN case_id TEXT;
                         PRAGMA user_version = 2;
                     """)
+                    version = 2
+                if version < 3:                    # v3: a tougher caller's options, the agent timed from the caller
+                    db.executescript("""
+                        ALTER TABLE runs ADD COLUMN options TEXT;
+                        ALTER TABLE runs ADD COLUMN latencies TEXT;
+                        PRAGMA user_version = 3;
+                    """)
                 self._db = db
             return self._db
 
@@ -140,11 +150,12 @@ class EvalStore:
 
     # ------------------------------------------------------------------ runs
     def create(self, *, caller_agent: str, method: str, number: str, persona: str, goal: str,
-               criteria: list[str], max_minutes: int, by: str = "", case_id: str = "") -> dict:
+               criteria: list[str], max_minutes: int, by: str = "", case_id: str = "",
+               options: dict | None = None) -> dict:
         if method not in METHODS:
             raise EvalError("method is google_voice or speaker")
         number = normalize_number(number)
-        persona, goal = str(persona or "").strip()[:1000], str(goal or "").strip()[:500]
+        persona, goal = str(persona or "").strip()[:3000], str(goal or "").strip()[:500]
         if not persona or not goal:
             raise EvalError("describe who is calling (persona) and what they want (goal)")
         crit = [str(c).strip()[:300] for c in (criteria or []) if str(c).strip()]
@@ -155,16 +166,17 @@ class EvalStore:
         with self._lock:
             self.db().execute(
                 "INSERT INTO runs (id, created, caller_agent, method, number, persona, goal, criteria, max_minutes, "
-                "status, by, case_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                "status, by, case_id, options) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (rid, time.time(), caller_agent, method, number, persona, goal, json.dumps(crit), minutes,
-                 "waiting", by, case_id if CASE_ID.match(case_id or "") else None))
+                 "waiting", by, case_id if CASE_ID.match(case_id or "") else None,
+                 json.dumps(options) if options else None))
             self.db().commit()
         return self.get(rid)
 
     def update(self, rid: str, **fields: Any) -> None:
         if not fields:
             return
-        for k in ("transcript", "results"):
+        for k in ("transcript", "results", "latencies"):
             if k in fields and not isinstance(fields[k], (str, type(None))):
                 fields[k] = json.dumps(fields[k])
         cols = ", ".join(f"{k} = ?" for k in fields)
@@ -203,6 +215,10 @@ class EvalStore:
         d["results"] = json.loads(d["results"]) if d.get("results") else None
         d["transcript"] = json.loads(d["transcript"]) if d.get("transcript") else []
         d["duration"] = round(d["ended"] - d["started"]) if d.get("started") and d.get("ended") else None
+        d["options"] = json.loads(d["options"]) if d.get("options") else None
+        lat = json.loads(d.pop("latencies", None) or "[]")
+        d["agent_ms"] = ({"turns": len(lat), "p50": percentile(lat, 50), "p95": percentile(lat, 95), "max": max(lat)}
+                         if lat else None)
         if brief:
             d.pop("transcript", None)
         return d
@@ -310,6 +326,20 @@ async def grade(llm, run: dict, said: list[dict]) -> dict:
 
 def verdict(results: dict) -> str:
     return "passed" if results.get("goal_met") and all(c["passed"] for c in results.get("criteria", [])) else "failed"
+
+
+# ---------------------------------------------------------------------- replaying a call
+
+def replay_persona(caller_lines: list[str], persona: str = "") -> str:
+    """A persona that says what a past caller said, in order: to play a failed call again."""
+    lines = [str(x).strip() for x in caller_lines if str(x).strip()][:40]
+    if not lines:
+        raise EvalError("that call has nothing the caller said to replay")
+    steps = "\n".join(f"{i + 1}. {x[:300]}" for i, x in enumerate(lines))
+    who = (persona.strip() + "\n\n") if persona.strip() else ""
+    return (f"{who}Replay a past call: say these lines in this order, one per turn, waiting for the agent each time. "
+            "Keep the wording. If the agent asks something none of them answers, answer briefly and go on with the "
+            f"next line. After the last line, say goodbye.\n{steps}")[:3000]
 
 
 # ---------------------------------------------------------------------- importing test scripts

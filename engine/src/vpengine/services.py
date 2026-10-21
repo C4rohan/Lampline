@@ -719,6 +719,17 @@ def make_stt(cfg: Config):
 
 # -- speaking ------------------------------------------------------------------
 
+VOICE_FIELD = {"deepgram": "tts_voice", "fish": "fish_voice", "kokoro": "kokoro_voice", "kokoro-server": "kokoro_voice",
+               "qwen3-tts": "qwen3_tts_voice"}
+
+
+def with_voice(cfg: Config, voice: str) -> Config:
+    """The same settings speaking with another voice of the chosen text-to-speech service."""
+    import dataclasses
+    name = VOICE_FIELD.get(cfg.tts)
+    return dataclasses.replace(cfg, **{name: voice}) if name and voice else cfg
+
+
 def make_tts(cfg: Config, sample_rate: int | None = None):
     if cfg.tts == "fish":
         if not cfg.fish_key:

@@ -41,7 +41,8 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from .flow import FlowController
 from .graph import Graph
 from .pricing import new_usage
-from .services import Config, make_llm, make_stt, make_tts, make_turn_strategies
+from .stress import CallerClock, NoiseMixer, PauseGate, Stress
+from .services import Config, make_llm, make_stt, make_tts, make_turn_strategies, with_voice
 
 log = logging.getLogger("vpengine.session")
 
@@ -293,7 +294,8 @@ class Session:
 
     async def run(self) -> None:
         """Run until the call ends (voice sessions await this directly)."""
-        self.task = PipelineWorker(self.build(), params=self.task_params(), idle_timeout_secs=None,
+        self.pipeline = self.build()
+        self.task = PipelineWorker(self.pipeline, params=self.task_params(), idle_timeout_secs=None,
                                  enable_rtvi=False, check_dangling_tasks=False)
 
         @self.task.event_handler("on_pipeline_error")
@@ -423,8 +425,11 @@ class VoiceSession(Session):
         super().__init__(graph, cfg, **kwargs)
         self.transport = transport
         self.autostart = autostart   # False: call begin() once the caller is connected
+        # an eval's Test Caller can be made tougher (stress.py): another voice, noise, pauses, cutting in
+        raw = self.meta.get("stress")
+        self.stress = Stress.parse(raw) if isinstance(raw, dict) else None
         self.stt = stt or make_stt(cfg)
-        self.tts = tts or make_tts(cfg)
+        self.tts = tts or make_tts(with_voice(cfg, self.stress.voice) if self.stress and self.stress.voice else cfg)
         self._begun = False
         self.audio_in_rate = audio_in_rate
         self.audio_out_rate = audio_out_rate
@@ -460,10 +465,13 @@ class VoiceSession(Session):
             _ScriptGate(self),
             self.llm,
             _BotTap(self),
+            *([PauseGate(self, self.stress)] if self.stress and self.stress.pauses else []),
             self.tts,
+            *([NoiseMixer(self.stress)] if self.stress and self.stress.noise else []),
             self.transport.output(),
             *([_recorder(self.record_to)] if self.record_to else []),
             _LatencyTap(self),
+            *([CallerClock(self, self.stress)] if self.meta.get("eval") else []),
             self.aggregators.assistant(),
         ])
 

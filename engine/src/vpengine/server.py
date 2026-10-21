@@ -66,6 +66,7 @@ from .services import Config, ConfigError, default_model, make_llm
 from . import pricing
 from . import realtime
 from .session import Session, TextSession, VoiceSession
+from .stress import Stress, StressError
 from . import builder, generate
 from . import moonshine_stt, parakeet_stt
 from .transfer import PendingTransfers
@@ -1261,7 +1262,8 @@ def create_app(engine: Engine) -> FastAPI:
                 await session.stop()
             ended = next((e for e in reversed(session.events) if e.get("type") == "call_ended"), {})
             said = evals_module.transcript(session.events)
-            engine.evals.update(rid, status="grading", ended=time.time(), transcript=said,
+            heard = [int(e["ms"]) for e in session.events if e.get("type") == "agent_latency"][-500:]
+            engine.evals.update(rid, status="grading", ended=time.time(), transcript=said, latencies=heard,
                                 ended_reason=reason or str(ended.get("reason") or "ended"))
             if not any(x["who"] == "agent" for x in said):
                 engine.evals.update(rid, status="error", error="the Test Caller heard nothing from the call: check "
@@ -1288,6 +1290,10 @@ def create_app(engine: Engine) -> FastAPI:
         meta = {"agent": run["caller_agent"], "channel": "web", "eval": rid,
                 "by": {"name": run.get("by") or "owner", "role": "builder"},
                 "events_token": _secrets.token_urlsafe(18)}
+        tough = Stress.parse(run["options"]) if run.get("options") else None
+        if tough is not None:
+            meta["stress"] = tough.as_dict()
+        persona = "\n\n".join(x for x in (run["persona"], tough.persona_note() if tough else "") if x)
 
         def linked(session: Session) -> None:
             engine.eval_live[rid] = session
@@ -1295,7 +1301,7 @@ def create_app(engine: Engine) -> FastAPI:
             asyncio.get_running_loop().create_task(_watch_run(rid, session, int(run["max_minutes"])))
 
         answer, _ = await _webrtc(graph, run["caller_agent"], sdp, type_, None, None,
-                                  {"persona": run["persona"], "goal": run["goal"]}, meta, False, on_session=linked)
+                                  {"persona": persona, "goal": run["goal"]}, meta, False, on_session=linked)
         return {"sdp": answer.get("sdp"), "type": answer.get("type"), "run_id": rid}
 
     @app.get("/v1/evals", dependencies=auth)
@@ -1309,19 +1315,54 @@ def create_app(engine: Engine) -> FastAPI:
         caller = str(body.get("caller_agent") or "")
         engine.load_agent(caller)                                    # 404 when there's no such agent
         try:
+            tough = Stress.parse(body.get("caller")) if body.get("caller") else None
+        except StressError as exc:
+            raise HTTPException(422, f"caller: {exc}") from exc
+        options = tough.as_dict() if tough is not None and tough.active else None
+        try:
             run = engine.evals.create(caller_agent=caller, method=str(body.get("method") or ""),
                                       number=str(body.get("number") or ""), persona=str(body.get("persona") or ""),
                                       goal=str(body.get("goal") or ""),
                                       criteria=body.get("criteria") if isinstance(body.get("criteria"), list) else [],
                                       max_minutes=body.get("max_minutes") if isinstance(body.get("max_minutes"), int) else 5,
                                       by=str((getattr(request.state, "who", None) or {}).get("name") or ""),
-                                      case_id=str(body.get("case_id") or ""))
+                                      case_id=str(body.get("case_id") or ""), options=options)
         except evals_module.EvalError as exc:
             raise HTTPException(422, str(exc)) from exc
         if run["method"] == "google_voice":
             run["bridge"] = {"token": engine.evals.bridge_token(run["id"]),
                              "open_url": evals_module.google_voice_url(run["number"])}
         return run
+
+    @app.post("/v1/evals/replay", dependencies=auth)
+    async def replay_draft(body: dict[str, Any], request: Request):
+        """A draft eval that plays a past call again: what its caller said, in order (nothing is saved)."""
+        _local_only(request)
+        if body.get("run_id"):
+            run = _run_or_404(str(body["run_id"]))
+            lines = [x["text"] for x in run["transcript"] if x["who"] == "caller" and not x.get("interruption")]
+            draft = {"persona": run["persona"], "goal": run["goal"], "criteria": run["criteria"], "number": run["number"],
+                     "caller": run.get("options") or None, "case_id": run.get("case_id") or ""}
+        elif body.get("call_id"):
+            call = await asyncio.to_thread(engine.history.get, str(body["call_id"]))
+            if call is None:
+                raise HTTPException(404, "no such call")
+            lines = [x["text"] for x in call["transcript"] if x["who"] == "caller"]
+            checks = (call.get("grade_results") or {})
+            found = await asyncio.to_thread(engine.history.checks, call["agent"])
+            crit = found[0]["criteria"] if found else [c["criterion"] for c in checks.get("criteria", [])]
+            goal = (found[0]["goal"] if found else "") or checks.get("goal") or "Get the same help the original caller wanted"
+            draft = {"persona": "", "goal": goal, "criteria": crit, "number": "", "caller": None, "case_id": ""}
+        else:
+            raise HTTPException(422, "give call_id or run_id")
+        if body.get("exact") is False and body.get("run_id"):
+            return draft                                            # run it again as it was
+        try:
+            draft["persona"] = evals_module.replay_persona(lines, "" if body.get("call_id") else
+                                                          draft["persona"].split("\n\nReplay a past call")[0])
+        except evals_module.EvalError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return draft
 
     @app.get("/v1/evals/cases", dependencies=auth)
     async def list_cases(request: Request):
