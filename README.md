@@ -285,6 +285,7 @@ tools, data and knowledge: [engine/README.md](engine/README.md).
 - [x] Users and roles, and an HTTPS guide ([docs/HTTPS.md](docs/HTTPS.md))
 - [x] Test a phone agent for free from your laptop ([docs/PHONE-TESTING.md](docs/PHONE-TESTING.md))
 - [x] Evals: real phone calls through Google Voice, played by a Test Caller and graded ([docs/EVALS.md](docs/EVALS.md))
+- [x] Import Hammer, Cyara or spreadsheet test scripts as eval test cases ([docs/EVALS.md](docs/EVALS.md#import-test-scripts))
 - [ ] Evals placed by Lampline through Twilio, for unattended runs
 - [x] Call history and optional recordings, on this computer ([engine/README.md](engine/README.md#call-history))
 - [ ] Published benchmarks
@@ -315,7 +316,7 @@ link this repository. GitHub's **Cite this repository** button (from
   author  = {Salvi, Rohan},
   title   = {Lampline: open-source, self-hosted voice agents},
   year    = {2026},
-  version = {0.2.0},
+  version = {0.3.0},
   url     = {https://github.com/C4rohan/lampline}
 }
 ```

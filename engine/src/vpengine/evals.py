@@ -30,11 +30,14 @@ from typing import Any
 
 log = logging.getLogger("vpengine.evals")
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 METHODS = ("google_voice", "speaker")
 BRIDGE_TTL = 20 * 60                    # a bridge token is good for 20 minutes, until its call starts
 MAX_CRITERIA = 12
 ID = re.compile(r"^ev_[A-Za-z0-9_-]{8,40}$")
+CASE_ID = re.compile(r"^tc_[A-Za-z0-9_-]{8,40}$")
+MAX_CASES = 500
+MAX_SCRIPT = 120_000                    # characters of a test script sent to the model
 PHONE = re.compile(r"^\+[1-9]\d{6,14}$")
 DONE = ("passed", "failed", "error", "cancelled")
 
@@ -116,6 +119,16 @@ class EvalStore:
                         CREATE INDEX IF NOT EXISTS runs_created ON runs (created DESC);
                         PRAGMA user_version = 1;
                     """)
+                    version = 1
+                if version < 2:                    # v2: saved test cases, and which case a run came from
+                    db.executescript("""
+                        CREATE TABLE IF NOT EXISTS cases (
+                            id TEXT PRIMARY KEY, created REAL NOT NULL, name TEXT NOT NULL, persona TEXT NOT NULL,
+                            goal TEXT NOT NULL, criteria TEXT NOT NULL, number TEXT NOT NULL DEFAULT '',
+                            source TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '');
+                        ALTER TABLE runs ADD COLUMN case_id TEXT;
+                        PRAGMA user_version = 2;
+                    """)
                 self._db = db
             return self._db
 
@@ -127,7 +140,7 @@ class EvalStore:
 
     # ------------------------------------------------------------------ runs
     def create(self, *, caller_agent: str, method: str, number: str, persona: str, goal: str,
-               criteria: list[str], max_minutes: int, by: str = "") -> dict:
+               criteria: list[str], max_minutes: int, by: str = "", case_id: str = "") -> dict:
         if method not in METHODS:
             raise EvalError("method is google_voice or speaker")
         number = normalize_number(number)
@@ -142,9 +155,9 @@ class EvalStore:
         with self._lock:
             self.db().execute(
                 "INSERT INTO runs (id, created, caller_agent, method, number, persona, goal, criteria, max_minutes, "
-                "status, by) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                "status, by, case_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (rid, time.time(), caller_agent, method, number, persona, goal, json.dumps(crit), minutes,
-                 "waiting", by))
+                 "waiting", by, case_id if CASE_ID.match(case_id or "") else None))
             self.db().commit()
         return self.get(rid)
 
@@ -193,6 +206,59 @@ class EvalStore:
         if brief:
             d.pop("transcript", None)
         return d
+
+    # ------------------------------------------------------------------ test cases
+    def save_cases(self, cases: list[dict], source: str = "") -> list[dict]:
+        """Keep test cases (from an imported script or typed in). Bad ones are refused as a whole."""
+        rows = []
+        for c in cases:
+            if not isinstance(c, dict):
+                raise EvalError("each test case is an object")
+            name = str(c.get("name") or "").strip()[:120]
+            persona, goal = str(c.get("persona") or "").strip()[:1500], str(c.get("goal") or "").strip()[:500]
+            if not name or not persona or not goal:
+                raise EvalError("each test case needs a name, who is calling, and what they want")
+            crit = [str(x).strip()[:300] for x in (c.get("criteria") or []) if str(x).strip()][:MAX_CRITERIA]
+            number = ""
+            if c.get("number"):
+                try:
+                    number = normalize_number(str(c["number"]))
+                except EvalError:
+                    number = ""
+            rows.append(("tc_" + secrets.token_urlsafe(12), time.time(), name, persona, goal, json.dumps(crit), number,
+                         str(source or c.get("source") or "")[:120], str(c.get("notes") or "")[:1000]))
+        with self._lock:
+            have = self.db().execute("SELECT COUNT(*) FROM cases").fetchone()[0]
+            if have + len(rows) > MAX_CASES:
+                raise EvalError(f"at most {MAX_CASES} test cases; delete some first")
+            self.db().executemany("INSERT INTO cases (id, created, name, persona, goal, criteria, number, source, notes) "
+                                  "VALUES (?,?,?,?,?,?,?,?,?)", rows)
+            self.db().commit()
+        return [self.case(r[0]) for r in rows]
+
+    def case(self, cid: str) -> dict | None:
+        if not CASE_ID.match(cid or ""):
+            return None
+        with self._lock:
+            row = self.db().execute("SELECT * FROM cases WHERE id = ?", (cid,)).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["criteria"] = json.loads(d["criteria"] or "[]")
+        return d
+
+    def cases(self) -> list[dict]:
+        with self._lock:
+            ids = [r[0] for r in self.db().execute("SELECT id FROM cases ORDER BY created, name").fetchall()]
+        return [c for c in (self.case(i) for i in ids) if c]
+
+    def delete_case(self, cid: str) -> bool:
+        if not CASE_ID.match(cid or ""):
+            return False
+        with self._lock:
+            n = self.db().execute("DELETE FROM cases WHERE id = ?", (cid,)).rowcount
+            self.db().commit()
+        return bool(n)
 
     # ------------------------------------------------------------------ bridge tokens
     def bridge_token(self, rid: str) -> str:
@@ -244,3 +310,76 @@ async def grade(llm, run: dict, said: list[dict]) -> dict:
 
 def verdict(results: dict) -> str:
     return "passed" if results.get("goal_met") and all(c["passed"] for c in results.get("criteria", [])) else "failed"
+
+
+# ---------------------------------------------------------------------- importing test scripts
+
+CONVERTER = """You turn test scripts for phone systems (IVR and voice-agent tests from tools like Hammer, Cyara,
+Botium, spreadsheets, or plain notes) into test cases for an AI test caller that phones the system and talks to it.
+
+For each test in the script, write one test case:
+- name: the test's own name or id, short.
+- persona: who the caller is and how they behave, plus exactly what to say or give at each point, in order
+  ("When asked for the account number, say 4 4 7 2 1. When asked to confirm, say yes."). Keep any data the script
+  uses as-is. Where the script presses keys (DTMF), tell the caller to say those digits instead.
+- goal: what the call is trying to get done, in a few words.
+- criteria: what must be true afterwards, one short check each, from the script's expected prompts and results
+  ("The system asks for the account number", "The system reads back a balance", "The call is transferred to an
+  agent"). Quote expected prompts loosely: say what the system should ask or say, not the exact recording.
+- number: the number dialed, if the script has one (with country code), else empty.
+- notes: anything the test caller can't do (keypad tones, waiting for a callback, checking a screen pop or a
+  database), in one sentence; else empty.
+
+Use only what the script says; don't invent tests. Reply with one JSON object and nothing else."""
+
+CONVERT_SCHEMA = {"type": "object", "additionalProperties": False, "required": ["cases"], "properties": {"cases": {
+    "type": "array", "items": {"type": "object", "additionalProperties": False,
+                               "required": ["name", "persona", "goal", "criteria", "number", "notes"],
+                               "properties": {"name": {"type": "string"}, "persona": {"type": "string"},
+                                              "goal": {"type": "string"},
+                                              "criteria": {"type": "array", "items": {"type": "string"}},
+                                              "number": {"type": "string"}, "notes": {"type": "string"}}}}}}
+
+
+def script_text(raw: bytes | str, filename: str = "") -> str:
+    """The text of an uploaded test script (text, CSV, XML, JSON); refuses binaries."""
+    if isinstance(raw, bytes):
+        if b"\x00" in raw[:4096]:
+            raise EvalError("that file isn't text: export the script as text, CSV, XML or JSON")
+        for enc in ("utf-8-sig", "utf-16", "latin-1"):
+            try:
+                raw = raw.decode(enc)
+                break
+            except UnicodeDecodeError:
+                continue
+    text = str(raw).strip()
+    if not text:
+        raise EvalError("the script is empty")
+    if len(text) > MAX_SCRIPT:
+        raise EvalError(f"the script is too long ({len(text):,} characters; at most {MAX_SCRIPT:,}): import it in parts")
+    return text
+
+
+async def convert_script(llm, text: str, filename: str = "") -> list[dict]:
+    """Test cases the model reads out of a test script. Nothing is saved; the person picks which to keep."""
+    from pipecat.processors.aggregators.llm_context import LLMContext
+
+    from .flow import parse_json_object
+
+    ask = (f"File: {filename}\n\n" if filename else "") + "Test script:\n" + text
+    ctx = LLMContext(messages=[{"role": "user", "content": ask}])
+    out = parse_json_object(await asyncio.wait_for(
+        llm.run_inference(ctx, max_tokens=8000, system_instruction=CONVERTER, response_schema=CONVERT_SCHEMA), 180)) or {}
+    cases = []
+    for c in out.get("cases") or []:
+        if not isinstance(c, dict):
+            continue
+        crit = [str(x).strip()[:300] for x in (c.get("criteria") or []) if isinstance(x, str) and x.strip()][:MAX_CRITERIA]
+        case = {"name": str(c.get("name") or "").strip()[:120], "persona": str(c.get("persona") or "").strip()[:1500],
+                "goal": str(c.get("goal") or "").strip()[:500], "criteria": crit,
+                "number": str(c.get("number") or "").strip()[:40], "notes": str(c.get("notes") or "").strip()[:1000]}
+        if case["name"] and case["persona"] and case["goal"]:
+            cases.append(case)
+    if not cases:
+        raise EvalError("no test cases could be read from that script")
+    return cases[:MAX_CASES]

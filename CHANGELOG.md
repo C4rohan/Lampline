@@ -4,11 +4,20 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 
 ## Unreleased (on dev)
 
+## v0.3.0
+
+Test real phone calls, graded: an Evals tab, test scripts that turn into test cases, and Google agents side by side.
+
+### Test real calls
 - **Evals** tab: real phone calls to a voice agent, played by a Test Caller and graded against a goal and pass criteria. Through Google Voice in Chrome or Edge, the new **Lampline Phone Bridge** extension connects the call's audio to the Test Caller inside the browser (no speakers or cables, Windows or Mac); or with a phone on speaker, choosing the microphone and speaker. Runs are kept with their transcripts ([docs/EVALS.md](docs/EVALS.md)).
+- Import test scripts from Hammer, Cyara, a spreadsheet or notes (text, CSV, XML or JSON): your model turns each test into a test case (what the caller says, and what has to happen), and you run any case as an eval. Keypad steps are said as digits ([docs/EVALS.md](docs/EVALS.md#import-test-scripts)).
 - Test a phone agent for free from your laptop: the new Test Caller template plays a caller with a persona and a goal through the laptop's speakers and mic, with your phone on speaker carrying the call ([docs/PHONE-TESTING.md](docs/PHONE-TESTING.md)). Start steps can wait for the other side to speak first.
 
-### Security and reliability (review of October 2026)
+### Test Google agents
+- `vk test --target dfcx|ces`: run the same test files against your live Dialogflow CX agent or CX Agent Studio app (text), or side by side with the engine (`--target engine,dfcx`).
+- `vk test` can let a model play the caller: describe who is calling and what they want (`caller:` in a test file), and the engine's model talks to your agent until the goal is met.
 
+### Security and reliability
 - Saving an agent can no longer write a prompt file outside its folder: step and transfer ids are checked, and file names are always slugs.
 - A remote save (`VPE_REMOTE_EDITING`) can't change where end steps transfer calls, what they send, or the agent's values those addresses use; and call context from the API trigger can't override the agent's own transfer or recipient addresses.
 - Outbound calls never ring twice: a contact is counted before the call, a timed-out request (the phone may be ringing) answers 504 and keeps the 10-minute guard, and the API trigger takes an `Idempotency-Key`. `dry_run` must be a real true/false.
@@ -18,8 +27,8 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 - A live conversation can be watched only by the key that started it (or an admin); phone and message conversations follow the call-history rule.
 - The public health check no longer shows setup details to callers without a key, and `/openapi.json` isn't served.
 
-- `vk test --target dfcx|ces`: run the same test files against your live Dialogflow CX agent or CX Agent Studio app (text), or side by side with the engine (`--target engine,dfcx`).
-- `vk test` can let a model play the caller: describe who is calling and what they want (`caller:` in a test file), and the engine's model talks to your agent until the goal is met.
+### Project
+- The committed web UI build has fixed file names, so two branches that both rebuild it conflict instead of quietly keeping both builds.
 
 ## v0.2.0
 

@@ -57,6 +57,32 @@ runs, is coming next.
    A call where the Test Caller heard nothing shows **Didn't run** instead, so
    a bad connection never counts as a failed agent.
 
+## Import test scripts
+
+Already have IVR or voice tests in **Hammer**, **Cyara**, a spreadsheet or a
+document? Bring them in instead of typing each one.
+
+1. In **Evals → Test cases**, press **Import test scripts**.
+2. Paste the script, or choose a file exported as text, CSV, XML or JSON (up to
+   120,000 characters at a time; split bigger exports).
+3. Press **Convert to test cases**. Your model reads each test and writes a
+   case: who the caller is and what to say at each point, what they want, and
+   the checks (from the expected prompts and results). Nothing is saved yet.
+4. Untick any you don't want, and press **Save**.
+5. Press **Use** on a case to fill in the eval, check the number, and **Start
+   eval**. The run is linked to its case.
+
+Good to know:
+- **Keypad steps (DTMF)** become spoken digits: the Test Caller says "4 4 7 2 1"
+  where the script pressed keys. That works for menus that accept speech; a
+  case shows a note when the script relies on keys or on things a caller
+  can't see (a callback, a screen pop, a database).
+- Expected prompts become checks in plain words ("The system asks for the
+  account number"), graded against what was actually said, so a reworded
+  recording still passes.
+- The script goes to your model like any other request. Use made-up test data,
+  never real customers' details.
+
 ## What the extension does, and doesn't
 
 - It only acts in a Google Voice tab that Lampline itself opened for an eval.
@@ -81,7 +107,9 @@ runs, is coming next.
 
 ## For developers
 
-- API: `POST /v1/evals`, `GET /v1/evals`, `GET /v1/evals/{id}`,
+- API: `GET /v1/evals/cases`, `POST /v1/evals/cases` (save `{cases, source}`),
+  `POST /v1/evals/cases/convert` (`{text, filename}` → cases, nothing saved),
+  `DELETE /v1/evals/cases/{id}`, `POST /v1/evals`, `GET /v1/evals`, `GET /v1/evals/{id}`,
   `POST /v1/evals/{id}/offer` (phone on speaker), `POST /v1/evals/{id}/stop`,
   `DELETE /v1/evals/{id}`, and `POST /v1/evals/bridge/offer` (the extension,
   with its one-call token in `X-Lampline-Bridge`). See
