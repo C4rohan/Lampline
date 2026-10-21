@@ -74,7 +74,8 @@ def _prompt_filenames(nodes: list[dict]) -> dict[str, str]:
     names: dict[str, str] = {}
     for node in nodes:
         data = node.get("data") or {}
-        base = slugify(data.get("name") or "", fallback=f"node-{node.get('id')}")
+        # The fallback is slugified too: a node id is client input and must never become a path.
+        base = slugify(data.get("name") or "", fallback="node-" + slugify(str(node.get("id") or ""), fallback="step"))
         candidate, n = base, 2
         while candidate in used:
             candidate = f"{base}-{n}"
@@ -192,8 +193,11 @@ def write(agent: Agent, folder: str | Path) -> list[str]:
         for stale in prompts.glob("*.md"):
             if f"{PROMPTS_DIR}/{stale.name}" not in files:
                 stale.unlink()
+    base = root.resolve()
     for rel, text in files.items():
         path = root / rel
+        if not path.resolve().is_relative_to(base):          # defense in depth: never write outside the folder
+            raise FolderError(f"refusing to write {rel!r} outside the agent folder")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
     return list(files)

@@ -195,3 +195,15 @@ async def test_a_model_plays_the_caller(c):
     assert set(out) == {"line", "done"} and isinstance(out["done"], bool)
     assert (await c.post("/v1/tests/caller", json={"persona": ""})).status_code == 422
     assert (await c.post("/v1/tests/caller", json={"persona": "Sam", "transcript": "nope"})).status_code == 422
+
+
+async def test_listen_first_waits_for_the_other_side(c):
+    """The Test Caller template says nothing until the agent it called speaks, then answers as the caller."""
+    a = (await c.post("/v1/agents", json={"name": "My test caller", "template": "test-caller"})).json()
+    r = (await c.post("/v1/chat/sessions", json={"agent": a["slug"]})).json()
+    assert not [e for e in r["events"] if e["type"] == "bot_speech"]           # silent until it hears something
+    assert r["current_step"] in ("caller", "Caller") or any(e.get("node_name") == "Caller" for e in r["events"])
+    r = (await c.post(f"/v1/chat/sessions/{r['session_id']}/messages",
+                      json={"text": "Thanks for calling Riverside Dental. How can I help?"})).json()
+    assert [e for e in r["events"] if e["type"] == "bot_speech"]                # now it answers
+    await c.post(f"/v1/chat/sessions/{r['session_id']}/end")

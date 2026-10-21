@@ -38,6 +38,7 @@ from vk.tools import TEMPLATE
 from . import jambonz
 from .connectors import ConnectorError, Incoming, normalize_email, normalize_phone
 from .graph import render
+from .transfer import routing_values
 from .services import make_llm
 
 if TYPE_CHECKING:
@@ -342,7 +343,7 @@ class Automations:
                                          need_summary=any("summary" in json.dumps(j[1]) for j in jobs))
         results = []
         for tid, send in jobs:
-            results.append(await self._send(slug, tid, send, values))
+            results.append(await self._send(slug, tid, send, values, constants=session.graph.context))
         return results
 
     async def _call_values(self, session, meta: dict, ended: dict, variables: dict, need_summary: bool) -> dict:
@@ -377,12 +378,14 @@ class Automations:
             log.info("summary failed: %s", exc)
             return ""
 
-    async def _send(self, slug: str, tid: str, send: dict, values: dict, dry_run: bool = False) -> dict:
+    async def _send(self, slug: str, tid: str, send: dict, values: dict, dry_run: bool = False,
+                    constants: dict | None = None) -> dict:
         via = send.get("via")
         try:
             if via in ("webhook", "webhook-node"):
                 return await self._webhook(slug, tid, send, values, dry_run)
-            to = render(str(send.get("to") or ""), values).strip()
+            to_template = str(send.get("to") or "")
+            to = render(to_template, routing_values(to_template, values, constants)).strip()
             text = render(str(send.get("text") or ""), values).strip()
             subject = render(str(send.get("subject") or f"From {values.get('agent', '')}"), values).strip()
             if not to:
@@ -472,13 +475,24 @@ class Automations:
         if time.time() - last < RECIPIENT_GAP:
             raise OutboundRefused("this person was contacted by this agent in the last 10 minutes")
 
-    def _count(self, slug: str, contact: str) -> None:
-        """Only contacts that went out count toward the limits."""
+    def _count(self, slug: str, contact: str) -> float:
+        """Claim a contact toward the limits. Called right after the check, before anything is awaited, so two
+        requests at once can't both pass; released again only when the provider certainly didn't place it."""
         counts = self.state.setdefault("counts", {})
         counts[slug] = counts.get(slug, 0) + 1
         last = self.state.setdefault("last_contact", {})
-        last[f"{slug}|{contact}"] = time.time()
-        self.state["last_contact"] = {k: v for k, v in last.items() if time.time() - v < 86400}
+        now = time.time()
+        last[f"{slug}|{contact}"] = now
+        self.state["last_contact"] = {k: v for k, v in last.items() if now - v < 86400}
+        return now
+
+    def _release(self, slug: str, contact: str, claimed: float) -> None:
+        counts = self.state.setdefault("counts", {})
+        if counts.get(slug, 0) > 0:
+            counts[slug] -= 1
+        last = self.state.setdefault("last_contact", {})
+        if last.get(f"{slug}|{contact}") == claimed:
+            last.pop(f"{slug}|{contact}", None)
 
     async def outbound(self, slug: str, action: str, to: str, *, channel: str = "", context: dict | None = None,
                        text: str = "", source: str = "api", dry_run: bool = False) -> dict:
@@ -501,25 +515,41 @@ class Automations:
             if dry_run:
                 return self.record(slug, source, what, True, "would start" + (f" with: {render(text, context)[:150]}" if text else ""),
                                    contact, dry_run=True)
+            claimed = self._count(slug, contact)
             if action == "call":
-                detail = await self._call(slug, contact, context)
-                self._count(slug, contact)
+                try:
+                    detail = await self._call(slug, contact, context)
+                except (httpx.TimeoutException, httpx.TransportError):
+                    # The request may have reached the provider: the phone may be ringing. Keep the claim so a
+                    # retry within 10 minutes is refused instead of calling the person twice.
+                    log.warning("outbound call to %s: no answer from the phone provider; outcome unknown", slug)
+                    rec = self.record(slug, source, what, False, "the phone provider didn't answer in time: the call "
+                                      "may still ring. Not retried; this person can't be called again for 10 minutes.",
+                                      contact)
+                    return {**rec, "unknown": True}
+                except BaseException:
+                    self._release(slug, contact, claimed)
+                    raise
                 return self.record(slug, source, what, True, detail, contact)
-            conv, opening = await self._open(slug, channel, contact, {**context, "channel": channel, "contact": contact,
-                                                                      **({"caller_phone": contact} if channel == "whatsapp" else {}),
-                                                                      **({"caller_email": contact} if channel == "email" else {})},
-                                             source)
-            first = render(text, conv.session.flow.variables).strip() if text else "\n\n".join(opening)
-            if text:
-                conv.session.context.add_message({"role": "assistant", "content": first})
-            await self.engine.connectors.reply(channel, contact, first or "Hello!")
-            self._count(slug, contact)
+            try:
+                conv, opening = await self._open(slug, channel, contact, {**context, "channel": channel, "contact": contact,
+                                                                          **({"caller_phone": contact} if channel == "whatsapp" else {}),
+                                                                          **({"caller_email": contact} if channel == "email" else {})},
+                                                 source)
+                first = render(text, conv.session.flow.variables).strip() if text else "\n\n".join(opening)
+                if text:
+                    conv.session.context.add_message({"role": "assistant", "content": first})
+                await self.engine.connectors.reply(channel, contact, first or "Hello!")
+            except BaseException:
+                self._release(slug, contact, claimed)
+                raise
             return self.record(slug, source, what, True, "", contact)
         except (OutboundRefused, ConnectorError, ValueError) as exc:
             return self.record(slug, source, what, False, str(exc), to, dry_run=dry_run)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - the details go to the log, not to whoever called the API
             log.exception("outbound failed")
-            return self.record(slug, source, what, False, f"{exc.__class__.__name__}: {exc}", to, dry_run=dry_run)
+            return self.record(slug, source, what, False, f"unexpected error ({exc.__class__.__name__}); see the engine log",
+                               to, dry_run=dry_run)
 
     async def _call(self, slug: str, number: str, context: dict) -> str:
         e, c = self.engine, self.engine.cfg
@@ -558,8 +588,10 @@ class Automations:
                          "or jambonz (API key, account and application SIDs, number)")
 
     def take_context(self, token: str) -> dict:
-        ctx, expiry = self.contexts.pop(token or "", ({}, 0))
-        return ctx if expiry > time.time() else {}
+        """The context an outbound call was started with. Kept until it expires (10 minutes), so a redelivered
+        voice webhook still gets it; the webhook itself is signature-checked."""
+        ctx, expiry = self.contexts.get(token or "", ({}, 0))
+        return dict(ctx) if expiry > time.time() else {}
 
     # ------------------------------------------------------------------ schedules and the API trigger
 

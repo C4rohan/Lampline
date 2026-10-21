@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { AudioLines, GitBranch, MessageSquare, Mic, PhoneOff, Send, Timer, Wrench } from "lucide-react";
-import { api, auth, STT_LABEL, TTS_LABEL, type AgentSummary } from "@/lib/api";
+import { api, STT_LABEL, TTS_LABEL, type AgentSummary } from "@/lib/api";
 import { useApp, useLoad } from "@/lib/app";
 import { cn, local } from "@/lib/utils";
 import { Page } from "@/components/shell";
@@ -169,11 +169,11 @@ export function TestCall({ params }: { params: URLSearchParams }) {
         await pc.setLocalDescription(await pc.createOffer());
         await waitIce(pc);
         setStatus("Connecting…");
-        const ans = await api<{ sdp: string; type: RTCSdpType; session_id: string }>("POST", "/v1/calls/webrtc/offer",
+        const ans = await api<{ sdp: string; type: RTCSdpType; session_id: string; events_token: string }>("POST", "/v1/calls/webrtc/offer",
           { agent, sdp: pc.localDescription!.sdp, type: pc.localDescription!.type, mock_tools: mock });
         await pc.setRemoteDescription({ sdp: ans.sdp, type: ans.type });
         rt.current.session = ans.session_id; setSession(ans.session_id);
-        const es = new EventSource(`/v1/sessions/${ans.session_id}/events${auth.key ? `?key=${encodeURIComponent(auth.key)}` : ""}`);
+        const es = new EventSource(`/v1/sessions/${ans.session_id}/events?token=${encodeURIComponent(ans.events_token)}`);
         es.onmessage = (m) => onEvent(JSON.parse(m.data));
         rt.current.es = es;
         const ctx = new AudioContext(); const an = ctx.createAnalyser(); an.fftSize = 256;

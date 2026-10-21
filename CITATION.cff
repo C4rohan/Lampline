@@ -12,8 +12,8 @@ authors:
     given-names: Rohan
 repository-code: "https://github.com/C4rohan/lampline"
 license: Apache-2.0
-version: 0.2.0
-date-released: 2026-10-20
+version: 0.3.0
+date-released: 2026-10-21
 keywords:
   - voice agents
   - conversational AI

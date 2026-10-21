@@ -40,6 +40,7 @@ GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me"
 TELEGRAM = "https://api.telegram.org"
 GRAPH = "https://graph.facebook.com/v21.0"
 DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+_WHATSAPP_SEEN: dict[str, float] = {}     # WhatsApp message ids already handled (Meta redelivers)
 
 
 class ConnectorError(RuntimeError):
@@ -487,15 +488,35 @@ class Connectors:
 
     @staticmethod
     def whatsapp_messages(payload: dict) -> list[Incoming]:
+        """Text messages in a WhatsApp webhook. Anything shaped differently is skipped, not an error (Meta would
+        keep redelivering it), and a message delivered twice is answered once."""
+        def items(value: Any, key: str) -> list[dict]:
+            got = value.get(key) if isinstance(value, dict) else None
+            return [x for x in got if isinstance(x, dict)] if isinstance(got, list) else []
+
         out = []
-        for entry in payload.get("entry") or []:
-            for change in entry.get("changes") or []:
-                value = change.get("value") or {}
-                names = {c.get("wa_id"): (c.get("profile") or {}).get("name", "") for c in value.get("contacts") or []}
-                for m in value.get("messages") or []:
-                    if m.get("type") == "text" and (m.get("text") or {}).get("body"):
-                        out.append(Incoming("whatsapp", "+" + str(m.get("from", "")).lstrip("+"), m["text"]["body"],
-                                            names.get(m.get("from"), "")))
+        now = time.monotonic()
+        for k in [k for k, seen in _WHATSAPP_SEEN.items() if now - seen > 3600]:
+            del _WHATSAPP_SEEN[k]
+        for entry in items(payload, "entry"):
+            for change in items(entry, "changes"):
+                value = change.get("value") if isinstance(change.get("value"), dict) else {}
+                names = {c.get("wa_id"): str((c.get("profile") if isinstance(c.get("profile"), dict) else {}).get("name", ""))
+                         for c in items(value, "contacts")}
+                for m in items(value, "messages"):
+                    text = m.get("text") if isinstance(m.get("text"), dict) else {}
+                    body = text.get("body")
+                    if m.get("type") != "text" or not isinstance(body, str) or not body:
+                        continue
+                    mid = str(m.get("id") or "")
+                    if mid:
+                        if mid in _WHATSAPP_SEEN:
+                            continue
+                        _WHATSAPP_SEEN[mid] = now
+                        while len(_WHATSAPP_SEEN) > 10000:
+                            _WHATSAPP_SEEN.pop(next(iter(_WHATSAPP_SEEN)))
+                    out.append(Incoming("whatsapp", "+" + str(m.get("from", "")).lstrip("+"), body,
+                                        names.get(m.get("from"), "")))
         return out
 
     # ------------------------------------------------------------------ "Test connection"

@@ -115,21 +115,34 @@ class Transfer:
         return body
 
 
-def build(step, variables: dict[str, Any], session_id: str, render, collected: list[str] | None = None) -> Transfer | None:
+def routing_values(template: str, variables: dict[str, Any], constants: dict[str, Any] | None) -> dict[str, Any]:
+    """Values for an address (a transfer target, a message recipient): a name the agent itself sets keeps the
+    agent's value, so call context from an API trigger or a caller can't reroute it."""
+    values = dict(variables)
+    for name in re.findall(r"\{\{\s*([A-Za-z_]\w*)\s*\}\}", template or ""):
+        if constants and constants.get(name) not in (None, ""):
+            values[name] = constants[name]
+    return values
+
+
+def build(step, variables: dict[str, Any], session_id: str, render, collected: list[str] | None = None,
+          constants: dict[str, Any] | None = None) -> Transfer | None:
     """The transfer an end step asks for, or None. Raises ValueError for an address that can't be dialled.
 
     collected: the details this call gathered (not the agent's own constants), sent when the
     step doesn't list which details to send.
+    constants: the agent's own values; they win over call context inside the address.
     """
     raw = str(step.data.get("transfer_to") or "").strip() if step.kind == "end" else ""
     if not raw:
         return None
+    address_values = routing_values(raw, variables, constants)
     if re.fullmatch(r"\{\{\s*[A-Za-z_]\w*\s*\}\}", raw):
-        to = render(raw, variables).strip()          # the whole address from one variable (a lookup): checked below
+        to = render(raw, address_values).strip()     # the whole address from one variable (a lookup): checked below
     else:
         # A variable inside an address ("sip:{{extension}}@pbx...") is filled with address characters only, so a
         # value the caller influenced can't add SIP parameters or headers (;transport=, ?X-...=) or another host.
-        to = render(raw, {k: TARGET_UNSAFE.sub("", str(v)) for k, v in variables.items()}).strip()
+        to = render(raw, {k: TARGET_UNSAFE.sub("", str(v)) for k, v in address_values.items()}).strip()
     if not valid_target(to):
         raise ValueError(f"{step.name}: “{to}” isn't a phone number like +15551234567 or a SIP address like sip:desk@pbx.example.com")
     wanted = step.data.get("transfer_details")
@@ -153,10 +166,14 @@ class PendingTransfers:
             self._expire()
             self._items[call_id] = (transfer, self._now() + self._ttl)
 
-    def pop(self, call_id: str | None) -> Transfer | None:
+    def get(self, call_id: str | None) -> Transfer | None:
+        """The pending transfer, kept until it expires: carriers redeliver webhooks, and a second delivery
+        must connect the caller too rather than hang up."""
         self._expire()
-        item = self._items.pop(call_id or "", None)
+        item = self._items.get(call_id or "")
         return item[0] if item else None
+
+    pop = get           # the old name; nothing is removed early any more
 
     def _expire(self) -> None:
         now = self._now()

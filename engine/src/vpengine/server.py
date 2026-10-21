@@ -29,12 +29,14 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import hmac
 import html
 import json
 import logging
 import os
 import re
+import secrets as _secrets
 import sys
 import time
 from contextlib import asynccontextmanager
@@ -56,6 +58,7 @@ from .automation import Automations
 from .embed import Download as EmbedDownload, Embedder, MINILM
 from . import keys as keys_module
 from .history import CallHistory
+from . import evals as evals_module
 from .library import KINDS, Library, LibraryError
 from .connectors import ConnectorError, Connectors
 from .graph import Graph
@@ -160,6 +163,8 @@ class Engine:
         self.connectors = Connectors(cfg, save=self._save_settings)
         self.library = Library(data_dir, self._embedder(cfg))          # records and knowledge, opened on first use
         self.history = CallHistory(self.library.folder)                 # finished calls, next to records
+        self.evals = evals_module.EvalStore(self.library.folder)         # eval runs, next to the calls
+        self.eval_live: dict[str, Session] = {}                          # run id -> its conversation, while live
         self.keys = keys_module.KeyStore(store.path.parent / "keys.json" if store else None)   # named keys and roles
         self.connectors.library = self.library
         self.embed_download = EmbedDownload()
@@ -361,6 +366,50 @@ class Engine:
             await self._webrtc.close()
         self.library.close()
         self.history.close()
+        self.evals.close()
+
+
+TRANSFER_FIELDS = ("transfer_to", "transfer_details", "transfer_uui")
+PROXY_HEADERS = ("cf-connecting-ip", "x-forwarded-for", "forwarded", "x-real-ip", "x-forwarded-host", "via")
+LOCAL_NAMES = ("127.0.0.1", "::1", "localhost", "testclient", "testserver")
+BRIDGE_PATH = "/v1/evals/bridge/offer"   # the browser extension's own origin; a one-call token instead of a key
+EVENTS_PATH = re.compile(r"/v1/sessions/([A-Za-z0-9_-]{1,64})/events")
+
+
+def _flag(value: Any, *, default: bool) -> bool:
+    """A JSON true/false. Strings like "false" are refused rather than read as true."""
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    raise HTTPException(422, "dry_run must be true or false")
+
+
+class IdempotencyKeys:
+    """Results of state-changing API requests by their Idempotency-Key, for a day, so a retry gets the first
+    answer instead of a second call."""
+
+    TTL = 86400.0
+    MAX = 5000
+
+    def __init__(self):
+        self._items: dict[str, tuple[float, dict]] = {}
+
+    def get(self, key: str) -> dict | None:
+        now = time.time()
+        item = self._items.get(key)
+        return item[1] if item and item[0] > now else None
+
+    def put(self, key: str, value: dict) -> None:
+        now = time.time()
+        if len(self._items) >= self.MAX:
+            self._items = {k: v for k, v in self._items.items() if v[0] > now}
+            while len(self._items) >= self.MAX:
+                self._items.pop(next(iter(self._items)))
+        self._items[key] = (now + self.TTL, value)
+
+    def drop(self, key: str) -> None:
+        self._items.pop(key, None)
 
 
 def chat_payload(session: Session, events: list[dict]) -> dict:
@@ -396,7 +445,8 @@ def create_app(engine: Engine) -> FastAPI:
         await engine.automations.stop()
         await engine.shutdown()
 
-    app = FastAPI(title="Voice engine", version=__version__, docs_url=None, redoc_url=None, lifespan=lifespan)
+    app = FastAPI(title="Voice engine", version=__version__, docs_url=None, redoc_url=None, openapi_url=None,
+                  lifespan=lifespan)
 
     def require_key(request: Request) -> None:
         """The owner key (VPE_API_KEY) or a named key; a named key's role limits what it may change."""
@@ -404,8 +454,17 @@ def create_app(engine: Engine) -> FastAPI:
         if not engine.api_key:
             return
         given = request.headers.get("x-api-key") or ""
-        if not given and request.method == "GET" and request.url.path.endswith("/events"):
-            given = request.query_params.get("key") or ""      # EventSource can't send headers
+        m = EVENTS_PATH.fullmatch(request.url.path)
+        if not given and request.method == "GET" and m and request.query_params.get("token"):
+            # EventSource can't send headers: it gets a token for this one session instead of the API key,
+            # so no key ever sits in a URL (proxy access logs keep URLs).
+            s = engine.sessions.get(m.group(1))
+            want = str((getattr(s, "meta", None) or {}).get("events_token") or "") if s is not None else ""
+            if want and hmac.compare_digest(request.query_params["token"].encode(), want.encode()):
+                request.state.who = (s.meta or {}).get("by") or keys_module.describe(None)
+                request.state.events_token = True
+                return
+            raise HTTPException(401, "missing or wrong events token")
         if hmac.compare_digest(given.encode(), engine.api_key.encode()):
             return
         rec = engine.keys.match(given)
@@ -416,6 +475,7 @@ def create_app(engine: Engine) -> FastAPI:
             raise HTTPException(403, f"your key ({rec['name']}) is a {rec['role']} key, which can't do this; ask an admin")
 
     auth = [Depends(require_key)]
+    idempotent = IdempotencyKeys()
 
     @app.middleware("http")
     async def same_site_only(request: Request, call_next):
@@ -425,10 +485,12 @@ def create_app(engine: Engine) -> FastAPI:
         if host not in engine.allowed_hosts():
             return JSONResponse({"detail": "unknown host"}, status_code=421)
         origin = request.headers.get("origin")
-        if origin and request.method not in ("GET", "HEAD", "OPTIONS"):
+        if origin and request.method not in ("GET", "HEAD", "OPTIONS") and request.url.path != BRIDGE_PATH:
             if urlsplit(origin).netloc.lower() != (request.headers.get("host") or "").lower():
                 return JSONResponse({"detail": "cross-site request refused"}, status_code=403)
         response = await call_next(request)
+        if request.url.path.startswith("/static/"):
+            response.headers.setdefault("Cache-Control", "no-cache")   # file names don't change between versions
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("Referrer-Policy", "no-referrer")
@@ -478,10 +540,19 @@ def create_app(engine: Engine) -> FastAPI:
     async def call_page():
         return RedirectResponse("/#/test")
 
+    def _signed_in(request: Request) -> bool:
+        if not engine.api_key:
+            return True
+        given = request.headers.get("x-api-key") or ""
+        return hmac.compare_digest(given.encode(), engine.api_key.encode()) or engine.keys.match(given) is not None
+
     @app.get("/v1/health")
-    async def health():
-        return {"ok": True, "version": __version__, "auth_required": bool(engine.api_key), "container": engine.container,
-                "brand": (engine.cfg.brand_name or "Lampline")[:32],
+    async def health(request: Request):
+        basic = {"ok": True, "version": __version__, "auth_required": bool(engine.api_key), "container": engine.container,
+                 "brand": (engine.cfg.brand_name or "Lampline")[:32]}
+        if not _signed_in(request):
+            return basic                 # anyone who can reach the address: no setup details
+        return {**basic,
                 "phone_webhook": f"{engine.public_url}/v1/twilio/voice" if engine.public_url else None,
                 "telnyx_webhook": f"{engine.public_url}/v1/telnyx/voice" if engine.public_url else None,
                 "jambonz_webhook": f"{engine.public_url}/v1/jambonz/call" if engine.public_url else None,
@@ -491,17 +562,23 @@ def create_app(engine: Engine) -> FastAPI:
     # -- integrations --------------------------------------------------------
 
     def _is_local(request: Request) -> bool:
-        """A browser or script on this computer, not through the tunnel or the network."""
-        proxied = any(request.headers.get(h) for h in ("cf-connecting-ip", "x-forwarded-for", "forwarded"))
-        if proxied:
+        """A browser or script on this computer, not through the tunnel or the network.
+
+        Fails closed: any proxy header, or a Host that isn't this computer's own name, means "not local". A proxy
+        can still rewrite Host and send no forwarding header (a bare nginx proxy_pass, an SSH tunnel), so once the
+        engine has a public address or runs in Docker, a local-only change also needs the owner key."""
+        if any(request.headers.get(h) for h in PROXY_HEADERS):
             return False
-        host = request.client.host if request.client else ""
-        if host in ("127.0.0.1", "::1", "localhost", "testclient"):
-            return True
-        if engine.container and engine.api_key:      # Docker: the port mapping hides the address; the key doesn't
+        named = urlsplit("//" + (request.headers.get("host") or "")).hostname or ""
+        if named not in LOCAL_NAMES:
+            return False
+        client = request.client.host if request.client else ""
+        if client not in LOCAL_NAMES and not (engine.container and engine.api_key):
+            return False                                 # Docker's port mapping hides the address; the key doesn't
+        if (engine.container or engine.public_url) and engine.api_key:
             given = request.headers.get("x-api-key") or ""
             return hmac.compare_digest(given.encode(), engine.api_key.encode())
-        return False
+        return True
 
     def _local_only(request: Request) -> None:
         if engine.remote_editing and not keys_module.always_local(request.method, request.url.path):
@@ -639,11 +716,19 @@ def create_app(engine: Engine) -> FastAPI:
             raise HTTPException(422, str(exc)) from exc
 
     def _reach(doc: dict) -> str:
-        """What in an agent can use your secrets or contact people: tools, triggers, and webhook/trigger nodes."""
-        nodes = [n for n in ((doc.get("definition") or {}).get("nodes") or [])
-                 if isinstance(n, dict) and n.get("type") in ("trigger", "webhook", "qa")]
-        return json.dumps({"tools": doc.get("tools") or [], "triggers": doc.get("triggers") or [], "nodes": nodes},
-                          sort_keys=True, default=str)
+        """What in an agent can use your secrets or contact people: tools, triggers, webhook/trigger nodes, where
+        end steps transfer calls (and what they send), and the agent's own values those addresses use."""
+        all_nodes = [n for n in ((doc.get("definition") or {}).get("nodes") or []) if isinstance(n, dict)]
+        nodes = [n for n in all_nodes if n.get("type") in ("trigger", "webhook", "qa")]
+        transfers = sorted((str(n.get("id")), {k: (n.get("data") or {}).get(k) for k in TRANSFER_FIELDS})
+                           for n in all_nodes if n.get("type") == "endCall" and isinstance(n.get("data"), dict)
+                           and any((n.get("data") or {}).get(k) for k in TRANSFER_FIELDS))
+        reach = {"tools": doc.get("tools") or [], "triggers": doc.get("triggers") or [], "nodes": nodes,
+                 "transfers": transfers}
+        used = set(re.findall(r"\{\{\s*([A-Za-z_]\w*)\s*\}\}", json.dumps(reach, default=str)))
+        constants = doc.get("context_variables") or {}
+        reach["values"] = {k: constants.get(k) for k in sorted(used) if isinstance(constants, dict) and k in constants}
+        return json.dumps(reach, sort_keys=True, default=str)
 
     def _same_reach(folder: Path, body: dict) -> None:
         """Saved from elsewhere (VPE_REMOTE_EDITING): steps, prompts and data may change, but not what can use
@@ -952,24 +1037,45 @@ def create_app(engine: Engine) -> FastAPI:
         # Tools sent inline by someone not on this computer never see your secrets and never call out.
         trusted = not body.tools or _is_local(request)
         session = engine.new_text(graph, body.context, mock_tools=body.mock_tools or not trusted, trusted=trusted,
-                                  meta={"agent": body.agent, "channel": "web"} if body.agent else None)
+                                  meta={**({"agent": body.agent, "channel": "web"} if body.agent else {}),
+                                        **_owned(request)})
         async with engine.locks[session.id]:
             try:
                 events = await session.open()
             except Exception as exc:  # noqa: BLE001
                 await session.close()
                 raise HTTPException(502, f"could not start: {exc}") from exc
-        return chat_payload(session, events)
+        return {**chat_payload(session, events), "events_token": session.meta["events_token"]}
 
-    def _text(sid: str) -> TextSession:
+    def _owned(request: Request) -> dict:
+        """Who started a conversation (it's theirs to watch), and a token for its live events."""
+        return {"by": getattr(request.state, "who", None) or keys_module.describe(None),
+                "events_token": _secrets.token_urlsafe(18)}
+
+    def _session(sid: str, request: Request) -> Session:
+        """A live conversation, for the key that started it (or an admin). Phone and message conversations
+        carry callers' details, like call history: this computer only (or VPE_REMOTE_EDITING)."""
         s = engine.get(sid)
+        if getattr(request.state, "events_token", False):
+            return s                                   # the token was checked against this very session
+        who = getattr(request.state, "who", None) or keys_module.describe(None)
+        by = (s.meta or {}).get("by")
+        if by is None:
+            _local_only(request)
+            return s
+        if who.get("role") != "admin" and who.get("name") != by.get("name"):
+            raise HTTPException(403, "this conversation was started by someone else")
+        return s
+
+    def _text(sid: str, request: Request) -> TextSession:
+        s = _session(sid, request)
         if not isinstance(s, TextSession):
             raise HTTPException(400, "not a text chat session")
         return s
 
     @app.post("/v1/chat/sessions/{sid}/messages", dependencies=auth)
-    async def chat_send(sid: str, body: ChatMessage):
-        s = _text(sid)
+    async def chat_send(sid: str, body: ChatMessage, request: Request):
+        s = _text(sid, request)
         async with engine.locks[sid]:
             if s.flow.ended:
                 raise HTTPException(409, "the conversation has ended")
@@ -977,21 +1083,21 @@ def create_app(engine: Engine) -> FastAPI:
         return chat_payload(s, events)
 
     @app.post("/v1/chat/sessions/{sid}/end", dependencies=auth)
-    async def chat_end(sid: str):
-        s = _text(sid)
+    async def chat_end(sid: str, request: Request):
+        s = _text(sid, request)
         if not s.flow.ended:
             await s.flow.finish("ended by client")
         await s.close()
         return chat_payload(s, [])
 
     @app.get("/v1/sessions/{sid}", dependencies=auth)
-    async def session_info(sid: str):
-        s = engine.get(sid)
+    async def session_info(sid: str, request: Request):
+        s = _session(sid, request)
         return {**s.summary(), "events": s.events}
 
     @app.get("/v1/sessions/{sid}/events", dependencies=auth)
     async def session_events(sid: str, request: Request):
-        s = engine.get(sid)
+        s = _session(sid, request)
         queue: asyncio.Queue = asyncio.Queue()
         backlog = list(s.events)
         unsubscribe = s.subscribe(queue.put_nowait)
@@ -1000,6 +1106,8 @@ def create_app(engine: Engine) -> FastAPI:
             try:
                 for e in backlog:
                     yield f"data: {json.dumps(e)}\n\n"
+                if s.finished.is_set() and queue.empty():
+                    return                                 # an ended conversation: the backlog is all there is
                 while True:
                     if await request.is_disconnected():
                         break
@@ -1021,19 +1129,19 @@ def create_app(engine: Engine) -> FastAPI:
 
     # -- browser calls (WebRTC) ----------------------------------------------
 
-    @app.post("/v1/calls/webrtc/offer", dependencies=auth)
-    async def webrtc_offer(body: WebRTCOffer):
+    async def _webrtc(graph, agent: str | None, sdp: str, type_: str, pc_id: str | None, restart_pc: bool | None,
+                      variables: dict, meta: dict, mock_tools: bool = False, on_session=None) -> tuple[dict, Session | None]:
+        """Answer a browser's WebRTC offer with a voice conversation (or renegotiate an existing one)."""
         from pipecat.transports.base_transport import TransportParams
         from pipecat.transports.smallwebrtc.request_handler import SmallWebRTCRequest
         from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 
-        graph = engine.load_agent(body.agent) if not body.pc_id else None
         s2s = engine.speech_to_speech(graph)[0]
         if not engine.voice_ready and not s2s:
             raise HTTPException(503, "voice calls need speech set up in Integrations (text chat works without it)")
         if not engine.llm_ready and not s2s:
             raise HTTPException(503, "no model key set: add one in Integrations")
-        if engine.speech_factory is None and not body.pc_id and not s2s:
+        if engine.speech_factory is None and not pc_id and not s2s:
             problem = await local_speech_problem(engine.cfg)
             if problem:
                 raise HTTPException(503, problem)
@@ -1046,10 +1154,11 @@ def create_app(engine: Engine) -> FastAPI:
                                                                          audio_out_enabled=True))
             stt, tts = engine.speech_factory() if engine.speech_factory else (None, None)
             session = engine.add(engine.voice_session(graph, transport, autostart=False, stt=stt, tts=tts,
-                                              variables=body.context, llm=engine._make_llm(),
-                                              tools=engine.tool_runner(mock=body.mock_tools),
-                                              meta={"agent": body.agent, "channel": "web"}))
+                                              variables=variables, llm=engine._make_llm(),
+                                              tools=engine.tool_runner(mock=mock_tools), meta=meta))
             holder["s"] = session
+            if on_session is not None:
+                on_session(session)
 
             @transport.event_handler("on_client_connected")
             async def _connected(t, client):
@@ -1063,14 +1172,21 @@ def create_app(engine: Engine) -> FastAPI:
 
         try:
             answer = await engine.webrtc.handle_web_request(
-                SmallWebRTCRequest(sdp=body.sdp, type=body.type, pc_id=body.pc_id, restart_pc=body.restart_pc),
-                on_connection)
+                SmallWebRTCRequest(sdp=sdp, type=type_, pc_id=pc_id, restart_pc=restart_pc), on_connection)
         except ConfigError as exc:
             raise HTTPException(503, str(exc)) from exc
         if graph is not None and "s" not in holder:
             raise HTTPException(500, "the call could not be set up; see the engine log")
-        if "s" in holder:
-            answer = {**answer, "session_id": holder["s"].id}
+        return answer, holder.get("s")
+
+    @app.post("/v1/calls/webrtc/offer", dependencies=auth)
+    async def webrtc_offer(body: WebRTCOffer, request: Request):
+        graph = engine.load_agent(body.agent) if not body.pc_id else None
+        owner = _owned(request)
+        answer, session = await _webrtc(graph, body.agent, body.sdp, body.type, body.pc_id, body.restart_pc,
+                                        body.context, {"agent": body.agent, "channel": "web", **owner}, body.mock_tools)
+        if session is not None:
+            answer = {**answer, "session_id": session.id, "events_token": owner["events_token"]}
         return answer
 
     @app.patch("/v1/calls/webrtc/offer", dependencies=auth)
@@ -1080,6 +1196,183 @@ def create_app(engine: Engine) -> FastAPI:
         await engine.webrtc.handle_patch_request(SmallWebRTCPatchRequest(
             pc_id=body.pc_id, candidates=[IceCandidate(**c.model_dump()) for c in body.candidates]))
         return {"ok": True}
+
+    # -- evals: real phone calls played by a Test Caller -----------------------
+
+    def _run_or_404(rid: str) -> dict:
+        run = engine.evals.get(rid)
+        if run is None:
+            raise HTTPException(404, "no such eval run")
+        return run
+
+    def _run_view(run: dict) -> dict:
+        live = engine.eval_live.get(run["id"])
+        if live is not None and not live.finished.is_set():
+            run = {**run, "live": {"session_id": live.id, "events_token": (live.meta or {}).get("events_token")}}
+        return run
+
+    async def _watch_run(rid: str, session: Session, minutes: int) -> None:
+        reason = ""
+        try:
+            try:
+                await asyncio.wait_for(session.finished.wait(), minutes * 60)
+            except asyncio.TimeoutError:
+                reason = f"time limit ({minutes} min)"
+                await session.stop()
+            ended = next((e for e in reversed(session.events) if e.get("type") == "call_ended"), {})
+            said = evals_module.transcript(session.events)
+            engine.evals.update(rid, status="grading", ended=time.time(), transcript=said,
+                                ended_reason=reason or str(ended.get("reason") or "ended"))
+            if not any(x["who"] == "agent" for x in said):
+                engine.evals.update(rid, status="error", error="the Test Caller heard nothing from the call: check "
+                                    "that the call connected and its audio reached Lampline")
+                return
+            run = engine.evals.get(rid)
+            llm = engine._make_llm() or make_llm(engine.cfg)
+            results = await evals_module.grade(llm, run, said)
+            engine.evals.update(rid, status=evals_module.verdict(results), results=results, summary=results["summary"])
+        except Exception as exc:  # noqa: BLE001 - shown on the run
+            log.exception("eval %s failed", rid)
+            engine.evals.update(rid, status="error", error=f"grading failed: {exc.__class__.__name__}")
+        finally:
+            engine.eval_live.pop(rid, None)
+
+    async def _run_call(run: dict, sdp: str, type_: str) -> dict:
+        if run["status"] != "waiting":
+            raise HTTPException(409, f"this run is {run['status']}; start a new one")
+        try:
+            graph = engine.load_agent(run["caller_agent"])
+        except HTTPException:
+            raise HTTPException(409, f"the caller agent {run['caller_agent']} is gone") from None
+        rid = run["id"]
+        meta = {"agent": run["caller_agent"], "channel": "web", "eval": rid,
+                "by": {"name": run.get("by") or "owner", "role": "builder"},
+                "events_token": _secrets.token_urlsafe(18)}
+
+        def linked(session: Session) -> None:
+            engine.eval_live[rid] = session
+            engine.evals.update(rid, status="in_call", session_id=session.id, started=time.time())
+            asyncio.get_running_loop().create_task(_watch_run(rid, session, int(run["max_minutes"])))
+
+        answer, _ = await _webrtc(graph, run["caller_agent"], sdp, type_, None, None,
+                                  {"persona": run["persona"], "goal": run["goal"]}, meta, False, on_session=linked)
+        return {"sdp": answer.get("sdp"), "type": answer.get("type"), "run_id": rid}
+
+    @app.get("/v1/evals", dependencies=auth)
+    async def list_evals(request: Request, limit: int = 50, before: float | None = None):
+        _local_only(request)            # numbers called and what was said, like call history
+        return engine.evals.list(limit, before)
+
+    @app.post("/v1/evals", dependencies=auth)
+    async def create_eval(body: dict[str, Any], request: Request):
+        _local_only(request)
+        caller = str(body.get("caller_agent") or "")
+        engine.load_agent(caller)                                    # 404 when there's no such agent
+        try:
+            run = engine.evals.create(caller_agent=caller, method=str(body.get("method") or ""),
+                                      number=str(body.get("number") or ""), persona=str(body.get("persona") or ""),
+                                      goal=str(body.get("goal") or ""),
+                                      criteria=body.get("criteria") if isinstance(body.get("criteria"), list) else [],
+                                      max_minutes=body.get("max_minutes") if isinstance(body.get("max_minutes"), int) else 5,
+                                      by=str((getattr(request.state, "who", None) or {}).get("name") or ""),
+                                      case_id=str(body.get("case_id") or ""))
+        except evals_module.EvalError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        if run["method"] == "google_voice":
+            run["bridge"] = {"token": engine.evals.bridge_token(run["id"]),
+                             "open_url": evals_module.google_voice_url(run["number"])}
+        return run
+
+    @app.get("/v1/evals/cases", dependencies=auth)
+    async def list_cases(request: Request):
+        _local_only(request)
+        return {"cases": engine.evals.cases()}
+
+    @app.post("/v1/evals/cases", dependencies=auth)
+    async def save_cases(body: dict[str, Any], request: Request):
+        _local_only(request)
+        cases = body.get("cases")
+        if not isinstance(cases, list) or not cases:
+            raise HTTPException(422, "give cases: a list of test cases")
+        try:
+            return {"cases": engine.evals.save_cases(cases, str(body.get("source") or ""))}
+        except evals_module.EvalError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.post("/v1/evals/cases/convert", dependencies=auth)
+    async def convert_cases(body: dict[str, Any], request: Request):
+        """Read test cases out of a test script (Hammer, Cyara, a spreadsheet, notes) with the engine's model.
+        Nothing is saved: the page shows them and the person keeps the ones they want."""
+        _local_only(request)
+        filename = str(body.get("filename") or "")[:200]
+        try:
+            text = evals_module.script_text(str(body.get("text") or ""), filename)
+        except evals_module.EvalError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        try:
+            llm = engine._make_llm() or make_llm(engine.cfg)
+        except ConfigError as exc:
+            raise HTTPException(503, str(exc)) from exc
+        try:
+            return {"cases": await evals_module.convert_script(llm, text, filename)}
+        except evals_module.EvalError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001 - shown on the page
+            log.exception("converting a test script failed")
+            raise HTTPException(502, f"the model couldn't read the script ({exc.__class__.__name__}); try a smaller part") from exc
+
+    @app.delete("/v1/evals/cases/{cid}", dependencies=auth)
+    async def delete_case(cid: str, request: Request):
+        _local_only(request)
+        if not engine.evals.delete_case(cid):
+            raise HTTPException(404, "no such test case")
+        return {"deleted": cid}
+
+    @app.post(BRIDGE_PATH)
+    async def eval_bridge_offer(body: dict[str, Any], request: Request):
+        """The Lampline Phone Bridge extension, from a Google Voice tab: a one-call token instead of a key."""
+        rid = engine.evals.redeem(request.headers.get("x-lampline-bridge") or "")
+        run = engine.evals.get(rid) if rid else None
+        if run is None:
+            raise HTTPException(401, "this bridge link has expired or was used; start the eval again")
+        return await _run_call(run, str(body.get("sdp") or ""), str(body.get("type") or "offer"))
+
+    @app.get("/v1/evals/{rid}", dependencies=auth)
+    async def get_eval(rid: str, request: Request):
+        _local_only(request)
+        return _run_view(_run_or_404(rid))
+
+    @app.post("/v1/evals/{rid}/offer", dependencies=auth)
+    async def eval_offer(rid: str, body: dict[str, Any], request: Request):
+        """The speaker method: the Evals page's own microphone and speaker carry the call."""
+        _local_only(request)
+        run = _run_or_404(rid)
+        if run["method"] != "speaker":
+            raise HTTPException(409, "this run goes through Google Voice")
+        out = await _run_call(run, str(body.get("sdp") or ""), str(body.get("type") or "offer"))
+        live = engine.eval_live.get(rid)
+        return {**out, "session_id": live.id if live else None,
+                "events_token": (live.meta or {}).get("events_token") if live else None}
+
+    @app.post("/v1/evals/{rid}/stop", dependencies=auth)
+    async def stop_eval(rid: str, request: Request):
+        _local_only(request)
+        run = _run_or_404(rid)
+        live = engine.eval_live.get(rid)
+        if live is not None:
+            await live.stop()
+        elif run["status"] == "waiting":
+            engine.evals.update(rid, status="cancelled", ended=time.time())
+        return _run_view(_run_or_404(rid))
+
+    @app.delete("/v1/evals/{rid}", dependencies=auth)
+    async def delete_eval(rid: str, request: Request):
+        _local_only(request)
+        if rid in engine.eval_live:
+            raise HTTPException(409, "the call is still going; stop it first")
+        if not engine.evals.delete(rid):
+            raise HTTPException(404, "no such eval run")
+        return {"deleted": rid}
 
     # -- phone calls (Twilio and Telnyx media streams) -----------------------
 
@@ -1194,7 +1487,7 @@ def create_app(engine: Engine) -> FastAPI:
         url = f"{engine.public_url}{request.url.path}" + (f"?{request.url.query}" if request.url.query else "")
         if not valid_signature(engine.twilio_auth_token, url, form, request.headers.get("x-twilio-signature", "")):
             raise HTTPException(403, "bad Twilio signature")
-        transfer = engine.transfers.pop(form.get("CallSid"))
+        transfer = engine.transfers.get(form.get("CallSid"))
         return _xml(transfer.twiml() if transfer else hangup_twiml())
 
     @app.websocket("/v1/twilio/stream")
@@ -1319,7 +1612,7 @@ def create_app(engine: Engine) -> FastAPI:
     async def jambonz_done(request: Request):
         """The listen verb's actionHook (the stream ended) and the application's call status webhook."""
         call = await _jambonz_body(request)
-        transfer = engine.transfers.pop(str(call.get("call_sid") or ""))
+        transfer = engine.transfers.get(str(call.get("call_sid") or ""))
         return transfer.jambonz_verbs() if transfer else [{"verb": "hangup"}]
 
     @app.websocket("/v1/jambonz/stream")
@@ -1472,7 +1765,7 @@ def create_app(engine: Engine) -> FastAPI:
         t = next((x for x in (a.triggers if a else []) if x["id"] == tid), None)
         if t is None:
             raise HTTPException(404, f"no working trigger {tid!r} in {slug} (save it, and check `vk lint`)")
-        dry = bool((body or {}).get("dry_run", True))
+        dry = _flag((body or {}).get("dry_run"), default=True)
         if t["type"] == "schedule":
             return {"results": await engine.automations.run_schedule(slug, t, dry_run=dry)}
         if t["type"] == "after_call":
@@ -1499,9 +1792,35 @@ def create_app(engine: Engine) -> FastAPI:
         if not to:
             raise HTTPException(422, "give phone_number (for a call) or channel and to (for a message)")
         context = body.get("initial_context") if isinstance(body.get("initial_context"), dict) else {}
-        result = await engine.automations.outbound(slug, "call" if channel == "call" else "message", to, channel=channel,
-                                                   context=context, text=str(body.get("text") or ""), source=f"api {path}",
-                                                   dry_run=bool(body.get("dry_run")))
+        dry_run = _flag(body.get("dry_run"), default=False)
+        key = (request.headers.get("idempotency-key") or "").strip()
+        if len(key) > 128:
+            raise HTTPException(422, "Idempotency-Key is at most 128 characters")
+        fingerprint = hashlib.sha256(json.dumps([path, body], sort_keys=True, default=str).encode()).hexdigest()
+        if key and not dry_run:
+            seen = idempotent.get(key)
+            if seen is not None:
+                if seen["fingerprint"] != fingerprint:
+                    raise HTTPException(422, "this Idempotency-Key was already used for a different request")
+                if seen["result"] is None:
+                    raise HTTPException(409, "a request with this Idempotency-Key is still in progress")
+                return _trigger_reply(seen["result"])
+            idempotent.put(key, {"fingerprint": fingerprint, "result": None})
+        try:
+            result = await engine.automations.outbound(slug, "call" if channel == "call" else "message", to,
+                                                       channel=channel, context=context, text=str(body.get("text") or ""),
+                                                       source=f"api {path}", dry_run=dry_run)
+        except BaseException:
+            if key and not dry_run:
+                idempotent.drop(key)
+            raise
+        if key and not dry_run:
+            idempotent.put(key, {"fingerprint": fingerprint, "result": result})
+        return _trigger_reply(result)
+
+    def _trigger_reply(result: dict):
+        if result.get("unknown"):
+            raise HTTPException(504, result["detail"])          # outcome unknown: don't retry blindly
         if not result["ok"]:
             raise HTTPException(409, result["detail"])
         return result

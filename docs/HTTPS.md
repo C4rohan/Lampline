@@ -89,6 +89,10 @@ The Phone numbers page shows them.
   and knowledge, and reading call history and records, only work from the
   machine itself. Set `VPE_REMOTE_EDITING=on` to allow them through the proxy,
   as each key's role allows.
+- **"This computer" needs the owner key once there's a public address.** A
+  proxy that rewrites the Host and sends no forwarding header would otherwise
+  look local, so with `VPE_PUBLIC_URL` set, local-only changes also need the
+  owner key (`VPE_API_KEY`), even on the machine itself.
 - **Some things stay local regardless.** Settings, secrets, model downloads,
   sign-ins, imports, trying a tool, MCP and connector tests, and running
   triggers never work through a proxy or tunnel, whatever the key or setting.

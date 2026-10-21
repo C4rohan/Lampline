@@ -16,7 +16,7 @@ from vk.exporters import ExportError, build, export
 from vk.importers import convert
 from vk.lint import lint
 
-TEMPLATES = ["front-desk", "appointment-finder", "bilingual-front-desk", "appointment-scheduling", "nurse-callback"]
+TEMPLATES = ["front-desk", "appointment-finder", "bilingual-front-desk", "appointment-scheduling", "nurse-callback", "test-caller"]
 
 
 def template(name: str) -> agentfs.Agent:
