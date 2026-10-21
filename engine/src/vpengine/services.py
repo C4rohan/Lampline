@@ -247,6 +247,19 @@ SPECS: tuple[FieldSpec, ...] = (
 SPEC_BY_NAME = {s.name: s for s in SPECS}
 
 
+def _private_host(host: str) -> bool:
+    """This computer or a private network: localhost, a bare name, a .local/.lan/.internal name, or a private IP."""
+    import ipaddress
+    host = host.lower()
+    if host in ("localhost",) or "." not in host and ":" not in host or host.endswith((".local", ".lan", ".internal", ".home.arpa")):
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return ip.is_private or ip.is_loopback
+
+
 @dataclass
 class Config:
     llm: str = "anthropic"
@@ -403,8 +416,13 @@ class Config:
                               ("base_url", "https://api.openai.com/v1")):
             if values.get(name) and not re.match(r"^https?://[^\s/]+", values[name]):
                 raise ConfigError(f"{SPEC_BY_NAME[name].label} must be an http(s) address, like {example}")
-        if values.get("realtime_url") and not re.match(r"^wss?://[^\s/]+", values["realtime_url"]):
-            raise ConfigError("the realtime server must be a ws(s) address, like wss://api.openai.com/v1/realtime")
+        if values.get("realtime_url"):
+            from urllib.parse import urlsplit
+            u = urlsplit(values["realtime_url"])
+            if u.scheme not in ("ws", "wss") or not u.hostname:
+                raise ConfigError("the realtime server must be a ws(s) address, like wss://api.openai.com/v1/realtime")
+            if u.scheme == "ws" and not _private_host(u.hostname):
+                raise ConfigError("use wss:// for a realtime server beyond your own network (ws:// sends audio and keys unencrypted)")
         if values.get("vertex_credentials"):
             import json as _json
             try:
@@ -489,8 +507,15 @@ class Config:
         return bool(self.kokoro_url)
 
     @property
+    def realtime_is_openai(self) -> bool:
+        from urllib.parse import urlsplit
+        u = urlsplit(self.realtime_url)
+        return u.scheme == "wss" and (u.hostname or "").lower() == "api.openai.com"
+
+    @property
     def realtime_api_key(self) -> str:
-        return self.realtime_key or (self.openai_key if "api.openai.com" in self.realtime_url else "")
+        """The key sent to the realtime server: its own, or the OpenAI key, but only to OpenAI itself."""
+        return self.realtime_key or (self.openai_key if self.realtime_is_openai else "")
 
     @property
     def voice_ready(self) -> bool:

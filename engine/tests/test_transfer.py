@@ -220,3 +220,14 @@ def test_telnyx_asks_call_control_to_transfer(cfg, agents_dir, handoff_agent, mo
     assert payload["to"] == "sip:desk@pbx.example.com"
     assert {"name": "X-Lampline-caller_phone", "value": "+15550100"} in payload["custom_headers"]
     assert not [s for s in sent if s[0].endswith("/actions/hangup")]     # the transfer has the call, no hang-up
+
+
+def test_a_variable_inside_an_address_cant_add_parameters_or_hosts():
+    from types import SimpleNamespace
+    from vpengine import transfer
+    from vpengine.graph import render
+    step = SimpleNamespace(kind="end", name="Desk", data={"transfer_to": "sip:{{ext}}@pbx.example.com"})
+    t = transfer.build(step, {"ext": "1000;transport=tcp?X-Lampline-Session=forged&Foo=bar@evil.example"}, "sid", render)
+    assert t.to == "sip:1000transporttcpX-Lampline-SessionforgedFoobarevil.example@pbx.example.com"
+    whole = SimpleNamespace(kind="end", name="Desk", data={"transfer_to": "{{desk}}"})
+    assert transfer.build(whole, {"desk": "sip:billing@pbx.example.com"}, "sid", render).to == "sip:billing@pbx.example.com"

@@ -44,7 +44,7 @@ READY_WAIT = 10.0              # seconds to wait for the model's session before 
 
 def problem(graph: Graph, cfg: Config) -> str | None:
     """Why this agent can't run speech to speech now, or None."""
-    if not cfg.realtime_api_key and "api.openai.com" in cfg.realtime_url:
+    if not cfg.realtime_api_key and cfg.realtime_is_openai:
         return "speech to speech needs an OpenAI API key (Integrations → Speech to speech)"
     scripted = [s.name for s in graph.steps.values() if getattr(s, "scripted", False)]
     if scripted:

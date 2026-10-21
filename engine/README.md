@@ -717,11 +717,13 @@ with it and open **Team** to make a key per person, with a role:
 
 Keys start with `lpk_` and are shown once; only a SHA-256 fingerprint is kept
 (`keys.json` next to the settings file, mode 600). Revoking one takes effect
-at once. `GET /v1/me` says who a key is. By default, changes still have to
-come from this computer; behind an HTTPS proxy, `VPE_REMOTE_EDITING=on` lets
-keys save agents, data and knowledge through it, as their role allows.
-Settings, secrets, downloads, sign-ins and running triggers always stay
-local. See [docs/HTTPS.md](../docs/HTTPS.md) for Caddy and nginx setups.
+at once. `GET /v1/me` says who a key is. By default, changes, records and
+call history still have to come from this computer; behind an HTTPS proxy,
+`VPE_REMOTE_EDITING=on` allows them through it, as each key's role allows.
+Settings, secrets, downloads, sign-ins, imports, trying tools and running
+triggers always stay local, and an agent saved through the proxy can't
+change its tools, triggers or webhooks (they can use your secrets and
+contact people). See [docs/HTTPS.md](../docs/HTTPS.md) for Caddy and nginx setups.
 
 ## Call history
 

@@ -618,10 +618,30 @@ def create_app(engine: Engine) -> FastAPI:
     @app.put("/v1/agents/{slug}", dependencies=auth)
     async def save_agent(slug: str, body: dict[str, Any], request: Request):
         _local_only(request)
+        if not _is_local(request):
+            _same_reach(_folder(slug), body)
         try:
             return builder.save(_folder(slug), body)
         except (builder.BuilderError, agentfs.FolderError) as exc:
             raise HTTPException(422, str(exc)) from exc
+
+    def _reach(doc: dict) -> str:
+        """What in an agent can use your secrets or contact people: tools, triggers, and webhook/trigger nodes."""
+        nodes = [n for n in ((doc.get("definition") or {}).get("nodes") or [])
+                 if isinstance(n, dict) and n.get("type") in ("trigger", "webhook", "qa")]
+        return json.dumps({"tools": doc.get("tools") or [], "triggers": doc.get("triggers") or [], "nodes": nodes},
+                          sort_keys=True, default=str)
+
+    def _same_reach(folder: Path, body: dict) -> None:
+        """Saved from elsewhere (VPE_REMOTE_EDITING): steps, prompts and data may change, but not what can use
+        secrets or contact people. A tool or trigger pointed at another address could send them anywhere."""
+        try:
+            current = builder.read(folder) if folder.exists() else {}
+        except (builder.BuilderError, agentfs.FolderError):
+            current = {}
+        if _reach(current) != _reach(body):
+            raise HTTPException(403, "tools, triggers and webhooks can only be changed on this computer: they can "
+                                     "use your secrets and contact people")
 
     @app.post("/v1/agents/{slug}/check", dependencies=auth)
     async def check_agent(slug: str, body: dict[str, Any]):
@@ -1339,21 +1359,25 @@ def create_app(engine: Engine) -> FastAPI:
     # -- call history --------------------------------------------------------
 
     @app.get("/v1/calls", dependencies=auth)
-    async def list_calls(agent: str = "", channel: str = "", q: str = "", before: float | None = None, limit: int = 50):
+    async def list_calls(request: Request, agent: str = "", channel: str = "", q: str = "", before: float | None = None,
+                         limit: int = 50):
+        _local_only(request)            # callers' details, like records: this computer (or VPE_REMOTE_EDITING)
         calls = await asyncio.to_thread(engine.history.list, agent=agent, channel=channel, query=q[:100],
                                         before=before, limit=limit)
         return {"calls": calls, "keeping": engine.cfg.call_history != "off",
                 "days": int(engine.cfg.call_history_days or 30), "recordings": engine.cfg.call_recordings == "on"}
 
     @app.get("/v1/calls/{call_id}", dependencies=auth)
-    async def get_call(call_id: str):
+    async def get_call(call_id: str, request: Request):
+        _local_only(request)
         call = await asyncio.to_thread(engine.history.get, call_id)
         if call is None:
             raise HTTPException(404, "no such call (calls older than the history setting are deleted)")
         return call
 
     @app.get("/v1/calls/{call_id}/recording", dependencies=auth)
-    async def call_recording(call_id: str):
+    async def call_recording(call_id: str, request: Request):
+        _local_only(request)
         path = engine.history.recording_path(call_id)
         if path is None:
             raise HTTPException(404, "this call has no recording")
@@ -1361,7 +1385,8 @@ def create_app(engine: Engine) -> FastAPI:
                             headers={"Cache-Control": "no-store"})
 
     @app.delete("/v1/calls/{call_id}", dependencies=auth)
-    async def delete_call(call_id: str):
+    async def delete_call(call_id: str, request: Request):
+        _local_only(request)
         if not await asyncio.to_thread(engine.history.delete, call_id):
             raise HTTPException(404, "no such call")
         return {"deleted": call_id}
