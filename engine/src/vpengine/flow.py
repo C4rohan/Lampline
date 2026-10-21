@@ -585,13 +585,19 @@ class FlowController:
                 transfer = build(self.current, self.variables, getattr(self.host, "id", ""), render, self.collected())
             except ValueError as exc:
                 self.host.emit({"type": "execution_error", "message": f"{exc}. Hanging up instead."})
+        if transfer is not None and not getattr(self.host, "can_transfer", True):
+            # A Telegram, WhatsApp or email conversation has no call to hand over.
+            self.host.emit({"type": "notice", "message": f"{self.current.name} transfers calls to {transfer.to}; "
+                                                         "a message conversation just ends here."})
+            transfer = None
         if transfer is not None:
             self.host.emit({"type": "transfer", "node_name": self.current.name, **transfer.event()})
             try:
                 await self.host.transfer(transfer)
+                reason = f"transferred to {transfer.to}"
             except Exception as exc:  # noqa: BLE001 - a failed hand-off still ends the call cleanly
                 self.host.emit({"type": "execution_error", "message": f"transfer to {transfer.to} failed: {exc}"})
-            reason = f"transferred to {transfer.to}"
+                transfer = None
         self.host.emit({"type": "call_ended", "reason": reason,
                         "node_name": self.current.name if self.current else None,
                         "variables": dict(self.variables),

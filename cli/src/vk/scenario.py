@@ -16,6 +16,22 @@ A test file lives in an agent folder under tests/*.yaml:
       not_says: [account number]
       ends: true                        # the conversation reached an end step
 
+Or let a model play the caller, for conversations you don't want to script line
+by line (the engine's own model plays it, so vk needs no key):
+
+    name: impatient caller with a billing question
+    caller:
+      persona: Sam, in a hurry, confused by a bill with a late fee on it
+      goal: get the late fee explained or talk to someone in billing
+      opening: Hi, I've got a question about my bill.   # optional first line
+      max_turns: 8                                      # optional, 1 to 30 (default 8)
+    expect:
+      reaches: Billing
+      not_says: [card number]
+
+The caller is different every run, so keep expectations to what any good
+conversation must do, and run it a few times when you change the agent.
+
 Text chat runs the folder as it is on disk, with the model configured in the
 engine, so a test exercises exactly what a call would. Results depend on the
 model: keep expectations about behaviour (where it goes, what it must or must not
@@ -45,6 +61,7 @@ class Scenario:
     turns: list[dict]
     expect: dict
     context: dict
+    caller: dict | None = None          # a model plays the caller: {persona, goal, opening, max_turns}
 
 
 @dataclass
@@ -139,13 +156,36 @@ def load_file(path: Path, rel: str) -> Scenario:
     turns = doc.get("turns") or []
     if not isinstance(turns, list) or not all(isinstance(t, dict) and isinstance(t.get("user"), str) for t in turns):
         raise TestFileError(f"{rel}: turns must be a list of {{user: <text>}} entries")
+    caller = _check_caller(doc.get("caller"), rel)
+    if caller and turns:
+        raise TestFileError(f"{rel}: use either turns (scripted) or caller (a model plays the caller), not both")
     for i, turn in enumerate(turns, 1):
         _check_expect(turn.get("expect"), f"{rel} turn {i}")
     context = doc.get("context") or {}
     if not isinstance(context, dict):
         raise TestFileError(f"{rel}: context must be a mapping")
     return Scenario(name=str(doc.get("name") or path.stem), path=rel, turns=turns,
-                    expect=_check_expect(doc.get("expect"), rel), context=context)
+                    expect=_check_expect(doc.get("expect"), rel), context=context, caller=caller)
+
+
+def _check_caller(caller: Any, rel: str) -> dict | None:
+    if caller is None:
+        return None
+    if not isinstance(caller, dict):
+        raise TestFileError(f"{rel}: caller must be a mapping with persona, and optionally goal, opening, max_turns")
+    unknown = sorted(set(caller) - {"persona", "goal", "opening", "max_turns"})
+    if unknown:
+        raise TestFileError(f"{rel}: unknown caller key(s) {', '.join(unknown)} (allowed: persona, goal, opening, max_turns)")
+    if not isinstance(caller.get("persona"), str) or len(caller["persona"].strip()) < 5:
+        raise TestFileError(f"{rel}: caller.persona describes who is calling, like \"Sam, in a hurry, asking about a bill\"")
+    for key in ("goal", "opening"):
+        if key in caller and not isinstance(caller[key], str):
+            raise TestFileError(f"{rel}: caller.{key} must be text")
+    turns = caller.get("max_turns", 8)
+    if not isinstance(turns, int) or isinstance(turns, bool) or not 1 <= turns <= 30:
+        raise TestFileError(f"{rel}: caller.max_turns must be a whole number from 1 to 30")
+    return {"persona": caller["persona"].strip(), "goal": str(caller.get("goal") or "").strip(),
+            "opening": str(caller.get("opening") or "").strip(), "max_turns": turns}
 
 
 def load(folder: str | Path) -> list[Scenario]:
@@ -212,6 +252,26 @@ def _absorb(session: dict, transcript: Transcript, seen: set[str]) -> None:
         (session.get("session_data") or {}).get("status") == "completed"
 
 
+def _play_caller(client, caller: dict, run_id: str, transcript: Transcript, seen: set[str], failures: list[str]) -> str:
+    """Let the engine's model play the caller until it's done, the call ends, or max_turns."""
+    for turn in range(1, caller["max_turns"] + 1):
+        if transcript.ended:
+            break
+        line = caller["opening"] if turn == 1 and caller["opening"] else None
+        if line is None:
+            said = [{"who": w, "text": t} for w, t in transcript.lines if w in ("caller", "agent")]
+            nxt = client.caller_line(caller["persona"], caller["goal"], said)
+            if nxt.get("done") or not nxt.get("line"):
+                break
+            line = nxt["line"]
+        session = client.send_chat(run_id, line)
+        _absorb(session, transcript, seen)
+    else:
+        if not transcript.ended:
+            transcript.lines.append(("note", f"stopped after {caller['max_turns']} caller turns"))
+    return run_id
+
+
 def run(client, scenario: Scenario, context_defaults: dict | None = None) -> Result:
     started = time.monotonic()
     transcript, seen, failures = Transcript(), set(), []
@@ -221,6 +281,8 @@ def run(client, scenario: Scenario, context_defaults: dict | None = None) -> Res
     run_id = session["run_id"]
     try:
         _absorb(session, transcript, seen)
+        if scenario.caller:
+            run_id = _play_caller(client, scenario.caller, run_id, transcript, seen, failures)
         for i, turn in enumerate(scenario.turns, 1):
             if transcript.ended:
                 failures.append(f"turn {i}: the conversation had already ended before {turn['user']!r}")

@@ -41,7 +41,7 @@ async def test_agents_listing(client, agents_dir):
     r = (await client.get("/v1/agents")).json()
     slugs = {a["slug"]: a for a in r["agents"]}
     fd = slugs["front-desk"]
-    assert fd["name"] == "Front Desk" and "Router" in fd["steps"] and fd["tests"] == 4 and fd["has_persona"]
+    assert fd["name"] == "Front Desk" and "Router" in fd["steps"] and fd["tests"] == 5 and fd["has_persona"]
     router = next(s for s in fd["graph"] if s["name"] == "Router")
     assert router["kind"] == "agent" and {"to": "Appointments", "label": "appointments"}.items() <= router["routes"][0].items()
     assert next(s for s in fd["graph"] if s["kind"] == "start")["greeting"]

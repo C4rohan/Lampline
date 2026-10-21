@@ -65,6 +65,18 @@ expect:
 Test behaviour (where the call goes, what must or must never be said), not
 exact wording: the LLM phrases things differently each run. Synthetic data only.
 
+For callers you can't script line by line (vague, impatient, changing their
+mind), add a model-played caller in place of `turns`:
+
+```yaml
+name: impatient caller with a billing question
+caller:
+  persona: Sam, in a hurry, confused by a late fee on this month's bill
+  goal: get the fee explained or talk to someone in billing
+  max_turns: 8
+expect: {reaches: Billing, not_says: [card number]}
+```
+
 ## 3. Write the folder
 
 Start from a template (`vk templates list`, then

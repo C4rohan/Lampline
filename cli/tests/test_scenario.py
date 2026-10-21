@@ -144,3 +144,50 @@ def test_lint_reports_broken_test_file(tmp_path):
     (tmp_path / "tests").mkdir()
     (tmp_path / "tests/x.yaml").write_text("turns: [user: hi")
     assert any(f.code == "VK110" and "not valid YAML" in f.message for f in lint(agentfs.load(tmp_path), tmp_path))
+
+
+MODEL_CALLER = {
+    "name": "model caller reschedules",
+    "caller": {"persona": "Sam, in a hurry, needs a new appointment day", "goal": "reschedule to Friday",
+               "opening": "Hi there, quick question."},
+    "expect": {"reaches": ["Router", "Reschedule", "Goodbye"], "ends": True},
+}
+
+
+def test_a_model_plays_the_caller(run, engine, tmp_path):
+    engine.caller_script = ["I want to reschedule my visit", "Friday is fine, so it's rescheduled, thanks"]
+    folder = make_folder(tmp_path, {"model": MODEL_CALLER})
+    code, out, err = run("test", str(folder), "-v")
+    assert code == 0, out + err
+    assert "PASS  model caller reschedules  (3 turn(s), model caller" in out
+    assert "caller: Hi there, quick question." in out                      # the opening line goes first, unasked
+    first = engine.caller_asks[0]
+    assert first["persona"].startswith("Sam") and first["goal"] == "reschedule to Friday"
+    assert [x["who"] for x in first["transcript"]][:2] == ["agent", "caller"]   # it sees the conversation so far
+    assert len(engine.caller_asks) == 2                                      # the call ended: no more asking
+
+
+def test_a_model_caller_that_gives_up_or_runs_long(run, engine, tmp_path):
+    engine.caller_script = []                                                # done straight after the opening
+    folder = make_folder(tmp_path, {"model": {**MODEL_CALLER, "caller": {**MODEL_CALLER["caller"], "max_turns": 2}}})
+    code, out, _ = run("test", str(folder))
+    assert code == 1 and "expected to reach 'Reschedule'" in out
+    engine.caller_script = ["hello", "hello again", "and again"]
+    folder = make_folder(tmp_path / "b", {"model": {"name": "long", "caller": {"persona": "Sam, chatty", "max_turns": 2}}})
+    code, out, _ = run("test", str(folder), "-v")
+    assert code == 0 and "stopped after 2 caller turns" in out and engine.caller_script == ["and again"]
+
+
+@pytest.mark.parametrize("caller, message", [
+    ({"persona": "Sam"}, "persona"),
+    ({"persona": "Sam, busy", "max_turns": 99}, "max_turns"),
+    ({"persona": "Sam, busy", "mood": "x"}, "unknown caller key"),
+    ("just a string", "mapping"),
+])
+def test_bad_caller_blocks(tmp_path, caller, message):
+    folder = make_folder(tmp_path, {"x": {"name": "x", "caller": caller}})
+    with pytest.raises(scenario.TestFileError, match=message):
+        scenario.load(folder)
+    folder = make_folder(tmp_path / "both", {"x": {"name": "x", "caller": {"persona": "Sam, busy"}, "turns": [{"user": "hi"}]}})
+    with pytest.raises(scenario.TestFileError, match="not both"):
+        scenario.load(folder)

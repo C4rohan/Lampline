@@ -75,7 +75,7 @@ export function TeamPage() {
           <div key={r} className="rounded-lg border px-3 py-2.5"><p className="font-medium capitalize">{r}</p><p className="text-muted-foreground">{ROLE[r]}</p></div>
         ))}
       </div>
-      <p className="mt-4 text-xs text-muted-foreground">Settings changes still have to be made on this computer, whatever the role. Put the engine behind HTTPS before sharing keys over a network (docs/HTTPS.md).</p>
+      <p className="mt-4 text-xs text-muted-foreground">Over a network, saving changes and reading calls and records also need VPE_REMOTE_EDITING=on. Settings, secrets, tools and triggers are only changed on this computer, whatever the role. Put the engine behind HTTPS before sharing keys (docs/HTTPS.md).</p>
       <NewKey open={creating} onOpenChange={setCreating} onDone={reload} />
       <Dialog open={!!revoke} onOpenChange={(v) => !v && setRevoke(null)}>
         <DialogContent>

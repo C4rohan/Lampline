@@ -107,6 +107,11 @@ The full mapping, both ways, and what doesn't carry over yet:
 
 ## 👀 A quick tour
 
+<p align="center">
+  <img src="docs/images/demo.gif" alt="A 25-second tour: the agent list, the builder with a transfer to a person, speech options in Integrations, and the Calls page with a call's details" width="880">
+  <br><sub>Sample data only.</sub>
+</p>
+
 <table>
   <tr>
     <td width="50%" valign="top">
