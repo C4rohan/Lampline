@@ -9,6 +9,7 @@ Endpoints (all JSON; /v1/* need X-API-Key when VPE_API_KEY is set):
     POST   /v1/chat/sessions                 {agent | name+definition, context}
     POST   /v1/chat/sessions/{id}/messages   {text}
     POST   /v1/chat/sessions/{id}/end
+    POST   /v1/tests/caller                  {persona, goal, transcript}: a role-played caller's next line
     GET    /v1/sessions/{id}                 summary and events
     GET    /v1/sessions/{id}/events          live events (server-sent events)
     POST   /v1/calls/webrtc/offer            {agent, sdp, type, context}
@@ -1348,6 +1349,51 @@ def create_app(engine: Engine) -> FastAPI:
             engine.transfers.add(str(sid or ""), transfer)   # the stream ends; jambonz asks /v1/jambonz/done
 
         await _run_phone_call(websocket, pending, serializer, rate, on_transfer=hand_off)
+
+    # -- tests: a model plays the caller ---------------------------------------
+
+    @app.post("/v1/tests/caller", dependencies=auth)
+    async def test_caller(body: dict[str, Any]):
+        """The next thing a role-played caller says, for `vk test` files with a `caller:` block.
+
+        Uses the engine's own model, so `vk` needs no model key of its own."""
+        persona = str(body.get("persona") or "").strip()[:2000]
+        goal = str(body.get("goal") or "").strip()[:500]
+        if len(persona) < 5:
+            raise HTTPException(422, "describe the caller (persona)")
+        lines = body.get("transcript") or []
+        if not isinstance(lines, list):
+            raise HTTPException(422, "transcript must be a list of {who, text}")
+        said = "\n".join(f"{'Caller' if str(x.get('who')) == 'caller' else 'Agent'}: {str(x.get('text') or '')[:1000]}"
+                         for x in lines[-60:] if isinstance(x, dict))
+        try:
+            llm = engine._make_llm() or make_llm(engine.cfg)
+        except ConfigError as exc:
+            raise HTTPException(503, str(exc)) from exc
+        instruction = "\n\n".join([
+            "You are role-playing a CALLER phoning a business, to test its voice agent. You are not the agent.",
+            f"Who you are: {persona}",
+            f"What you want from this call: {goal}" if goal else "",
+            "Speak like a real caller on the phone: one or two short sentences, plain words, no stage directions, "
+            "no quotation marks. Answer the agent's questions. When it asks for details, make up plausible ones "
+            "(a name, a day, a 555-01xx phone number); never use real people's details.",
+            "When what you wanted is done, or the agent has said goodbye, or you would hang up, set done to true "
+            "and line to null. Reply with one JSON object and nothing else.",
+        ])
+        schema = {"type": "object", "additionalProperties": False, "required": ["line", "done"],
+                  "properties": {"line": {"type": ["string", "null"]}, "done": {"type": "boolean"}}}
+        from pipecat.processors.aggregators.llm_context import LLMContext
+        ctx = LLMContext(messages=[{"role": "user", "content": (said or "(the call has just connected; the agent "
+                                                                         "hasn't spoken yet)") + "\n\nWhat does the caller say next?"}])
+        try:
+            text = await asyncio.wait_for(llm.run_inference(ctx, max_tokens=200, system_instruction=instruction,
+                                                            response_schema=schema), 45)
+        except Exception as exc:  # noqa: BLE001 - shown to the person running the tests
+            raise HTTPException(502, f"the model couldn't play the caller: {exc}") from exc
+        from .flow import parse_json_object
+        out = parse_json_object(text) or {}
+        line = str(out.get("line") or "").strip()[:500] or None
+        return {"line": line, "done": bool(out.get("done")) or line is None}
 
     # -- users and roles -------------------------------------------------------
 

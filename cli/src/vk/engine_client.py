@@ -82,5 +82,10 @@ class EngineClient:
         reply = self._request("POST", f"/chat/sessions/{run_id}/messages", json={"text": text}, timeout=timeout)
         return self._shape(reply, text)
 
+    def caller_line(self, persona: str, goal: str, transcript: list[dict], *, timeout: float = 120.0) -> dict:
+        """The next thing a model-played caller says: {line, done}."""
+        return self._request("POST", "/tests/caller", json={"persona": persona, "goal": goal, "transcript": transcript},
+                             timeout=timeout)
+
     def end_chat(self, run_id: str) -> dict:
         return self._request("POST", f"/chat/sessions/{run_id}/end", json={})

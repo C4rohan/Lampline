@@ -798,6 +798,7 @@ The folder runs as it is on disk: nothing to save or deploy first.
 | POST | `/v1/chat/sessions/{id}/end` | |
 | GET | `/v1/sessions/{id}` | steps visited, current step, collected values, events |
 | GET | `/v1/sessions/{id}/events` | the same events live (server-sent events) |
+| POST | `/v1/tests/caller` | `{persona, goal, transcript}`: what a model-played test caller says next (`vk test`) |
 | GET | `/v1/me` | who this key is, and its role |
 | GET, POST, DELETE | `/v1/keys`, `/v1/keys/{id}` | named keys with roles (admin) |
 | GET | `/v1/calls` | call history: `agent`, `channel`, `q`, `before`, `limit` |
