@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Lampline Phone Bridge",
+  "version": "0.1.0",
+  "description": "Connects a Google Voice call to Lampline's Test Caller for evals. Only Google Voice tabs that Lampline opens are bridged.",
+  "minimum_chrome_version": "111",
+  "permissions": ["storage"],
+  "host_permissions": ["http://localhost:*/*", "http://127.0.0.1:*/*"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://voice.google.com/*"],
+      "js": ["gv-page.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://voice.google.com/*"],
+      "js": ["gv-relay.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["http://localhost:*/*", "http://127.0.0.1:*/*"],
+      "js": ["lampline-relay.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

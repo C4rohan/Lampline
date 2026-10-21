@@ -28,13 +28,14 @@ async def test_pages_cannot_be_framed(app_and_engine):
     assert r.headers["x-content-type-options"] == "nosniff"
 
 
-async def test_the_key_goes_in_a_header_except_for_the_event_stream(app_and_engine):
+async def test_the_key_never_goes_in_a_url(app_and_engine):
     app, _ = app_and_engine
     async with client(app) as c:
         assert (await c.get("/v1/agents", params={"key": "k-123"})).status_code == 401
         assert (await c.get("/v1/agents", headers={"X-API-Key": "k-123"})).status_code == 200
-        r = await c.get("/v1/sessions/nope/events", params={"key": "k-123"})
-        assert r.status_code == 404                                   # past the key check: there's no such session
+        # The live event stream takes a token for its one session, not the API key (proxy logs keep URLs).
+        assert (await c.get("/v1/sessions/nope/events", params={"key": "k-123"})).status_code == 401
+        assert (await c.get("/v1/sessions/nope/events", params={"token": "guess"})).status_code == 401
 
 
 async def test_webhooks_refuse_large_bodies_before_checking_signatures(app_and_engine):

@@ -201,7 +201,7 @@ async def test_outbound_call_with_twilio(setup):
     assert q["agent"] == ["parking"]
     ctx = engine.automations.take_context(q["ctx"][0])
     assert ctx == {"caller_name": "Sam", "caller_phone": "+15550101234"}
-    assert engine.automations.take_context(q["ctx"][0]) == {}          # once only
+    assert engine.automations.take_context(q["ctx"][0]) == ctx         # a redelivered webhook gets it too
 
 
 async def test_outbound_call_through_jambonz(setup):

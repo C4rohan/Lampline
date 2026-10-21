@@ -169,3 +169,9 @@ async def test_logos_are_optional_and_scoped(cfg, agents_dir, tmp_path):
         assert r.status_code == 200 and r.headers["content-type"] == "image/svg+xml" and "sandbox" in r.headers["content-security-policy"]
         for bad in ("..%2Fsecret.txt", "secret.txt", "Twilio.svg", "x.html"):
             assert (await c.get(f"/v1/logos/{bad}")).status_code == 404
+
+
+async def test_app_files_are_revalidated(client):
+    """The built UI keeps the same file names between versions, so browsers must check for a newer copy."""
+    r = await client.get("/static/index.html")
+    assert r.status_code == 200 and r.headers["cache-control"] == "no-cache"

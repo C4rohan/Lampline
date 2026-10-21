@@ -1,0 +1,6 @@
+name: the test caller answers the agent and says what it wants
+turns:
+  - user: Thanks for calling Riverside Dental, this is the virtual assistant. How can I help you today?
+expect:
+  reaches: Caller
+  not_says: [as an AI, language model]

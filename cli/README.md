@@ -40,6 +40,7 @@ Two sections are notes for you and your tools, not part of the agent itself:
 |---|---|
 | `vk lint DIR... [--format json] [--strict]` | Offline checks; exit 1 on errors (`--strict`: on warnings too) |
 | `vk test DIR [-k TEXT] [--url URL] [--format json] [-v] [--live-tools]` | Run `tests/*.yaml` conversations on the engine, with the folder as it is on disk |
+| `vk test DIR --target dfcx\|ces\|engine,dfcx --agent RESOURCE` | Run the same tests against your live Dialogflow CX agent or CX Agent Studio app, or side by side with the engine |
 | `vk templates list` / `vk templates install NAME [--dir D] [--name N]` | Starter agents |
 | `vk import dfcx\|ces\|auto EXPORT [--dir D] [--name N]` | Turn a Dialogflow CX or CX Agent Studio export (zip or folder) into an agent folder, offline. See [Import](#import) |
 | `vk export ces\|dfcx DIR [--out F] [--folder]` | Write an agent folder as a CX Agent Studio app or a Dialogflow CX agent, offline. See [Export](#export) |
@@ -107,6 +108,42 @@ something different every run, so keep `expect` to what any good conversation
 must do, and run it a few times after changing the agent. A file has either
 `turns` or a `caller`, not both.
 
+### Test the original Google agent, side by side
+
+The same test files run against a live Dialogflow CX agent or CX Agent Studio
+app, so a folder you imported can be checked against the original:
+
+```bash
+gcloud auth login                       # your own Google account; vk uses `gcloud auth print-access-token`
+vk test agents/clinic --target dfcx --agent projects/my-project/locations/global/agents/AGENT_ID
+vk test agents/clinic --target ces  --agent projects/my-project/locations/us/apps/APP_ID --deployment DEPLOYMENT_ID
+vk test agents/clinic --target engine,dfcx --agent projects/...      # both, then a side-by-side table
+```
+
+```
+Side by side
+  test                         engine  dfcx
+  caller moves an appointment  PASS    PASS
+  caller asks for billing      PASS    FAIL    ← differs
+```
+
+- **What's checked:** for Dialogflow CX, `reaches` matches the pages, flows and
+  playbooks the agent went through; for CX Agent Studio, the agents it
+  transferred to. Imported folders use the same names, so one test file fits
+  both. `calls_tool` matches tool display names, `says` the agent's text, and
+  `ends` an end of session, a live-agent handoff or a phone transfer.
+- **Context:** `context:` values go in as session parameters (Dialogflow CX)
+  or variables (CX Agent Studio) on the first turn.
+- **Model callers:** tests with a `caller:` block need the Lampline engine
+  too (`--url`), because its model plays the caller.
+- **Options:** `--environment` (Dialogflow CX, default the draft),
+  `--deployment` (CX Agent Studio), `--language` (default `en`).
+- **Your own agents only.** The access token is yours (`gcloud`, or
+  `VK_GOOGLE_TOKEN`), used for these requests and never saved. Tests talk to
+  the real agent, so its webhooks and tools run for real: use a test project
+  and synthetic data, and never a production agent you aren't responsible for.
+- Text only for now; voice (calling the agent's phone number) is next.
+
 - Moving between steps is reported as a call to the transition's tool, named
   from its label (`hours or location` → `hours_or_location`).
 - LLMs phrase things differently every run: assert on where the call goes and on
@@ -126,6 +163,7 @@ must do, and run it a few times after changing the agent. A file has either
 | `bilingual-front-desk` | English and Spanish front desk that answers in the caller's language |
 | `appointment-finder` | Root agent with an HTTP tool that looks up open times (mock answers until you add a URL) |
 | `nurse-callback` | A scripted page that takes a callback request word for word: exact lines, a form, rule transfers, and no model calls at all |
+| `test-caller` | An AI caller with a persona and a goal, for testing another phone agent from your laptop ([docs/PHONE-TESTING.md](../docs/PHONE-TESTING.md)); its Start waits for the other side to speak first |
 
 Each comes with prompts, tests, a fictional business (Riverside Clinic) in
 `context_variables`, and `setup.real_data: false`. Edit the context variables

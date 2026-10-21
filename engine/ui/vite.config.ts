@@ -15,6 +15,12 @@ export default defineConfig({
     chunkSizeWarningLimit: 900,
     rollupOptions: {
       output: {
+        // Fixed file names (no content hashes): two branches that both rebuild the UI then change the same files,
+        // so git shows a conflict to rebuild, instead of quietly keeping both builds. The engine serves them with
+        // Cache-Control: no-cache, so browsers still pick up a new version.
+        entryFileNames: "assets/[name].js",
+        chunkFileNames: "assets/[name].js",
+        assetFileNames: "assets/[name][extname]",
         // The builder's canvas libraries load only on the builder page.
         manualChunks: (id: string) =>
           /node_modules\/(@xyflow|@dagrejs)\//.test(id) ? "flow" : undefined,
