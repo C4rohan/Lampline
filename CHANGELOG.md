@@ -4,6 +4,9 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 
 ## Unreleased (on dev)
 
+
+- Test a phone agent for free from your laptop: the new Test Caller template plays a caller with a persona and a goal through the laptop's speakers and mic, with your phone on speaker carrying the call ([docs/PHONE-TESTING.md](docs/PHONE-TESTING.md)). Start steps can wait for the other side to speak first.
+
 ### Security and reliability (review of October 2026)
 
 - Saving an agent can no longer write a prompt file outside its folder: step and transfer ids are checked, and file names are always slugs.

@@ -283,6 +283,7 @@ tools, data and knowledge: [engine/README.md](engine/README.md).
 - [ ] **Google Cloud deployment** (coming soon)
 - [ ] **Contact centers:** Genesys Cloud, Avaya, Cisco Webex Contact Center, Cisco UCCE, Amazon Connect, NICE CXone, Five9, Twilio Flex (coming soon)
 - [x] Users and roles, and an HTTPS guide ([docs/HTTPS.md](docs/HTTPS.md))
+- [x] Test a phone agent for free from your laptop ([docs/PHONE-TESTING.md](docs/PHONE-TESTING.md))
 - [x] Call history and optional recordings, on this computer ([engine/README.md](engine/README.md#call-history))
 - [ ] Published benchmarks
 

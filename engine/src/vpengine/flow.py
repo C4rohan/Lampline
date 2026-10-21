@@ -163,6 +163,16 @@ class FlowController:
         await self._set_step(start)
         greeting = render(start.greeting, self.variables).strip()
         handoff = next((r for r in start.routes if r.after_greeting), None)
+        if start.data.get("listen_first"):
+            # The other side speaks first (this agent is the caller, testing someone else's agent): say
+            # nothing; Start's routes, or the step after it, answer once something is heard.
+            if handoff is not None and not greeting:
+                await self._set_step(self.graph.steps[handoff.target])
+                if self.current.scripted:
+                    await self._enter()
+                return
+            if not greeting:
+                return
         if greeting:
             await self.host.say(greeting)
         if handoff is not None:
