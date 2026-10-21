@@ -43,7 +43,8 @@ FISH_TTS_MODELS = ("s2.1-pro-free", "s2.1-pro", "s2-pro", "drama-3", "s1")
 
 # Numeric settings: (minimum, maximum). Empty means the provider's default.
 RANGES = {"turn_pause": (0.2, 6.0), "fish_speed": (0.5, 2.0), "fish_volume": (-20.0, 20.0), "fish_temperature": (0.0, 1.0),
-          "fish_top_p": (0.0, 1.0)}
+          "fish_top_p": (0.0, 1.0), "price_stt_min": (0.0, 10.0), "price_llm_in": (0.0, 1000.0),
+          "price_llm_out": (0.0, 1000.0), "price_tts_mchar": (0.0, 1000.0), "price_phone_min": (0.0, 10.0)}
 
 
 @dataclass(frozen=True)
@@ -238,6 +239,11 @@ SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("call_history", "VPE_CALL_HISTORY", "Keep call history", choices=("on", "off")),
     FieldSpec("call_history_days", "VPE_CALL_HISTORY_DAYS", "Keep calls for (days)"),
     FieldSpec("call_recordings", "VPE_CALL_RECORDINGS", "Record voice calls", choices=("off", "on")),
+    FieldSpec("price_stt_min", "VPE_PRICE_STT_MIN", "Speech to text, $ per minute"),
+    FieldSpec("price_llm_in", "VPE_PRICE_LLM_IN", "Model input, $ per 1M tokens"),
+    FieldSpec("price_llm_out", "VPE_PRICE_LLM_OUT", "Model output, $ per 1M tokens"),
+    FieldSpec("price_tts_mchar", "VPE_PRICE_TTS_MCHAR", "Voice, $ per 1M characters"),
+    FieldSpec("price_phone_min", "VPE_PRICE_PHONE_MIN", "Phone line, $ per minute"),
     # knowledge search
     FieldSpec("embeddings", "VPE_EMBEDDINGS", "Embeddings for knowledge search", choices=("local", "ollama", "off")),
     FieldSpec("embeddings_url", "VPE_EMBEDDINGS_URL", "Embeddings server (OpenAI-compatible)"),
@@ -366,6 +372,11 @@ class Config:
     call_history: str = "on"          # transcripts, collected details and outcomes, on this computer
     call_history_days: str = "30"
     call_recordings: str = "off"      # stereo WAV of voice calls (caller left, agent right)
+    price_stt_min: str = ""           # cost estimate rates; blank = the list price we know, if any (pricing.py)
+    price_llm_in: str = ""
+    price_llm_out: str = ""
+    price_tts_mchar: str = ""
+    price_phone_min: str = ""
     embeddings: str = "local"
     embeddings_url: str = "http://localhost:11434/v1"
     embeddings_model: str = "nomic-embed-text"

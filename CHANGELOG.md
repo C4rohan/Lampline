@@ -4,6 +4,12 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 
 ## Unreleased (on dev)
 
+### Watch real calls
+- **Call checks:** grade real calls automatically. Pick an agent on the Calls page, write what a good call achieves and a few checks, and each call to it is graded by your model as it ends, with a reason per check. Filter by **Failed checks**, or grade any kept call by hand. Off until you turn it on per agent; a grader that can't be reached marks the call "Not graded", never failed.
+- **Response times:** each call keeps every turn's response time and shows p50 and p95 (and the slowest); the Calls page shows the last 7 days across all turns.
+- **Cost per call (estimate):** speech to text, model tokens, characters spoken and phone minutes, times your rates (Integrations → Call history) or a list price Lampline knows. Local services cost nothing; parts without a rate are named.
+- The call history file upgrades in place.
+
 ## v0.3.0
 
 Test real phone calls, graded: an Evals tab, test scripts that turn into test cases, and Google agents side by side.

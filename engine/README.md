@@ -503,6 +503,7 @@ one container, built from the `Dockerfile` at the top of the repo:
 | `VPE_CALL_HISTORY` | `on` | keep finished calls on the Calls page |
 | `VPE_CALL_HISTORY_DAYS` | 30 | then they're deleted, recordings included |
 | `VPE_CALL_RECORDINGS` | `off` | `on` saves voice calls as stereo WAV |
+| `VPE_PRICE_STT_MIN`, `VPE_PRICE_LLM_IN`, `VPE_PRICE_LLM_OUT`, `VPE_PRICE_TTS_MCHAR`, `VPE_PRICE_PHONE_MIN` | list prices | rates for each call's cost estimate: $ per minute, per 1M tokens, per 1M characters |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_FROM_NUMBER` | | outbound calls through Twilio |
 | `TELNYX_TEXML_APP_ID`, `TELNYX_FROM_NUMBER` | | outbound calls through Telnyx |
 | `JAMBONZ_API_URL`, `JAMBONZ_ACCOUNT_SID`, `JAMBONZ_API_KEY`, `JAMBONZ_APPLICATION_SID`, `JAMBONZ_FROM_NUMBER` | `https://api.jambonz.cloud` | outbound calls over SIP through jambonz |
@@ -745,8 +746,37 @@ calls are also saved as stereo WAV (caller left, agent right, 16 kHz) in
 the rules depend on where they are. Use synthetic test data unless the
 machine is set up to protect real callers' details.
 
-The API: `GET /v1/calls` (`agent`, `channel`, `q`, `before`, `limit`),
-`GET /v1/calls/{id}`, `GET /v1/calls/{id}/recording`, `DELETE /v1/calls/{id}`.
+### Response times, cost and automatic grading
+
+- **Response times.** Each call keeps the agent's response time for every turn
+  (from the caller's last word to the agent's first sound) and shows the
+  typical (p50) and slow (p95) ones. The top of the Calls page has the last 7
+  days across every turn.
+- **Cost per call (estimate).** The engine counts what each call used: seconds
+  of audio sent to speech to text, the model's input and output tokens, and
+  characters spoken. It multiplies them by your rates in **Integrations → Call
+  history** (`VPE_PRICE_STT_MIN`, `VPE_PRICE_LLM_IN`, `VPE_PRICE_LLM_OUT`,
+  `VPE_PRICE_TTS_MCHAR`, `VPE_PRICE_PHONE_MIN`), or by a list price Lampline
+  knows when you leave one blank (Deepgram speech to text, Fish Audio voices,
+  Gemini Flash-Lite and Claude Haiku 5.5). Services on this computer cost
+  nothing. A part without a rate is left out and named, and the cost shows a
+  "+". It's for comparing agents and settings, not a bill.
+- **Call checks.** Press **Call checks** on the Calls page, pick an agent, and
+  write what a good call achieves and a few checks ("The agent asks for the
+  caller's name"). When a call to that agent ends, your model grades the
+  transcript the way an eval is graded, and the call shows **Checks passed**
+  or **Checks failed** with a reason for each check. Filter by **Failed
+  checks**, or press **Grade now** on any kept call. Each grade uses model
+  tokens, so it's off until you turn it on per agent. If the model can't be
+  reached the call shows **Not graded**, never failed.
+
+The history file upgrades in place (schema version in `PRAGMA user_version`).
+
+The API: `GET /v1/calls` (`agent`, `channel`, `q`, `before`, `limit`, `grade`),
+`GET /v1/calls/summary` (`agent`, `days`), `GET /v1/calls/{id}`,
+`GET /v1/calls/{id}/recording`, `DELETE /v1/calls/{id}`,
+`POST /v1/calls/{id}/grade` (optional `{goal, criteria}`), `GET /v1/call-checks`,
+`PUT /v1/call-checks/{agent}` (`{goal, criteria, enabled}`), `DELETE /v1/call-checks/{agent}`.
 
 ## Turn taking and response time
 
@@ -810,7 +840,10 @@ The folder runs as it is on disk: nothing to save or deploy first.
 | POST | `/v1/tests/caller` | `{persona, goal, transcript}`: what a model-played test caller says next (`vk test`) |
 | GET | `/v1/me` | who this key is, and its role |
 | GET, POST, DELETE | `/v1/keys`, `/v1/keys/{id}` | named keys with roles (admin) |
-| GET | `/v1/calls` | call history: `agent`, `channel`, `q`, `before`, `limit` |
+| GET | `/v1/calls` | call history: `agent`, `channel`, `q`, `before`, `limit`, `grade` (`passed`, `failed`, `error`) |
+| GET | `/v1/calls/summary` | last `days` (7) for `agent` (all): calls, p50/p95 response, cost per call, checks passed |
+| POST | `/v1/calls/{id}/grade` | grade a kept call against its agent's checks (or `{goal, criteria}`) |
+| GET / PUT / DELETE | `/v1/call-checks`, `/v1/call-checks/{agent}` | checks that grade an agent's calls as they end |
 | GET | `/v1/calls/{id}` | one call: transcript, events, collected details |
 | GET | `/v1/calls/{id}/recording` | its recording (WAV), when recordings are on |
 | DELETE | `/v1/calls/{id}` | delete a call and its recording |
