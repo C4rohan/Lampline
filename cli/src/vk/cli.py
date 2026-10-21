@@ -240,7 +240,14 @@ def cmd_test(args) -> int:
         _err(f"no tests found in {folder}/tests/*.yaml" + (f" matching {args.k!r}" if args.k else ""))
         return 1
     url = args.url or os.environ.get("VK_ENGINE_URL") or "http://localhost:7860"
-    return _test_on_engine(args, agent, folder, scenarios, url.rstrip("/"))
+    targets = [t.strip() for t in (args.target or "engine").split(",") if t.strip()]
+    bad = [t for t in targets if t not in ("engine", "dfcx", "ces")]
+    if bad or not targets:
+        _err(f"error: --target is engine, dfcx or ces (or several, comma-separated); got {', '.join(bad) or 'nothing'}")
+        return 1
+    if targets == ["engine"]:
+        return _test_on_engine(args, agent, folder, scenarios, url.rstrip("/"))
+    return _test_targets(args, agent, folder, scenarios, url.rstrip("/"), targets)
 
 
 def _report(args, results) -> int:
@@ -281,6 +288,77 @@ def _test_on_engine(args, agent, folder: Path, scenarios, url: str) -> int:
     return _report(args, results)
 
 
+def _test_targets(args, agent, folder: Path, scenarios, url: str, targets: list[str]) -> int:
+    """Run the same tests on the engine and/or a live Google agent, with a side-by-side summary."""
+    from . import google_targets as gt
+
+    if any(t != "engine" for t in targets) and not args.agent:
+        _err("error: --agent names the Google agent: projects/P/locations/L/agents/ID (dfcx) or .../apps/ID (ces)")
+        return 1
+    if "dfcx" in targets and "ces" in targets:
+        _err("error: test one Google agent at a time (dfcx or ces)")
+        return 1
+    findings = lint(agent, folder)
+    if has_errors(findings):
+        _print_findings([f for f in findings if f.severity == "error"], "text")
+        _err("\nnot testing: fix the lint errors above")
+        return 1
+    key = os.environ.get("VK_ENGINE_KEY") or None
+    transport = getattr(args, "_transport", None)
+    needs_engine = "engine" in targets or any(sc.caller for sc in scenarios)
+    engine = EngineClient(url, agent, key, live_tools=args.live_tools, transport=transport) if needs_engine else None
+    by_target: dict[str, list] = {}
+    try:
+        if engine is not None:
+            try:
+                engine.health()
+            except ApiError as exc:
+                _err(f"error: {exc.message}" + ("" if "engine" in targets else
+                                                 " (the engine plays the caller in tests with a caller: block)"))
+                return 1
+        for target in targets:
+            if target == "engine":
+                client, label = engine, f"engine {url}"
+            else:
+                token = gt.access_token()
+                kw = {"token": token, "engine": engine, "transport": transport}
+                client = (gt.DialogflowCX(args.agent, environment=args.environment or "", language=args.language, **kw)
+                          if target == "dfcx" else gt.CXAgentStudio(args.agent, deployment=args.deployment or "", **kw))
+                label = f"{client.target} {args.agent}"
+            if args.format == "text":
+                _out(f"== {label}\n")
+            results = []
+            for sc in scenarios:
+                try:
+                    result = scenario.run(client, sc, agent.context_variables)
+                except ApiError as exc:
+                    result = scenario.Result(sc, scenario.Transcript(), [f"{target} error: {exc}"], 0.0)
+                results.append(result)
+                if args.format == "text":
+                    _print_result(result, args.verbose)
+            if target != "engine":
+                client.close()
+            by_target[target] = results
+            if args.format == "text":
+                failed = sum(not r.passed for r in results)
+                _out(f"\n{len(results) - failed} passed, {failed} failed\n")
+    finally:
+        if engine is not None:
+            engine.close()
+    if args.format == "json":
+        _out(json.dumps({t: [r.as_dict() for r in rs] for t, rs in by_target.items()}, indent=2, ensure_ascii=False))
+    elif len(by_target) > 1:
+        names = list(by_target)
+        width = max(len(sc.name) for sc in scenarios)
+        _out("Side by side")
+        _out("  " + "test".ljust(width) + "  " + "  ".join(n.ljust(6) for n in names))
+        for i, sc in enumerate(scenarios):
+            marks = ["PASS" if by_target[n][i].passed else "FAIL" for n in names]
+            differ = "  ← differs" if len(set(marks)) > 1 else ""
+            _out("  " + sc.name.ljust(width) + "  " + "  ".join(m.ljust(6) for m in marks) + differ)
+    return 1 if any(not r.passed for rs in by_target.values() for r in rs) else 0
+
+
 # --- parser ----------------------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
@@ -303,6 +381,14 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("-v", "--verbose", action="store_true", help="print transcripts of passing tests too")
     s.add_argument("--live-tools", action="store_true",
                    help="call tools' real services instead of their mock responses")
+    s.add_argument("--target", default="engine", metavar="TARGETS",
+                   help="where to run: engine (default), dfcx or ces, or several, like engine,dfcx (side by side)")
+    s.add_argument("--agent", metavar="RESOURCE",
+                   help="the Google agent: projects/P/locations/L/agents/ID (dfcx) or projects/P/locations/L/apps/ID (ces); "
+                        "uses your own `gcloud auth print-access-token` or VK_GOOGLE_TOKEN")
+    s.add_argument("--environment", help="dfcx: an environment ID (default: the draft)")
+    s.add_argument("--deployment", help="ces: a deployment ID")
+    s.add_argument("--language", default="en", help="dfcx: the language code (default en)")
     s.set_defaults(func=cmd_test)
 
     templates = sub.add_parser("templates", help="starter agents")
