@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CheckCircle2, CircleSlash, ClipboardCheck, FileUp, Headphones, ListChecks, Loader2, Phone, PhoneOff, Plus, Puzzle, Trash2, XCircle } from "lucide-react";
+import { CheckCircle2, CircleSlash, ClipboardCheck, FileUp, Headphones, ListChecks, Loader2, Phone, PhoneOff, Plus, Puzzle, Repeat, RotateCcw, Trash2, XCircle, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { api, type AgentSummary } from "@/lib/api";
 import { useLoad } from "@/lib/app";
@@ -20,9 +20,20 @@ type Run = {
   id: string; created: number; caller_agent: string; method: Method; number: string; persona: string; goal: string;
   criteria: string[]; max_minutes: number; status: string; started: number | null; ended: number | null; ended_reason: string | null;
   transcript?: Said[]; results: Result | null; summary: string | null; error: string | null; duration: number | null;
+  options?: Tough | null; agent_ms?: { turns: number; p50: number; p95: number; max: number } | null;
   live?: { session_id: string; events_token: string }; bridge?: { token: string; open_url: string };
 };
 type Bridge = { found: boolean; version?: string };
+type Tough = { noise: string; level: string; voice: string; style: string; interrupt: string; pauses: string; seed?: number };
+type Draft = { persona: string; goal: string; criteria: string[]; number: string; caller: Tough | null; case_id: string };
+const TOUGH: [keyof Tough, string, [string, string][]][] = [
+  ["noise", "Background noise", [["", "None"], ["room", "Busy room"], ["street", "Street"], ["car", "Car"]]],
+  ["level", "Noise level", [["low", "Low"], ["medium", "Medium"], ["high", "High"]]],
+  ["style", "How the caller talks", [["", "Plainly"], ["hesitant", "Hesitant (ums, restarts)"], ["terse", "Terse"], ["rambling", "Rambling"], ["non_native", "English as a second language"]]],
+  ["interrupt", "Cuts in on the agent", [["", "Never"], ["sometimes", "Sometimes"], ["often", "Often"]]],
+  ["pauses", "Long pauses (6–10 s)", [["", "None"], ["once", "Once"], ["several", "Several"]]],
+];
+const secs = (ms: number) => `${(ms / 1000).toFixed(2)} s`;
 type Case = { id?: string; name: string; persona: string; goal: string; criteria: string[]; number: string; notes: string; source?: string };
 
 const EXAMPLE = {
@@ -208,6 +219,8 @@ export function EvalsPage() {
       const e = JSON.parse(m.data);
       if (e.type === "user_speech" && e.text) setSaid((s) => [...s, { who: "agent", text: e.text }]);
       if (e.type === "bot_speech" && e.text && !e.filler) setSaid((s) => [...s, { who: "caller", text: e.text }]);
+      if (e.type === "stress" && e.kind === "pause") setNote(`The caller goes quiet for ${e.seconds} s…`);
+      if (e.type === "stress" && e.kind === "interruption") setNote("The caller cut in.");
     };
     rt.current.es = es;
   }
@@ -237,6 +250,7 @@ export function EvalsPage() {
       const r = await api<Run>("POST", "/v1/evals", {
         caller_agent: callerSlug, method, number: field("number"), persona: field("persona"), goal: field("goal"),
         criteria, max_minutes: Number(field("minutes", "5")), case_id: field("case") || undefined,
+        caller: tough(),
       });
       setRun(r);
       if (method === "google_voice") {
@@ -300,6 +314,34 @@ export function EvalsPage() {
       set("caller", a.slug); agents.reload(); toast.success("Test Caller created");
     } catch (e) { toast.error((e as Error).message); }
   }
+
+  function tough(): Tough | undefined {
+    const t = { noise: field("t_noise"), level: field("t_level", "medium"), voice: field("t_voice").trim(), style: field("t_style"),
+      interrupt: field("t_interrupt"), pauses: field("t_pauses"), ...(field("t_seed") ? { seed: Number(field("t_seed")) } : {}) };
+    return t.noise || t.voice || t.style || t.interrupt || t.pauses ? t : undefined;
+  }
+  const toughCount = ["t_noise", "t_voice", "t_style", "t_interrupt", "t_pauses"].filter((k) => field(k).trim()).length;
+  function loadDraft(d: Draft, what: string) {
+    setForm((f) => {
+      const n: Record<string, string> = { ...f, persona: d.persona, goal: d.goal, criteria: d.criteria.join("\n"), case: d.case_id || "",
+        t_noise: d.caller?.noise || "", t_level: d.caller?.level || "medium", t_voice: d.caller?.voice || "", t_style: d.caller?.style || "",
+        t_interrupt: d.caller?.interrupt || "", t_pauses: d.caller?.pauses || "", t_seed: d.caller?.seed ? String(d.caller.seed) : "",
+        ...(d.number ? { number: d.number } : {}) };
+      local.set("vpe-eval-form", JSON.stringify(n)); return n;
+    });
+    toast.success(`${what} Check the number, then Start eval.`);
+  }
+  async function replay(id: string, exact: boolean) {
+    try { loadDraft(await api<Draft>("POST", "/v1/evals/replay", { run_id: id, exact }), exact ? "Loaded what the caller said, to replay." : "Loaded the same eval."); }
+    catch (e) { toast.error((e as Error).message); }
+  }
+  useEffect(() => {                                     // "Replay as a test" from the Calls page
+    const raw = local.get("vpe-eval-draft");
+    if (!raw) return;
+    local.set("vpe-eval-draft", null);
+    try { loadDraft(JSON.parse(raw) as Draft, "Loaded the call to replay."); } catch { /* ignore a bad draft */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const live = run && !DONE.includes(run.status);
   const missing = [
@@ -389,6 +431,30 @@ export function EvalsPage() {
             <Textarea id="ev-criteria" rows={4} value={field("criteria")} onChange={(e) => set("criteria", e.target.value)} disabled={!!live}
               placeholder={"The agent asks for the caller's name\nThe agent offers a Friday morning time\nThe agent confirms the change before hanging up"} />
           </Field>
+          <details className="group rounded-lg border" open={toughCount > 0 || undefined}>
+            <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-sm font-medium">
+              <Zap className="size-4 text-muted-foreground" />Make the caller tougher
+              {toughCount > 0 && <Badge variant="lamp">{toughCount} on</Badge>}
+              <span className="ml-auto text-xs text-muted-foreground group-open:hidden">Noise, accents, interruptions, pauses</span>
+            </summary>
+            <div className="grid items-start gap-3 border-t p-3 sm:grid-cols-2">
+              {TOUGH.map(([k, label, opts]) => (
+                <Field key={k} label={label} htmlFor={`ev-t-${k}`}>
+                  <NativeSelect id={`ev-t-${k}`} value={field(`t_${k}`, k === "level" ? "medium" : "")} onChange={(e) => set(`t_${k}`, e.target.value)}
+                    disabled={!!live || (k === "level" && !field("t_noise"))}>
+                    {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </NativeSelect>
+                </Field>
+              ))}
+              <Field className="sm:col-span-2" label="Caller's voice" htmlFor="ev-t-voice" hint="Another voice of your text-to-speech service, for an accent: a Kokoro voice like bf_emma (British), a Deepgram or Fish Audio voice.">
+                <Input id="ev-t-voice" value={field("t_voice")} onChange={(e) => set("t_voice", e.target.value)} disabled={!!live} placeholder="the usual voice" />
+              </Field>
+              <p className="text-[12.5px] text-muted-foreground sm:col-span-2">
+                Noise is mixed under the caller's voice. Cutting in and pauses are planned from a seed, so a replay plays them the same way.
+                The agent's response time is always measured from the caller's side, phone line included.
+              </p>
+            </div>
+          </details>
           <Field label="Time limit" htmlFor="ev-minutes">
             <NativeSelect id="ev-minutes" value={field("minutes", "5")} onChange={(e) => set("minutes", e.target.value)} disabled={!!live}>
               {["3", "5", "10", "15"].map((m) => <option key={m} value={m}>{m} minutes</option>)}
@@ -429,6 +495,18 @@ export function EvalsPage() {
             {run && (run.results || run.error) && (
               <div className="grid gap-3 border-t p-4">
                 {run.error && <Notice tone="bad">{run.error}</Notice>}
+                {run.agent_ms && (
+                  <p className="text-sm"><strong className="font-medium">Agent response, as the caller heard it:</strong> {secs(run.agent_ms.p50)} typical,{" "}
+                    {secs(run.agent_ms.p95)} slow (p95), {secs(run.agent_ms.max)} slowest, over {run.agent_ms.turns} turn{run.agent_ms.turns === 1 ? "" : "s"}.</p>
+                )}
+                {run.options && (
+                  <p className="flex flex-wrap gap-1.5 text-xs">
+                    {TOUGH.filter(([k]) => k !== "level" && run.options![k]).map(([k, label, opts]) => (
+                      <Badge key={k} variant="outline">{label}: {opts.find(([v]) => v === run.options![k])?.[1]}{k === "noise" ? ` (${run.options!.level})` : ""}</Badge>
+                    ))}
+                    {run.options.voice && <Badge variant="outline">Voice: {run.options.voice}</Badge>}
+                  </p>
+                )}
                 {run.results && (
                   <>
                     {run.results.summary && <p className="text-sm">{run.results.summary}</p>}
@@ -443,6 +521,13 @@ export function EvalsPage() {
                       ))}
                     </ul>
                   </>
+                )}
+                {DONE.includes(run.status) && (
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" onClick={() => replay(run.id, false)}><RotateCcw />Run again</Button>
+                    {run.transcript?.some((x) => x.who === "caller") && (
+                      <Button size="sm" variant="outline" onClick={() => replay(run.id, true)}><Repeat />Replay what the caller said</Button>)}
+                  </div>
                 )}
               </div>
             )}
