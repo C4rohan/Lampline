@@ -337,7 +337,8 @@ class Engine:
         try:
             s2s = isinstance(session, realtime.RealtimeVoiceSession)
             voice = s2s or isinstance(session, VoiceSession)
-            model = self.cfg.realtime_model if s2s else (self.cfg.model or default_model(self.cfg.llm))
+            model = ((self.cfg.gemini_live_model or "gemini-live") if self.cfg.realtime_provider == "gemini"
+                     else self.cfg.realtime_model) if s2s else (self.cfg.model or default_model(self.cfg.llm))
             meta = session.meta or {}
             from .history import _channel
             return pricing.estimate(getattr(session, "usage", None), cfg=self.cfg, minutes=(time.time() - session.created) / 60,
