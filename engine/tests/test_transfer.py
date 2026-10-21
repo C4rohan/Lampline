@@ -80,14 +80,14 @@ def test_each_carrier_gets_its_own_form():
     assert phone.telnyx_body() == {"to": "+15551234567"}
 
 
-def test_pending_transfers_are_claimed_once_and_expire():
+def test_pending_transfers_survive_redelivery_and_expire():
     p = tr.PendingTransfers(ttl=0.05)
     t = tr.Transfer(to="+15551234567", session_id="s1")
     p.add("CA1", t)
-    assert p.pop("CA2") is None and p.pop("CA1") is t and p.pop("CA1") is None
+    assert p.get("CA2") is None and p.get("CA1") is t and p.get("CA1") is t     # carriers redeliver webhooks
     p.add("CA1", t)
     time.sleep(0.1)
-    assert p.pop("CA1") is None
+    assert p.get("CA1") is None
 
 
 # -- a call that reaches the step ------------------------------------------------------------------
@@ -166,7 +166,7 @@ def test_twilio_closes_the_stream_and_dials_the_desk(cfg, agents_dir, handoff_ag
         dial = c.post("/v1/twilio/after", content=urlencode(after), headers=sign).text
         assert "<Dial answerOnBridge=\"true\"><Sip>sip:desk@pbx.example.com?" in dial
         assert "X-Lampline-caller_phone=%2B15550100" in dial              # the caller's number, as a detail
-        assert c.post("/v1/twilio/after", content=urlencode(after), headers=sign).text.endswith("<Hangup/></Response>")
+        assert c.post("/v1/twilio/after", content=urlencode(after), headers=sign).text == dial   # a redelivery connects too
         assert c.post("/v1/twilio/after", content=urlencode(after), headers={"Content-Type": "application/x-www-form-urlencoded"}).status_code == 403
 
 
@@ -187,7 +187,8 @@ def test_jambonz_dials_the_desk_when_the_stream_ends(cfg, agents_dir, handoff_ag
         verbs = c.post("/v1/jambonz/done", content=done, headers={"Content-Type": "application/json", **sign(done)}).json()
         assert verbs[0]["verb"] == "dial" and verbs[0]["target"] == [{"type": "sip", "sipUri": "sip:desk@pbx.example.com"}]
         assert verbs[0]["headers"]["X-Lampline-caller_phone"] == "+15550100"
-        assert c.post("/v1/jambonz/done", content=done, headers={"Content-Type": "application/json", **sign(done)}).json() == [{"verb": "hangup"}]
+        again = c.post("/v1/jambonz/done", content=done, headers={"Content-Type": "application/json", **sign(done)}).json()
+        assert again == verbs                                              # a redelivery connects too
 
 
 def test_telnyx_asks_call_control_to_transfer(cfg, agents_dir, handoff_agent, monkeypatch):
