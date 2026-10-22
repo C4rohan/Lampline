@@ -409,6 +409,13 @@ class Config:
         for name, raw in (saved or {}).items():
             if name in SPEC_BY_NAME and raw not in (None, ""):
                 values[name], sources[name] = str(raw).strip(), "saved"
+        # A model named in the environment belongs to the environment's provider. When the Integrations page
+        # picked another provider, that provider's default (or its own saved model) applies instead: Claude
+        # must not be asked for qwen3:4b because VPE_LLM_MODEL came with --free.
+        env_llm = (e.get("VPE_LLM") or "").strip().strip('"').strip("'")
+        if sources.get("model") == "env" and sources.get("llm") == "saved" and values.get("llm") != env_llm:
+            values.pop("model")
+            sources.pop("model")
         for name, (lo, hi) in RANGES.items():
             if values.get(name):
                 try:

@@ -155,6 +155,9 @@ class MoonshineSTTService(STTService):
     """
 
     def __init__(self, *, model: str = DEFAULT, **kwargs):
+        from pipecat.services.settings import STTSettings
+        kwargs.setdefault("settings", STTSettings(model=model, language=None))
+        kwargs.setdefault("ttfs_p99_latency", 0.3)   # time to a final transcript after speech ends
         super().__init__(**kwargs)
         self._model = model
         self._stream = None

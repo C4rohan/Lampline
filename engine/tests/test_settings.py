@@ -184,3 +184,38 @@ def test_auto_download_fetches_only_what_the_settings_choose(cfg, agents_dir, tm
     engine.cfg = dataclasses.replace(cfg, stt="deepgram", tts="kokoro")
     monkeypatch.setattr(engine.downloads, "start", missing)
     assert engine.start_downloads() == []                                       # says so in the log, keeps running
+
+
+def test_an_environment_model_belongs_to_the_environment_provider():
+    """Found trying --free: VPE_LLM=ollama VPE_LLM_MODEL=qwen3:4b, with Claude chosen on the Integrations page,
+    sent "qwen3:4b" to Anthropic (404)."""
+    from vpengine.services import Config, default_model
+    env = {"VPE_LLM": "ollama", "VPE_LLM_MODEL": "qwen3:4b"}
+    c = Config.load(env=env, saved={"llm": "anthropic"})
+    assert c.llm == "anthropic" and c.model != "qwen3:4b"
+    assert (c.model or default_model("anthropic")) == default_model("anthropic")
+    assert Config.load(env=env, saved={"llm": "anthropic", "model": "claude-x"}).model == "claude-x"
+    assert Config.load(env=env, saved={}).model == "qwen3:4b"                     # the environment's own provider
+    assert Config.load(env=env, saved={"llm": "ollama"}).model == "qwen3:4b"       # same provider saved
+
+
+async def test_choosing_a_local_speech_model_starts_its_download(api, monkeypatch):
+    """Found trying it: switching Moonshine from tiny to small saved the setting but didn't download the model,
+    so the next call failed."""
+    from vpengine import moonshine_stt
+    c, engine = api
+    started = []
+    monkeypatch.setattr(moonshine_stt, "ready", lambda arch=None: arch == "tiny-streaming")
+    monkeypatch.setattr(engine.moonshine, "start", lambda m: started.append(m))
+    assert (await c.put("/v1/settings", json={"stt": "moonshine", "moonshine_model": "tiny-streaming"})).status_code == 200
+    assert started == []                                                    # already on this computer
+    assert (await c.put("/v1/settings", json={"moonshine_model": "small-streaming"})).status_code == 200
+    assert started == ["small-streaming"]
+
+
+def test_local_stt_services_have_complete_settings():
+    """Pipecat logged an ERROR for each call: our services left model and language unset."""
+    from vpengine.moonshine_stt import MoonshineSTTService
+    from vpengine.parakeet_stt import ParakeetSTTService
+    for svc in (MoonshineSTTService(model="tiny-streaming"), ParakeetSTTService()):
+        assert svc._settings.model is not None and svc._settings.language is None
