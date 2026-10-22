@@ -4,6 +4,7 @@
 #   scripts/engine-up.sh                 # http://localhost:7860
 #   scripts/engine-up.sh --agents DIR    # another agents directory
 #   scripts/engine-up.sh --port 7870
+#   scripts/engine-up.sh --free          # no API keys: Ollama, Moonshine and Kokoro on this computer
 #   scripts/engine-up.sh --tunnel        # also take phone calls (Twilio, Telnyx or jambonz)
 #   scripts/engine-up.sh --no-reload     # don't restart by itself when the engine's code changes
 #
@@ -21,15 +22,17 @@ VENV=.venv-engine
 AGENTS=agents
 ARGS=()
 TUNNEL=0
+FREE=0
 RELOAD=1
 PORT="${VPE_PORT:-7860}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --agents) AGENTS="$2"; shift 2 ;;
     --tunnel) TUNNEL=1; shift ;;
+    --free) FREE=1; shift ;;
     --no-reload) RELOAD=0; shift ;;
     --port) PORT="$2"; ARGS+=("$1" "$2"); shift 2 ;;
-    -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) ARGS+=("$1"); shift ;;
   esac
 done
@@ -82,6 +85,29 @@ if [[ ! -d "$AGENTS" ]] || [[ -z "$(ls -A "$AGENTS" 2>/dev/null)" ]]; then
   "$VENV/bin/vk" templates install front-desk --dir "$AGENTS/front-desk" >/dev/null
 fi
 
+
+# --free: everything on this computer, no accounts (values already in the environment or .env win).
+if [[ "$FREE" == 1 ]]; then
+  export VPE_LLM="${VPE_LLM:-ollama}" VPE_LLM_MODEL="${VPE_LLM_MODEL:-qwen3:4b}" VPE_TTS="${VPE_TTS:-kokoro}"
+  export VPE_AUTO_DOWNLOAD="${VPE_AUTO_DOWNLOAD:-on}"
+  if "$VENV/bin/python" -c 'import moonshine_voice' 2>/dev/null; then
+    export VPE_STT="${VPE_STT:-moonshine}"
+  else
+    export VPE_STT="${VPE_STT:-whisper}"
+  fi
+  if ! command -v ollama >/dev/null 2>&1; then
+    echo "--free needs Ollama for the model: install it from https://ollama.com (or brew install ollama), then run this again" >&2
+    exit 1
+  fi
+  if ! curl -fsS -m 3 http://localhost:11434/api/version >/dev/null 2>&1; then
+    echo "starting Ollama..."
+    (ollama serve >"$VENV/ollama.log" 2>&1 &)
+    for _ in $(seq 1 20); do curl -fsS -m 2 http://localhost:11434/api/version >/dev/null 2>&1 && break; sleep 1; done
+  fi
+  echo "getting the model $VPE_LLM_MODEL (about 2.5 GB, first run only)..."
+  ollama pull "$VPE_LLM_MODEL"
+  echo "speech models (about 500 MB) download when the engine starts; the Integrations page shows progress"
+fi
 
 [[ "$RELOAD" == 1 ]] && ARGS+=(--reload)
 export VPE_REPO_ROOT="$PWD"   # lets the Integrations page start local speech (local/docker-compose.speech.yml)
