@@ -78,12 +78,16 @@ def make_realtime_llm(cfg: Config):
             self.lp_kind = "auto"
             self._lp_waiting: list[tuple[str, str]] = []
             self.lp_run_pending = False
+            self._lp_seen: set[str] = set()        # every response id the server has used
+            self._lp_before: set[str] = set()      # ...as of when ours was asked for: those aren't ours
+            self._lp_rid: str | None = None        # the id of the response we asked for, once seen
 
         async def _lp_begin(self, kind: str, text: str = "") -> None:
             if self.lp_busy or not self._api_session_ready:
                 self._lp_waiting.append((kind, text))
                 return
             self.lp_busy, self.lp_kind = True, kind
+            self._lp_before, self._lp_rid = set(self._lp_seen), None
             if kind == "say":
                 await self.send_client_event(events.ResponseCreateEvent(response=events.ResponseProperties(
                     instructions=f"Say exactly this, word for word, and nothing else: {text}")))
@@ -110,6 +114,30 @@ def make_realtime_llm(cfg: Config):
                 await self._lp_begin("run")
             self.lp_run_pending = False
 
+        def _lp_note(self, rid) -> None:
+            """The first new response id after we asked for one is ours."""
+            if not rid or rid in self._lp_seen:
+                return
+            self._lp_seen.add(rid)
+            if self.lp_busy and self.lp_kind in ("say", "run") and self._lp_rid is None:
+                self._lp_rid = rid
+
+        async def _handle_evt_audio_delta(self, evt):
+            self._lp_note(getattr(evt, "response_id", None))
+            await super()._handle_evt_audio_delta(evt)
+
+        async def _handle_evt_audio_transcript_delta(self, evt):
+            self._lp_note(getattr(evt, "response_id", None))
+            await super()._handle_evt_audio_transcript_delta(evt)
+
+        async def _handle_evt_text_delta(self, evt):
+            self._lp_note(getattr(evt, "response_id", None))
+            await super()._handle_evt_text_delta(evt)
+
+        async def _handle_evt_function_call_arguments_done(self, evt):
+            self._lp_note(getattr(evt, "response_id", None))
+            await super()._handle_evt_function_call_arguments_done(evt)
+
         async def _handle_evt_conversation_item_added(self, evt):
             if getattr(evt.item, "role", None) == "assistant" and not self.lp_busy:
                 self.lp_busy, self.lp_kind = True, "auto"            # the server answered the caller on its own
@@ -132,6 +160,14 @@ def make_realtime_llm(cfg: Config):
 
         async def _handle_evt_response_done(self, evt):
             await super()._handle_evt_response_done(evt)
+            rid = getattr(getattr(evt, "response", None), "id", None)
+            if rid:
+                self._lp_seen.add(rid)
+            if self.lp_busy and self.lp_kind in ("say", "run") and rid and \
+                    (rid in self._lp_before or (self._lp_rid is not None and rid != self._lp_rid)):
+                # The end of an earlier response (often the caller's turn that called a route), arriving
+                # after we asked for ours: ours is still coming, so don't start the next one on top of it.
+                return
             self.lp_busy = False
             await self._lp_drain()
 
