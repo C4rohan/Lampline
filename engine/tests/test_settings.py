@@ -184,3 +184,16 @@ def test_auto_download_fetches_only_what_the_settings_choose(cfg, agents_dir, tm
     engine.cfg = dataclasses.replace(cfg, stt="deepgram", tts="kokoro")
     monkeypatch.setattr(engine.downloads, "start", missing)
     assert engine.start_downloads() == []                                       # says so in the log, keeps running
+
+
+def test_an_environment_model_belongs_to_the_environment_provider():
+    """Found trying --free: VPE_LLM=ollama VPE_LLM_MODEL=qwen3:4b, with Claude chosen on the Integrations page,
+    sent "qwen3:4b" to Anthropic (404)."""
+    from vpengine.services import Config, default_model
+    env = {"VPE_LLM": "ollama", "VPE_LLM_MODEL": "qwen3:4b"}
+    c = Config.load(env=env, saved={"llm": "anthropic"})
+    assert c.llm == "anthropic" and c.model != "qwen3:4b"
+    assert (c.model or default_model("anthropic")) == default_model("anthropic")
+    assert Config.load(env=env, saved={"llm": "anthropic", "model": "claude-x"}).model == "claude-x"
+    assert Config.load(env=env, saved={}).model == "qwen3:4b"                     # the environment's own provider
+    assert Config.load(env=env, saved={"llm": "ollama"}).model == "qwen3:4b"       # same provider saved
