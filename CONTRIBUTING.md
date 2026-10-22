@@ -1,6 +1,6 @@
 # Contributing
 
-Open pull requests against `dev`, and follow the [code of conduct](CODE_OF_CONDUCT.md). Changes reach `qa` and then `prod` by pull request; see [docs/BRANCHES.md](docs/BRANCHES.md).
+Open pull requests against `dev`, and follow the [code of conduct](CODE_OF_CONDUCT.md). Changes reach `qa` and then `prod` by pull request; see [docs/BRANCHES.md](docs/BRANCHES.md). Maintainers: `scripts/ship.sh` does each step.
 
 Thanks for helping. The most valuable contributions right now:
 
@@ -29,15 +29,16 @@ python3 costs/cost_model.py > costs/COSTS.md   # commit the regenerated file if 
 
 The built UI in `engine/src/vpengine/static` has fixed file names. If a merge
 (or GitHub's **Update branch**) reports a conflict there, don't pick a side:
-run `(cd engine/ui && npm ci && npm run build)` and commit the result.
+run `(cd engine/ui && npm ci && npm run build)` and commit the result. On a
+pull request into `dev`, the `ui-build` workflow does this for you.
 
 Price changes need a source link in the PR description.
 
 ## Dependency updates
 
-Dependabot opens one pull request a week for the engine UI's packages. Its
-`engine-ui` check fails until the committed build is rebuilt, because
-Dependabot can't run the build. Check out its branch, run
-`(cd engine/ui && npm ci && npm run build)`, commit
+Dependabot opens one pull request a week for the engine UI's packages. The
+`ui-build` workflow rebuilds the committed UI on that branch and re-runs CI, so
+it only needs a review. If it can't (say the build itself fails), check out the
+branch, run `(cd engine/ui && npm ci && npm run build)`, commit
 `engine/src/vpengine/static` and `engine/ui/public/THIRD-PARTY-LICENSES.txt`,
 and push to the same branch.

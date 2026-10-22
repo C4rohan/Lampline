@@ -333,7 +333,8 @@ class Engine:
                 log.exception("after-call triggers failed")
 
     def start_downloads(self) -> list[str]:
-        """Fetch the local speech models the settings choose and don't have yet (VPE_AUTO_DOWNLOAD=on)."""
+        """Fetch the local speech models the settings choose and don't have yet: at start with VPE_AUTO_DOWNLOAD=on,
+        and whenever settings are saved (choosing Moonshine small means wanting it)."""
         from .builtin_speech import kokoro_ready, whisper_ready
         started = []
         try:
@@ -344,6 +345,9 @@ class Engine:
             if self.cfg.stt == "moonshine" and not moonshine_stt.ready(self.cfg.moonshine_model):
                 self.moonshine.start(self.cfg.moonshine_model)
                 started.append("moonshine")
+            if self.cfg.stt == "parakeet" and not parakeet_stt.ready(self.cfg.parakeet_model):
+                self.parakeet.start(self.cfg.parakeet_model)
+                started.append("parakeet")
         except RuntimeError as exc:                  # libraries missing on this computer: say so, keep running
             log.warning("couldn't download local speech: %s", exc)
         if started:
@@ -663,6 +667,7 @@ def create_app(engine: Engine) -> FastAPI:
             engine.set_config(engine.store.update(body))
         except ConfigError as exc:
             raise HTTPException(422, str(exc)) from exc
+        engine.start_downloads()                 # a local speech model just chosen starts downloading
         return public_view(engine.cfg, engine.store.path)
 
     @app.get("/v1/fish/voices", dependencies=auth)

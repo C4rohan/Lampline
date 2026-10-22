@@ -4,6 +4,10 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 
 ## Unreleased (on dev)
 
+### Shipping
+- `scripts/ship.sh` does each step: `ship.sh "message"` opens a pull request into dev, `ship.sh qa` and `ship.sh prod v0.4.0` open the promotions, `ship.sh status` shows what's waiting.
+- New workflows: `sync` carries qa and prod back into dev (and a hotfix into qa) so promotions don't conflict; `ui-build` rebuilds a stale committed UI on pull requests, Dependabot's included; `release` tags and publishes when a `Release vX.Y.Z` pull request merges into prod.
+
 ### Getting started
 - **No API keys:** `scripts/docker-up.sh --free` runs everything on your computer: a model in Ollama (Qwen3 4B), Moonshine listening and Kokoro speaking, downloaded on the first start with progress shown. `scripts/engine-up.sh --free` does the same natively with your own Ollama. `VPE_AUTO_DOWNLOAD=on` fetches the chosen local speech models at start.
 - The README opens with a 30-second demo (import a Dialogflow CX agent, test it, grade a real phone call) and a section on free phone evals.
