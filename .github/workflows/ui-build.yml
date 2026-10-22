@@ -1,0 +1,85 @@
+name: ui-build
+
+# The engine UI's build is committed (engine/src/vpengine/static) so pip installs
+# work without Node. When a pull request changes the UI's source or packages and
+# the committed build is stale, rebuild it and push the result to the branch.
+# Covers Dependabot's weekly UI update and two UI changes merged one after another.
+#
+# Two jobs on purpose: the build runs the branch's npm packages with a read-only
+# token; only the second job, which runs no project code, can push.
+
+on:
+  pull_request_target:
+    branches: [dev]
+    paths: ["engine/ui/**"]
+
+concurrency:
+  group: ui-build-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # only branches in this repository (yours and Dependabot's), never forks
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    outputs:
+      stale: ${{ steps.diff.outputs.stale }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - name: Build
+        working-directory: engine/ui
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+      - id: diff
+        run: |
+          if git diff --quiet -- engine/src/vpengine/static engine/ui/public/THIRD-PARTY-LICENSES.txt \
+             && [ -z "$(git ls-files --others --exclude-standard engine/src/vpengine/static)" ]; then
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            tar -czf ui-build.tgz engine/src/vpengine/static engine/ui/public/THIRD-PARTY-LICENSES.txt
+          fi
+      - if: steps.diff.outputs.stale == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui-build
+          path: ui-build.tgz
+          retention-days: 1
+
+  commit:
+    needs: build
+    if: needs.build.outputs.stale == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: ui-build
+      - name: Commit the rebuilt UI and re-run CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          rm -rf engine/src/vpengine/static
+          tar -xzf ui-build.tgz && rm ui-build.tgz
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A engine/src/vpengine/static engine/ui/public/THIRD-PARTY-LICENSES.txt
+          git commit -m "Rebuild the engine UI"
+          git push origin "HEAD:$BRANCH"
+          gh workflow run ci.yml --ref "$BRANCH"   # pushes made by this job don't start CI themselves
