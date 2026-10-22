@@ -24,6 +24,7 @@
 
 <p align="center">
   <a href="#-quick-start"><b>🚀 Quick start</b></a> &nbsp;·&nbsp;
+  <a href="#-test-any-phone-agent-for-free">📋 Free phone evals</a> &nbsp;·&nbsp;
   <a href="#-bring-your-dialogflow-cx-and-cx-agent-studio-agents">🔁 Import from Google</a> &nbsp;·&nbsp;
   <a href="#-a-quick-tour">👀 Tour</a> &nbsp;·&nbsp;
   <a href="#-models">🧠 Models</a> &nbsp;·&nbsp;
@@ -36,10 +37,8 @@
 <br>
 
 <p align="center">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/builder-dark.webp">
-  <img src="docs/images/builder-light.webp" alt="The Lampline builder: a scripted page that collects a callback request, with its form on the right">
-</picture>
+  <img src="docs/images/hero.gif" width="900" alt="30 seconds: import a Dialogflow CX export, open it in the builder, chat with it while its steps light up, then a real phone call to it played by the Test Caller and graded Passed">
+  <br><sub>Import a Dialogflow CX agent, test it, and grade a real phone call to it. Sample agent and made-up data; replies from Lampline's test model.</sub>
 </p>
 
 Lampline imports your Dialogflow CX and CX Agent Studio agents, flows, pages,
@@ -59,6 +58,37 @@ Telnyx or any SIP trunk through jambonz. Built on
     <td valign="top"><b>🧩 Agents as code</b><br>Every agent is a folder of YAML and Markdown: reviewed in git, tested with <code>vk</code>, exported back to Google's tools whenever you like.</td>
   </tr>
 </table>
+
+## 📋 Test any phone agent for free
+
+Lampline's **Evals** tab phones a voice agent over a real phone line, plays the
+caller with an AI **Test Caller**, and grades the call against what should
+happen. It works on any agent with a phone number: one built in Lampline,
+Dialogflow CX, CX Agent Studio, Vapi, Retell, or your IVR.
+
+<table>
+  <tr>
+    <td width="52%" valign="top">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/evals-dark.webp">
+  <img src="docs/images/evals-light.webp" alt="A graded eval: the call's transcript, the agent's response time as the caller heard it, and each check passed">
+</picture>
+    </td>
+    <td valign="top">
+
+- **Free calls through Google Voice.** The Lampline Phone Bridge extension (Chrome or Edge) connects the call's audio to the Test Caller inside the browser: no cables, Windows or Mac. Or use any phone on speaker.
+- **Graded, with reasons.** You write who is calling, what they want and what must happen; your model grades the transcript, check by check. A call that heard nothing shows *Didn't run*, never *Failed*.
+- **Tough callers.** Background noise, accents, interruptions, long pauses, hesitant or rambling speech.
+- **The agent's speed, as callers hear it.** Typical and p95 response time, phone line included.
+- **Bring your test scripts.** Paste Hammer, Cyara or spreadsheet tests and they become runnable cases. Replay any failed call.
+
+[How to run evals →](docs/EVALS.md)
+    </td>
+  </tr>
+</table>
+
+Only call agents you own or are allowed to test. You press Call yourself:
+Google Voice doesn't allow automated dialing.
 
 ## 🔁 Bring your Dialogflow CX and CX Agent Studio agents
 
@@ -158,16 +188,24 @@ The full mapping, both ways, and what doesn't carry over yet:
 
 ## 🚀 Quick start
 
-Needs Docker with Compose v2 (Docker Desktop is fine).
+Needs Docker with Compose v2 (Docker Desktop is fine). **No API keys or accounts:**
 
 ```bash
 git clone https://github.com/C4rohan/lampline && cd lampline
-scripts/docker-up.sh                 # builds the image, starts it, prints the address to open
+scripts/docker-up.sh --free          # everything on this computer: Ollama, Moonshine and Kokoro
 ```
 
-It prints a link like `http://localhost:7860/#/?key=…`: open it once and the
-page remembers the key. Pick your model and voice on the Integrations page (or
-put keys like `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `DEEPGRAM_API_KEY` in
+`--free` runs the model (Qwen3 4B in Ollama) and speech (Moonshine listening,
+Kokoro speaking) on your own computer. The first start downloads about 3 GB and
+shows progress; after that it starts in seconds. Replies are slower and simpler
+than a cloud model's, and you can switch to any provider on the Integrations
+page whenever you like. On a Mac, the native route is faster, because Ollama
+uses the GPU outside Docker: install [Ollama](https://ollama.com), then
+`scripts/engine-up.sh --free`.
+
+Have API keys? Run `scripts/docker-up.sh` without `--free`. Either way it prints
+a link like `http://localhost:7860/#/?key=…`: open it once and the page
+remembers the key. Pick your model and voice on the Integrations page (or put keys like `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `DEEPGRAM_API_KEY` in
 `.env`; see `.env.example`). Your agents are in `./agents` (edit them, keep them
 in git) and everything else the engine keeps, settings with your keys, records,
 knowledge and downloaded models, is in `./.vpe-data`.

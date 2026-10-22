@@ -43,7 +43,8 @@ FISH_TTS_MODELS = ("s2.1-pro-free", "s2.1-pro", "s2-pro", "drama-3", "s1")
 
 # Numeric settings: (minimum, maximum). Empty means the provider's default.
 RANGES = {"turn_pause": (0.2, 6.0), "fish_speed": (0.5, 2.0), "fish_volume": (-20.0, 20.0), "fish_temperature": (0.0, 1.0),
-          "fish_top_p": (0.0, 1.0)}
+          "fish_top_p": (0.0, 1.0), "price_stt_min": (0.0, 10.0), "price_llm_in": (0.0, 1000.0),
+          "price_llm_out": (0.0, 1000.0), "price_tts_mchar": (0.0, 1000.0), "price_phone_min": (0.0, 10.0)}
 
 
 @dataclass(frozen=True)
@@ -168,11 +169,14 @@ SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("parakeet_model", "VPE_PARAKEET_MODEL", "Parakeet model", choices=("parakeet-tdt-0.6b-v2", "parakeet-tdt-0.6b-v3")),
     FieldSpec("local_whisper_model", "VPE_LOCAL_WHISPER_MODEL", "Whisper model", choices=("tiny.en", "base.en", "small.en", "distil-small.en")),
     FieldSpec("voice_mode", "VPE_VOICE_MODE", "How calls talk", choices=("chain", "speech-to-speech")),
+    FieldSpec("realtime_provider", "VPE_REALTIME_PROVIDER", "Speech-to-speech model", choices=("openai", "gemini")),
     FieldSpec("realtime_url", "VPE_REALTIME_URL", "Realtime server"),
     FieldSpec("realtime_model", "VPE_REALTIME_MODEL", "Speech-to-speech model"),
     FieldSpec("realtime_voice", "VPE_REALTIME_VOICE", "Voice"),
     FieldSpec("realtime_key", "VPE_REALTIME_API_KEY", "API key for the realtime server", secret=True),
     FieldSpec("realtime_turns", "VPE_REALTIME_TURNS", "Turn taking", choices=("semantic", "pause")),
+    FieldSpec("gemini_live_model", "VPE_GEMINI_LIVE_MODEL", "Gemini Live model"),
+    FieldSpec("gemini_live_voice", "VPE_GEMINI_LIVE_VOICE", "Gemini Live voice"),
     FieldSpec("turn_detection", "VPE_TURN_DETECTION", "How the agent knows the caller has finished", choices=("smart", "pause")),
     FieldSpec("turn_pause", "VPE_TURN_PAUSE", "Pause in seconds"),
     FieldSpec("tts", "VPE_TTS", "Text to speech", choices=("deepgram", "fish", "kokoro", "kokoro-server", "qwen3-tts")),
@@ -238,11 +242,17 @@ SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("call_history", "VPE_CALL_HISTORY", "Keep call history", choices=("on", "off")),
     FieldSpec("call_history_days", "VPE_CALL_HISTORY_DAYS", "Keep calls for (days)"),
     FieldSpec("call_recordings", "VPE_CALL_RECORDINGS", "Record voice calls", choices=("off", "on")),
+    FieldSpec("price_stt_min", "VPE_PRICE_STT_MIN", "Speech to text, $ per minute"),
+    FieldSpec("price_llm_in", "VPE_PRICE_LLM_IN", "Model input, $ per 1M tokens"),
+    FieldSpec("price_llm_out", "VPE_PRICE_LLM_OUT", "Model output, $ per 1M tokens"),
+    FieldSpec("price_tts_mchar", "VPE_PRICE_TTS_MCHAR", "Voice, $ per 1M characters"),
+    FieldSpec("price_phone_min", "VPE_PRICE_PHONE_MIN", "Phone line, $ per minute"),
     # knowledge search
     FieldSpec("embeddings", "VPE_EMBEDDINGS", "Embeddings for knowledge search", choices=("local", "ollama", "off")),
     FieldSpec("embeddings_url", "VPE_EMBEDDINGS_URL", "Embeddings server (OpenAI-compatible)"),
     FieldSpec("embeddings_model", "VPE_EMBEDDINGS_MODEL", "Embeddings model"),
     FieldSpec("brand_name", "BRAND_NAME", "Workspace name"),
+    FieldSpec("auto_download", "VPE_AUTO_DOWNLOAD", "Download the chosen local speech models at start", choices=("off", "on")),
 )
 SPEC_BY_NAME = {s.name: s for s in SPECS}
 
@@ -305,6 +315,9 @@ class Config:
     realtime_voice: str = "marin"
     realtime_key: str = ""              # empty: the OpenAI key, for OpenAI's own server
     realtime_turns: str = "semantic"    # semantic: the model judges when the caller is done; pause: a fixed silence
+    realtime_provider: str = "openai"   # openai: the OpenAI Realtime protocol (realtime_url); gemini: Gemini Live
+    gemini_live_model: str = ""         # empty: Pipecat's default Gemini Live model
+    gemini_live_voice: str = "Charon"
     turn_detection: str = "smart"
     turn_pause: str = ""          # smart: longest pause before answering anyway (3s); pause: silence that ends a turn (0.8s)
     tts: str = "deepgram"
@@ -366,10 +379,16 @@ class Config:
     call_history: str = "on"          # transcripts, collected details and outcomes, on this computer
     call_history_days: str = "30"
     call_recordings: str = "off"      # stereo WAV of voice calls (caller left, agent right)
+    price_stt_min: str = ""           # cost estimate rates; blank = the list price we know, if any (pricing.py)
+    price_llm_in: str = ""
+    price_llm_out: str = ""
+    price_tts_mchar: str = ""
+    price_phone_min: str = ""
     embeddings: str = "local"
     embeddings_url: str = "http://localhost:11434/v1"
     embeddings_model: str = "nomic-embed-text"
     brand_name: str = "Lampline"
+    auto_download: str = "off"        # on: fetch the chosen local speech models at start (scripts --free)
     language: str = "en"
     sources: dict[str, str] = field(default_factory=dict)   # field -> "env" | "saved"
 
@@ -423,6 +442,9 @@ class Config:
                 raise ConfigError("the realtime server must be a ws(s) address, like wss://api.openai.com/v1/realtime")
             if u.scheme == "ws" and not _private_host(u.hostname):
                 raise ConfigError("use wss:// for a realtime server beyond your own network (ws:// sends audio and keys unencrypted)")
+        for name in ("gemini_live_model", "gemini_live_voice"):
+            if values.get(name) and not re.fullmatch(r"[A-Za-z0-9._/-]{1,100}", values[name]):
+                raise ConfigError(f"{SPEC_BY_NAME[name].label} is a name like gemini-live-model or Charon")
         if values.get("vertex_credentials"):
             import json as _json
             try:
@@ -707,6 +729,17 @@ def make_stt(cfg: Config):
 
 
 # -- speaking ------------------------------------------------------------------
+
+VOICE_FIELD = {"deepgram": "tts_voice", "fish": "fish_voice", "kokoro": "kokoro_voice", "kokoro-server": "kokoro_voice",
+               "qwen3-tts": "qwen3_tts_voice"}
+
+
+def with_voice(cfg: Config, voice: str) -> Config:
+    """The same settings speaking with another voice of the chosen text-to-speech service."""
+    import dataclasses
+    name = VOICE_FIELD.get(cfg.tts)
+    return dataclasses.replace(cfg, **{name: voice}) if name and voice else cfg
+
 
 def make_tts(cfg: Config, sample_rate: int | None = None):
     if cfg.tts == "fish":

@@ -229,5 +229,5 @@ def test_a_version_1_store_is_upgraded(tmp_path):
     db.close()
     store = evals.EvalStore(tmp_path)
     assert store.get("ev_oldrun12345")["status"] == "passed"                  # old runs survive
-    assert store.db().execute("PRAGMA user_version").fetchone()[0] == 2
+    assert store.db().execute("PRAGMA user_version").fetchone()[0] == evals.SCHEMA_VERSION
     assert store.cases() == []

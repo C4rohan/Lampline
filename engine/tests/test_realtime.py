@@ -153,10 +153,10 @@ END_DEF = {"nodes": [
                "data": {"label": "goodbye", "condition": "caller is finished", "transition_speech": "Connecting you now."}}]}
 
 
-def test_the_goodbye_plays_before_the_transfer(cfg, tmp_path):
-    """Found in review: a transition's line into an end step ended the call before the end step's own reply."""
+def _goodbye_then_transfer(cfg, tmp_path, speak_delay=0.0, turn_done_delay=0.0):
     from conftest import write_agent
     fake = FakeRealtime(reply="Goodbye, take care.")
+    fake.speak_delay, fake.turn_done_delay = speak_delay, turn_done_delay
     d = tmp_path / "agents"
     d.mkdir()
     write_agent(d / "mini", END_DEF)
@@ -168,17 +168,32 @@ def test_the_goodbye_plays_before_the_transfer(cfg, tmp_path):
         token = _ring(client, "mini").json()[0]["url"].split("?t=", 1)[1]
         with client.websocket_connect(f"/v1/jambonz/stream?t={token}", subprotocols=["audio.jambonz.org"]) as ws:
             ws.send_text(json.dumps({"callSid": "jz-7", "sampleRate": 8000, "metadata": {"t": token}}))
-            time.sleep(1)
+            time.sleep(1 + speak_delay)
             for _ in range(40):
                 try:
                     ws.send_bytes(b"\x00\x00" * 160)
                 except Exception:  # noqa: BLE001 - the call may have ended
                     break
             session = next(iter(engine.sessions.values()))
-            assert _wait(lambda: any(e["type"] == "call_ended" for e in session.events))
+            assert _wait(lambda: any(e["type"] == "call_ended" for e in session.events), 15)
     said = [e["text"] for e in session.events if e["type"] == "bot_speech"]
     order = [e["type"] for e in session.events if e["type"] in ("bot_speech", "transfer", "call_ended")]
+    return fake, said, order
+
+
+def test_the_goodbye_plays_before_the_transfer(cfg, tmp_path):
+    """Found in review: a transition's line into an end step ended the call before the end step's own reply."""
+    fake, said, order = _goodbye_then_transfer(cfg, tmp_path)
     assert said == ["Hi there.", "Connecting you now.", "Goodbye, take care."]
     assert order[-2:] == ["transfer", "call_ended"]
     kinds = [(e.get("response") or {}).get("instructions", "(model)") for e in fake.of("response.create")]
     assert kinds[-1] == "(model)" and "Connecting you now." in kinds[-2]
+
+
+def test_a_late_done_for_the_callers_turn_doesnt_end_the_call_early(cfg, tmp_path):
+    """Found on CI: the server's response.done for the caller's turn (the route call) arrived after the
+    transition's line had started. It freed the queue, the goodbye started on top of the line, and the
+    line was taken for the goodbye, so the call ended before the goodbye."""
+    fake, said, order = _goodbye_then_transfer(cfg, tmp_path, speak_delay=0.3, turn_done_delay=0.15)
+    assert said == ["Hi there.", "Connecting you now.", "Goodbye, take care."]
+    assert order[-2:] == ["transfer", "call_ended"]
