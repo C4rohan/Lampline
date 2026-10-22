@@ -29,7 +29,8 @@ from pipecat.frames.frames import (
     TTSSpeakFrame,
     VADUserStoppedSpeakingFrame,
 )
-from pipecat.metrics.metrics import ProcessingMetricsData, TTFBMetricsData, TurnMetricsData
+from pipecat.metrics.metrics import (LLMUsageMetricsData, ProcessingMetricsData, STTUsageMetricsData, TTFBMetricsData,
+                                     TTSUsageMetricsData, TurnMetricsData)
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.workers.runner import WorkerRunner
@@ -39,7 +40,9 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from .flow import FlowController
 from .graph import Graph
-from .services import Config, make_llm, make_stt, make_tts, make_turn_strategies
+from .pricing import new_usage
+from .stress import CallerClock, NoiseMixer, PauseGate, Stress
+from .services import Config, make_llm, make_stt, make_tts, make_turn_strategies, with_voice
 
 log = logging.getLogger("vpengine.session")
 
@@ -124,7 +127,16 @@ class _LatencyTap(FrameProcessor):
         await super().process_frame(frame, direction)
         if isinstance(frame, MetricsFrame):
             for d in frame.data:
-                if isinstance(d, TurnMetricsData):
+                if isinstance(d, LLMUsageMetricsData):
+                    u, v = self._session.usage, d.value
+                    u["llm_in"] += v.prompt_tokens or 0
+                    u["llm_out"] += v.completion_tokens or 0
+                    u["llm_cached"] += v.cache_read_input_tokens or 0
+                elif isinstance(d, TTSUsageMetricsData):
+                    self._session.usage["tts_chars"] += d.value or 0
+                elif isinstance(d, STTUsageMetricsData):
+                    self._session.usage["stt_seconds"] += d.value.audio_seconds or 0
+                elif isinstance(d, TurnMetricsData):
                     self._parts["turn_ms"] = round(d.e2e_processing_time_ms)
                 elif isinstance(d, (TTFBMetricsData, ProcessingMetricsData)) and d.value > 0:
                     kind = self._kind(d.processor)
@@ -223,6 +235,7 @@ class Session:
         self.cfg = cfg
         self.created = time.time()
         self.events: list[dict] = []
+        self.usage = new_usage()                        # what this call used, for its cost estimate
         self._listeners: list[Callable[[dict], None]] = [on_event] if on_event else []
         self.llm = llm or make_llm(cfg)
         self.context = LLMContext()
@@ -281,7 +294,8 @@ class Session:
 
     async def run(self) -> None:
         """Run until the call ends (voice sessions await this directly)."""
-        self.task = PipelineWorker(self.build(), params=self.task_params(), idle_timeout_secs=None,
+        self.pipeline = self.build()
+        self.task = PipelineWorker(self.pipeline, params=self.task_params(), idle_timeout_secs=None,
                                  enable_rtvi=False, check_dangling_tasks=False)
 
         @self.task.event_handler("on_pipeline_error")
@@ -332,7 +346,7 @@ class TextSession(Session):
         self._started = asyncio.Event()
 
     def task_params(self) -> PipelineParams:
-        return PipelineParams(enable_metrics=True)
+        return PipelineParams(enable_metrics=True, enable_usage_metrics=True)
 
     def build(self) -> Pipeline:
         return Pipeline([self.aggregators.user(), _ScriptGate(self), self.llm, _BotTap(self), _LatencyTap(self),
@@ -411,8 +425,11 @@ class VoiceSession(Session):
         super().__init__(graph, cfg, **kwargs)
         self.transport = transport
         self.autostart = autostart   # False: call begin() once the caller is connected
+        # an eval's Test Caller can be made tougher (stress.py): another voice, noise, pauses, cutting in
+        raw = self.meta.get("stress")
+        self.stress = Stress.parse(raw) if isinstance(raw, dict) else None
         self.stt = stt or make_stt(cfg)
-        self.tts = tts or make_tts(cfg)
+        self.tts = tts or make_tts(with_voice(cfg, self.stress.voice) if self.stress and self.stress.voice else cfg)
         self._begun = False
         self.audio_in_rate = audio_in_rate
         self.audio_out_rate = audio_out_rate
@@ -437,7 +454,7 @@ class VoiceSession(Session):
 
     def task_params(self) -> PipelineParams:
         return PipelineParams(audio_in_sample_rate=self.audio_in_rate, audio_out_sample_rate=self.audio_out_rate,
-                              enable_metrics=True)
+                              enable_metrics=True, enable_usage_metrics=True)
 
     def build(self) -> Pipeline:
         return Pipeline([
@@ -448,10 +465,13 @@ class VoiceSession(Session):
             _ScriptGate(self),
             self.llm,
             _BotTap(self),
+            *([PauseGate(self, self.stress)] if self.stress and self.stress.pauses else []),
             self.tts,
+            *([NoiseMixer(self.stress)] if self.stress and self.stress.noise else []),
             self.transport.output(),
             *([_recorder(self.record_to)] if self.record_to else []),
             _LatencyTap(self),
+            *([CallerClock(self, self.stress)] if self.meta.get("eval") else []),
             self.aggregators.assistant(),
         ])
 

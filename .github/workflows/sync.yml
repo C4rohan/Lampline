@@ -1,0 +1,68 @@
+name: sync
+
+# After anything lands on qa or prod, carry it back down so the next
+# promotion never conflicts: prod -> qa, prod -> dev, qa -> dev.
+# dev is updated directly; qa (protected) gets a pull request instead.
+
+on:
+  push:
+    branches: [qa, prod]
+  workflow_dispatch:
+
+concurrency:
+  group: sync
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write                  # to start CI on the commits this job pushes
+
+jobs:
+  down:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Merge down
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          set -u
+          summary() { echo "$1" | tee -a "$GITHUB_STEP_SUMMARY"; }
+
+          # qa only takes pull requests: open one from prod if qa is missing something
+          if [ "$(git rev-list --count origin/qa..origin/prod)" != 0 ]; then
+            if [ -n "$(gh pr list --base qa --head prod --state open --json number -q '.[].number')" ]; then
+              summary "prod -> qa: a pull request is already open."
+            elif gh pr create --base qa --head prod --title "Sync: prod into qa" \
+                   --body "Carries prod's changes (usually a hotfix) back into qa. Opened by the sync workflow."; then
+              summary "prod -> qa: opened a pull request."
+            else
+              summary "prod -> qa: couldn't open a pull request (Settings > Actions > General > 'Allow GitHub Actions to create and approve pull requests'). Run: scripts/ship.sh sync"
+            fi
+          fi
+
+          # dev: merge prod and qa straight in
+          git switch -q dev
+          changed=0
+          for from in prod qa; do
+            [ "$(git rev-list --count dev..origin/$from)" = 0 ] && continue
+            if git merge --ff --no-edit -m "Sync: $from into dev" "origin/$from"; then
+              changed=1
+              summary "$from -> dev: merged."
+            else
+              git merge --abort
+              summary "$from -> dev: conflict, opening a pull request to resolve by hand."
+              gh pr create --base dev --head "$from" --title "Sync: $from into dev (conflict)" \
+                --body "The sync workflow couldn't merge $from into dev on its own. Resolve the conflict here." || true
+            fi
+          done
+          if [ "$changed" = 1 ]; then
+            git push origin dev
+            gh workflow run ci.yml --ref dev       # pushes made by this job don't start CI themselves
+          fi
+          [ "$changed" = 1 ] || summary "dev is already up to date."

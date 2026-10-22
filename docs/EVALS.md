@@ -57,6 +57,39 @@ runs, is coming next.
    A call where the Test Caller heard nothing shows **Didn't run** instead, so
    a bad connection never counts as a failed agent.
 
+## Make the caller tougher
+
+Real callers aren't polite test scripts. Open **Make the caller tougher** on
+the Evals page to make the Test Caller harder to handle:
+
+| Option | What it does |
+|---|---|
+| Background noise | A busy room, a street or a car, mixed under the caller's voice at a low, medium or high level (about 25, 15 or 8 dB below the voice) |
+| Caller's voice | Another voice of your text-to-speech service, for an accent or a different-sounding caller: a Kokoro voice like `bf_emma` (British), a Deepgram voice, or a Fish Audio voice id |
+| How the caller talks | Hesitant (ums and restarts), terse, rambling, or English as a second language |
+| Cuts in on the agent | Sometimes or often, the caller starts talking 1 to 2.5 seconds into the agent's reply ("Sorry to cut in, but…"). Never on the greeting |
+| Long pauses | Once or several times, the caller goes quiet for 6 to 10 seconds before answering. Does the agent check in, wait, or hang up? |
+
+Cutting in and pauses are planned from a seed, which the run keeps, so a
+replay plays them the same way.
+
+**The agent's response time, from the caller's side.** Every eval (tough or not)
+times the agent the way a caller experiences it: from the moment the Test
+Caller stops speaking to the moment it hears the agent start, phone network
+and all. The result shows the typical (p50), slow (p95) and slowest response.
+For your own Lampline agents, the Calls page shows the same measured inside
+the engine, so the difference is what the phone line adds.
+
+## Replay a call
+
+- **A failed eval:** press **Run again** for the same eval (same caller options
+  and seed), or **Replay what the caller said** to have the Test Caller say the
+  same lines, in order. Its own cut-ins aren't replayed as lines; the seed brings
+  them back.
+- **A real call** to one of your Lampline agents: on the Calls page, press
+  **Replay as a test**. The Evals page opens with the caller's lines, and the
+  agent's call checks as the pass criteria. Add the number to call and start.
+
 ## Import test scripts
 
 Already have IVR or voice tests in **Hammer**, **Cyara**, a spreadsheet or a
@@ -107,7 +140,11 @@ Good to know:
 
 ## For developers
 
-- API: `GET /v1/evals/cases`, `POST /v1/evals/cases` (save `{cases, source}`),
+- API: `POST /v1/evals` takes `caller` for a tougher caller: `{noise: room|street|car, level: low|medium|high,
+  voice, style: hesitant|terse|rambling|non_native, interrupt: sometimes|often, pauses: once|several, seed}`.
+  A run shows `options` and `agent_ms` (`{turns, p50, p95, max}`, from the caller's side).
+  `POST /v1/evals/replay` (`{run_id, exact}` or `{call_id}`) returns a draft eval and saves nothing.
+  `GET /v1/evals/cases`, `POST /v1/evals/cases` (save `{cases, source}`),
   `POST /v1/evals/cases/convert` (`{text, filename}` → cases, nothing saved),
   `DELETE /v1/evals/cases/{id}`, `POST /v1/evals`, `GET /v1/evals`, `GET /v1/evals/{id}`,
   `POST /v1/evals/{id}/offer` (phone on speaker), `POST /v1/evals/{id}/stop`,

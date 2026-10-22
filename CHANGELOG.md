@@ -4,6 +4,29 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 
 ## Unreleased (on dev)
 
+### Shipping
+- `scripts/ship.sh` does each step: `ship.sh "message"` opens a pull request into dev, `ship.sh qa` and `ship.sh prod v0.4.0` open the promotions, `ship.sh status` shows what's waiting.
+- New workflows: `sync` carries qa and prod back into dev (and a hotfix into qa) so promotions don't conflict; `ui-build` rebuilds a stale committed UI on pull requests, Dependabot's included; `release` tags and publishes when a `Release vX.Y.Z` pull request merges into prod.
+
+### Getting started
+- **No API keys:** `scripts/docker-up.sh --free` runs everything on your computer: a model in Ollama (Qwen3 4B), Moonshine listening and Kokoro speaking, downloaded on the first start with progress shown. `scripts/engine-up.sh --free` does the same natively with your own Ollama. `VPE_AUTO_DOWNLOAD=on` fetches the chosen local speech models at start.
+- The README opens with a 30-second demo (import a Dialogflow CX agent, test it, grade a real phone call) and a section on free phone evals.
+
+### Watch real calls
+- **Call checks:** grade real calls automatically. Pick an agent on the Calls page, write what a good call achieves and a few checks, and each call to it is graded by your model as it ends, with a reason per check. Filter by **Failed checks**, or grade any kept call by hand. Off until you turn it on per agent; a grader that can't be reached marks the call "Not graded", never failed.
+- **Response times:** each call keeps every turn's response time and shows p50 and p95 (and the slowest); the Calls page shows the last 7 days across all turns.
+- **Cost per call (estimate):** speech to text, model tokens, characters spoken and phone minutes, times your rates (Integrations → Call history) or a list price Lampline knows. Local services cost nothing; parts without a rate are named.
+- The call history file upgrades in place.
+
+### A tougher Test Caller
+- **Make the caller tougher** on the Evals page: background noise (busy room, street, car) at three levels, another voice for an accent, a speaking style (hesitant, terse, rambling, English as a second language), cutting in on the agent, and long pauses. Planned from a seed the run keeps, so a replay plays the same way ([docs/EVALS.md](docs/EVALS.md#make-the-caller-tougher)).
+- Every eval times the agent from the caller's side, phone line included: p50, p95 and the slowest response.
+- **Replay:** run a failed eval again, replay exactly what its caller said, or turn a real call on the Calls page into an eval with **Replay as a test**.
+- The eval history file upgrades in place (schema 3).
+
+### Speech to speech
+- **Gemini Live** next to OpenAI Realtime (Integrations → Speech to speech → Gemini Live; `VPE_REALTIME_PROVIDER=gemini`, `VPE_GEMINI_LIVE_MODEL`, `VPE_GEMINI_LIVE_VOICE`), with your Gemini API key. Gemini Live can't change its instructions mid-call, so Lampline connects with the first step's instructions and every step's tools, and hands each new step's instructions to the model as a note from the call system (in the route's result when the model moved the call). Experimental: test an agent before real calls.
+
 ## v0.3.0
 
 Test real phone calls, graded: an Evals tab, test scripts that turn into test cases, and Google agents side by side.

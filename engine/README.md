@@ -453,6 +453,12 @@ one container, built from the `Dockerfile` at the top of the repo:
   dropped.
 - **Ollama on this computer:** use `http://host.docker.internal:11434/v1` as the
   model's or the embeddings' address.
+- **No keys (`--free`):** `scripts/docker-up.sh --free` also starts Ollama in its
+  own container (the `free` profile, models in the `ollama-models` volume),
+  pulls `VPE_LLM_MODEL` (`qwen3:4b`), and fills in `.env` with `VPE_LLM=ollama`,
+  `VPE_STT=moonshine`, `VPE_TTS=kokoro` and `VPE_AUTO_DOWNLOAD=on` where you
+  haven't set them, so the speech models download on the first start. It waits
+  and shows progress. `--down` stops Ollama too.
 - **Phone numbers:** they need a public https address. Create a Cloudflare named
   tunnel whose hostname points at `http://engine:7860`, put
   `CLOUDFLARE_TUNNEL_TOKEN` and `VPE_DOCKER_PUBLIC_URL=https://…` in `.env`,
@@ -479,6 +485,7 @@ one container, built from the `Dockerfile` at the top of the repo:
 | `VPE_MOONSHINE_MODEL` | `small-streaming` | `tiny-streaming` for the fastest replies and the lightest CPU load |
 | `VPE_VOICE_MODE` | `chain` | `speech-to-speech`: one model listens and talks (experimental) |
 | `VPE_REALTIME_URL`, `VPE_REALTIME_MODEL`, `VPE_REALTIME_VOICE`, `VPE_REALTIME_API_KEY`, `VPE_REALTIME_TURNS` | `wss://api.openai.com/v1/realtime`, `gpt-realtime`, `marin`, the OpenAI key, `semantic` | the speech-to-speech server |
+| `VPE_REALTIME_PROVIDER` | `openai` | `gemini`: Gemini Live, with `VPE_GEMINI_LIVE_MODEL` and `VPE_GEMINI_LIVE_VOICE` (`Charon`) and your `GEMINI_API_KEY` |
 | `VPE_PARAKEET_MODEL` | `parakeet-tdt-0.6b-v2` | `parakeet-tdt-0.6b-v3` for 25 European languages |
 | `VPE_JAMBONZ_SAMPLE_RATE` | `8000` | `16000` for HD voice on SIP calls through jambonz |
 | `VPE_TURN_DETECTION` / `VPE_TURN_PAUSE` | `smart` / `3` (`0.8` with `pause`) | how a call decides the caller has finished: [Turn taking](#turn-taking-and-response-time) |
@@ -503,6 +510,8 @@ one container, built from the `Dockerfile` at the top of the repo:
 | `VPE_CALL_HISTORY` | `on` | keep finished calls on the Calls page |
 | `VPE_CALL_HISTORY_DAYS` | 30 | then they're deleted, recordings included |
 | `VPE_CALL_RECORDINGS` | `off` | `on` saves voice calls as stereo WAV |
+| `VPE_AUTO_DOWNLOAD` | `off` | `on` downloads the chosen local speech models (Kokoro, Whisper, Moonshine) when the engine starts |
+| `VPE_PRICE_STT_MIN`, `VPE_PRICE_LLM_IN`, `VPE_PRICE_LLM_OUT`, `VPE_PRICE_TTS_MCHAR`, `VPE_PRICE_PHONE_MIN` | list prices | rates for each call's cost estimate: $ per minute, per 1M tokens, per 1M characters |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_FROM_NUMBER` | | outbound calls through Twilio |
 | `TELNYX_TEXML_APP_ID`, `TELNYX_FROM_NUMBER` | | outbound calls through Telnyx |
 | `JAMBONZ_API_URL`, `JAMBONZ_ACCOUNT_SID`, `JAMBONZ_API_KEY`, `JAMBONZ_APPLICATION_SID`, `JAMBONZ_FROM_NUMBER` | `https://api.jambonz.cloud` | outbound calls over SIP through jambonz |
@@ -696,6 +705,18 @@ or `VPE_REALTIME_API_KEY`), or one you host (`VPE_REALTIME_URL`, like
 `ws://gpu-box:8000/v1/realtime`). Steps, transfers and tools work as before:
 each step's instructions and tools go to the model as the call moves on.
 
+**Gemini Live.** Choose Gemini Live under the same card
+(`VPE_REALTIME_PROVIDER=gemini`) to run calls on Google's native-audio models
+with your Gemini API key (`GEMINI_API_KEY`); pick the model and voice with
+`VPE_GEMINI_LIVE_MODEL` (blank: Pipecat's default) and `VPE_GEMINI_LIVE_VOICE`
+(`Charon`, `Kore`, `Puck`, …). Gemini Live sets its instructions and tools once,
+when it connects, so Lampline connects with the call's first step and every
+step's tools, then gives the model each new step's instructions as a note from
+the call system: inside the route's result when the model moved the call, or
+as a turn of its own when a rule did. A tool the current step doesn't have is
+refused, and the model carries on. Try an agent on the Test call page before
+real calls.
+
 What's different, so it's off by default:
 
 - Lines the agent must say word for word (Start's greeting, "say while
@@ -745,8 +766,37 @@ calls are also saved as stereo WAV (caller left, agent right, 16 kHz) in
 the rules depend on where they are. Use synthetic test data unless the
 machine is set up to protect real callers' details.
 
-The API: `GET /v1/calls` (`agent`, `channel`, `q`, `before`, `limit`),
-`GET /v1/calls/{id}`, `GET /v1/calls/{id}/recording`, `DELETE /v1/calls/{id}`.
+### Response times, cost and automatic grading
+
+- **Response times.** Each call keeps the agent's response time for every turn
+  (from the caller's last word to the agent's first sound) and shows the
+  typical (p50) and slow (p95) ones. The top of the Calls page has the last 7
+  days across every turn.
+- **Cost per call (estimate).** The engine counts what each call used: seconds
+  of audio sent to speech to text, the model's input and output tokens, and
+  characters spoken. It multiplies them by your rates in **Integrations → Call
+  history** (`VPE_PRICE_STT_MIN`, `VPE_PRICE_LLM_IN`, `VPE_PRICE_LLM_OUT`,
+  `VPE_PRICE_TTS_MCHAR`, `VPE_PRICE_PHONE_MIN`), or by a list price Lampline
+  knows when you leave one blank (Deepgram speech to text, Fish Audio voices,
+  Gemini Flash-Lite and Claude Haiku 5.5). Services on this computer cost
+  nothing. A part without a rate is left out and named, and the cost shows a
+  "+". It's for comparing agents and settings, not a bill.
+- **Call checks.** Press **Call checks** on the Calls page, pick an agent, and
+  write what a good call achieves and a few checks ("The agent asks for the
+  caller's name"). When a call to that agent ends, your model grades the
+  transcript the way an eval is graded, and the call shows **Checks passed**
+  or **Checks failed** with a reason for each check. Filter by **Failed
+  checks**, or press **Grade now** on any kept call. Each grade uses model
+  tokens, so it's off until you turn it on per agent. If the model can't be
+  reached the call shows **Not graded**, never failed.
+
+The history file upgrades in place (schema version in `PRAGMA user_version`).
+
+The API: `GET /v1/calls` (`agent`, `channel`, `q`, `before`, `limit`, `grade`),
+`GET /v1/calls/summary` (`agent`, `days`), `GET /v1/calls/{id}`,
+`GET /v1/calls/{id}/recording`, `DELETE /v1/calls/{id}`,
+`POST /v1/calls/{id}/grade` (optional `{goal, criteria}`), `GET /v1/call-checks`,
+`PUT /v1/call-checks/{agent}` (`{goal, criteria, enabled}`), `DELETE /v1/call-checks/{agent}`.
 
 ## Turn taking and response time
 
@@ -810,7 +860,10 @@ The folder runs as it is on disk: nothing to save or deploy first.
 | POST | `/v1/tests/caller` | `{persona, goal, transcript}`: what a model-played test caller says next (`vk test`) |
 | GET | `/v1/me` | who this key is, and its role |
 | GET, POST, DELETE | `/v1/keys`, `/v1/keys/{id}` | named keys with roles (admin) |
-| GET | `/v1/calls` | call history: `agent`, `channel`, `q`, `before`, `limit` |
+| GET | `/v1/calls` | call history: `agent`, `channel`, `q`, `before`, `limit`, `grade` (`passed`, `failed`, `error`) |
+| GET | `/v1/calls/summary` | last `days` (7) for `agent` (all): calls, p50/p95 response, cost per call, checks passed |
+| POST | `/v1/calls/{id}/grade` | grade a kept call against its agent's checks (or `{goal, criteria}`) |
+| GET / PUT / DELETE | `/v1/call-checks`, `/v1/call-checks/{agent}` | checks that grade an agent's calls as they end |
 | GET | `/v1/calls/{id}` | one call: transcript, events, collected details |
 | GET | `/v1/calls/{id}/recording` | its recording (WAV), when recordings are on |
 | DELETE | `/v1/calls/{id}` | delete a call and its recording |

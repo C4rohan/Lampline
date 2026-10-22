@@ -5,7 +5,8 @@ speech. A speech-to-speech model takes the caller's audio and answers with
 audio itself, so there's no wait for a transcript or a voice, and it hears how
 things are said, not just the words.
 
-This runs voice calls on any server that speaks the OpenAI Realtime protocol:
+Two kinds of model: Google's Gemini Live (VPE_REALTIME_PROVIDER=gemini, gemini_live.py), or any server
+that speaks the OpenAI Realtime protocol:
 OpenAI's gpt-realtime models, or one you host yourself that implements the
 same protocol (for example huggingface/speech-to-speech in its "realtime"
 mode, which is a chain inside but presents the same interface). Steps,
@@ -43,7 +44,10 @@ RATE = 24000                   # the Realtime protocol's audio: 16-bit PCM at 24
 
 def problem(graph: Graph, cfg: Config) -> str | None:
     """Why this agent can't run speech to speech now, or None."""
-    if not cfg.realtime_api_key and cfg.realtime_is_openai:
+    if cfg.realtime_provider == "gemini":
+        if not cfg.gemini_key:
+            return "Gemini Live needs a Gemini API key (Integrations → Gemini)"
+    elif not cfg.realtime_api_key and cfg.realtime_is_openai:
         return "speech to speech needs an OpenAI API key (Integrations → Speech to speech)"
     scripted = [s.name for s in graph.steps.values() if getattr(s, "scripted", False)]
     if scripted:
@@ -53,6 +57,9 @@ def problem(graph: Graph, cfg: Config) -> str | None:
 
 
 def make_realtime_llm(cfg: Config):
+    if cfg.realtime_provider == "gemini":
+        from .gemini_live import make_gemini_live
+        return make_gemini_live(cfg)
     from pipecat.services.openai.realtime import events
     from pipecat.services.openai.realtime.llm import OpenAIRealtimeLLMService
 
@@ -71,12 +78,16 @@ def make_realtime_llm(cfg: Config):
             self.lp_kind = "auto"
             self._lp_waiting: list[tuple[str, str]] = []
             self.lp_run_pending = False
+            self._lp_seen: set[str] = set()        # every response id the server has used
+            self._lp_before: set[str] = set()      # ...as of when ours was asked for: those aren't ours
+            self._lp_rid: str | None = None        # the id of the response we asked for, once seen
 
         async def _lp_begin(self, kind: str, text: str = "") -> None:
             if self.lp_busy or not self._api_session_ready:
                 self._lp_waiting.append((kind, text))
                 return
             self.lp_busy, self.lp_kind = True, kind
+            self._lp_before, self._lp_rid = set(self._lp_seen), None
             if kind == "say":
                 await self.send_client_event(events.ResponseCreateEvent(response=events.ResponseProperties(
                     instructions=f"Say exactly this, word for word, and nothing else: {text}")))
@@ -103,6 +114,30 @@ def make_realtime_llm(cfg: Config):
                 await self._lp_begin("run")
             self.lp_run_pending = False
 
+        def _lp_note(self, rid) -> None:
+            """The first new response id after we asked for one is ours."""
+            if not rid or rid in self._lp_seen:
+                return
+            self._lp_seen.add(rid)
+            if self.lp_busy and self.lp_kind in ("say", "run") and self._lp_rid is None:
+                self._lp_rid = rid
+
+        async def _handle_evt_audio_delta(self, evt):
+            self._lp_note(getattr(evt, "response_id", None))
+            await super()._handle_evt_audio_delta(evt)
+
+        async def _handle_evt_audio_transcript_delta(self, evt):
+            self._lp_note(getattr(evt, "response_id", None))
+            await super()._handle_evt_audio_transcript_delta(evt)
+
+        async def _handle_evt_text_delta(self, evt):
+            self._lp_note(getattr(evt, "response_id", None))
+            await super()._handle_evt_text_delta(evt)
+
+        async def _handle_evt_function_call_arguments_done(self, evt):
+            self._lp_note(getattr(evt, "response_id", None))
+            await super()._handle_evt_function_call_arguments_done(evt)
+
         async def _handle_evt_conversation_item_added(self, evt):
             if getattr(evt.item, "role", None) == "assistant" and not self.lp_busy:
                 self.lp_busy, self.lp_kind = True, "auto"            # the server answered the caller on its own
@@ -119,8 +154,20 @@ def make_realtime_llm(cfg: Config):
                 event.session.tools = []
             await super().send_client_event(event)
 
+        async def push_frame(self, frame, *args, **kwargs):
+            stamp(frame, self.lp_kind)
+            await super().push_frame(frame, *args, **kwargs)
+
         async def _handle_evt_response_done(self, evt):
             await super()._handle_evt_response_done(evt)
+            rid = getattr(getattr(evt, "response", None), "id", None)
+            if rid:
+                self._lp_seen.add(rid)
+            if self.lp_busy and self.lp_kind in ("say", "run") and rid and \
+                    (rid in self._lp_before or (self._lp_rid is not None and rid != self._lp_rid)):
+                # The end of an earlier response (often the caller's turn that called a route), arriving
+                # after we asked for ours: ours is still coming, so don't start the next one on top of it.
+                return
             self.lp_busy = False
             await self._lp_drain()
 
@@ -134,6 +181,15 @@ def make_realtime_llm(cfg: Config):
         settings=OpenAIRealtimeLLMService.Settings(model=cfg.realtime_model, session_properties=props))
 
 
+def stamp(frame, kind: str) -> None:
+    """Tag a response's start and end frames with what kind of response it was ("say", "run" or "auto") as they
+    leave the model. Read later, downstream, the model may already be on its next response."""
+    from pipecat.frames.frames import LLMFullResponseEndFrame, LLMFullResponseStartFrame
+
+    if isinstance(frame, (LLMFullResponseStartFrame, LLMFullResponseEndFrame)):
+        frame.lp_kind = kind
+
+
 class _RealtimeBotTap(_BotTap):
     """Lines said word for word ("say") are reported, but only the model's own turns count as replies,
     so a transition's line into an end step doesn't end the call before the goodbye."""
@@ -143,7 +199,8 @@ class _RealtimeBotTap(_BotTap):
         from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
         llm = self._session.llm
-        if direction == FrameDirection.DOWNSTREAM and getattr(llm, "lp_kind", "run") == "say" \
+        kind = getattr(frame, "lp_kind", None) or getattr(llm, "lp_kind", "run")   # as it left the model
+        if direction == FrameDirection.DOWNSTREAM and kind == "say" \
                 and isinstance(frame, (LLMFullResponseStartFrame, LLMFullResponseEndFrame)):
             await FrameProcessor.process_frame(self, frame, direction)
             if isinstance(frame, LLMFullResponseStartFrame):
@@ -189,13 +246,20 @@ class RealtimeVoiceSession(Session):
             # Pipecat's realtime service takes its first context frame as the start of the conversation and
             # marks tool results already in it as sent. Our first context frame comes after Start's route is
             # taken, so give it the (still empty) context now: that route's result then reaches the model.
+            if hasattr(self.llm, "lp_connect"):
+                # Gemini Live: connect once the first step is known (after Start's greeting and hand-over)
+                from .gemini_live import all_tools
+                await self.flow.start()
+                await self.llm.lp_connect(self.flow, self.context, all_tools(self.graph, self.flow))
+                return
             if getattr(self.llm, "_context", False) is None:
                 self.llm._context = self.context
                 self.llm._llm_needs_conversation_setup = False     # and it has nothing earlier to replay
             await self.flow.start()
 
     def task_params(self) -> PipelineParams:
-        return PipelineParams(audio_in_sample_rate=RATE, audio_out_sample_rate=RATE, enable_metrics=True)
+        return PipelineParams(audio_in_sample_rate=RATE, audio_out_sample_rate=RATE, enable_metrics=True,
+                              enable_usage_metrics=True)
 
     def build(self) -> Pipeline:
         return Pipeline([

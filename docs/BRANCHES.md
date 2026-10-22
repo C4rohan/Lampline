@@ -11,16 +11,27 @@ change is reviewed and tested before anyone runs it.
 
 CI (`.github/workflows/ci.yml`) runs on every push and pull request to all three.
 
-## Promoting
+## Shipping
+
+`scripts/ship.sh` does every step; GitHub does the rest.
 
 ```bash
-# dev -> qa: open a pull request, review, merge
-gh pr create --base qa --head dev --title "QA: <what's in it>"
-
-# qa -> prod, then tag the release
-gh pr create --base prod --head qa --title "Release v0.2.0"
-git switch prod && git pull && git tag -a v0.2.0 -m "v0.2.0" && git push origin v0.2.0
+scripts/ship.sh "Fix the transfer message"   # commit, push, open a pull request into dev
+scripts/ship.sh qa                           # open dev -> qa, listing the pull requests in it
+scripts/ship.sh prod v0.4.0                  # open qa -> prod; merging it tags v0.4.0 and publishes the release
+scripts/ship.sh status                       # what's waiting where
 ```
+
+Add `--check` to run CI's tests first. You still review and merge every pull request yourself.
+
+What runs on its own:
+
+| Workflow | When | What it does |
+|---|---|---|
+| `ci` | every push and pull request to dev, qa, prod | tests, UI build check, secret scan, Docker image |
+| `sync` | something lands on qa or prod | merges it back into dev, and opens a prod -> qa pull request after a hotfix, so the next promotion never conflicts |
+| `ui-build` | a pull request into dev changes `engine/ui` | rebuilds the committed UI if it's stale and pushes it to the branch (Dependabot's weekly update too) |
+| `release` | a pull request titled `Release vX.Y.Z` merges into prod | tags it and publishes a GitHub release with notes |
 
 ## QA checklist
 
@@ -32,8 +43,8 @@ git switch prod && git pull && git tag -a v0.2.0 -m "v0.2.0" && git push origin 
 
 ## Fixes to prod
 
-Branch from `prod`, open a pull request into `prod`, then merge `prod` back into
-`qa` and `dev` so the fix isn't lost on the next release.
+Branch from `prod` and open a pull request into `prod`. Once it merges, the
+`sync` workflow carries it back into `dev` and opens the pull request into `qa`.
 
 ## Going public
 
