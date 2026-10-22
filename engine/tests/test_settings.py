@@ -158,3 +158,29 @@ async def test_calls_explain_a_local_speech_server_that_is_not_running(cfg, agen
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(engine)), base_url="http://localhost") as c:
         r = await c.post("/v1/calls/webrtc/offer", json={"agent": "front-desk", "sdp": "x", "type": "offer"})
     assert r.status_code == 503 and "Kokoro isn't running" in r.json()["detail"] and "Start local speech" in r.json()["detail"]
+
+
+def test_auto_download_fetches_only_what_the_settings_choose(cfg, agents_dir, tmp_path, monkeypatch):
+    """scripts/*-up.sh --free set VPE_AUTO_DOWNLOAD=on: the chosen local speech models download at start."""
+    import dataclasses
+    from vpengine import builtin_speech, moonshine_stt
+    from vpengine.server import Engine
+    from vpengine.services import Config
+
+    assert Config.load(env={"VPE_AUTO_DOWNLOAD": "on"}).auto_download == "on" and Config().auto_download == "off"
+    started = []
+    monkeypatch.setattr(builtin_speech, "kokoro_ready", lambda: False)
+    monkeypatch.setattr(moonshine_stt, "ready", lambda arch=None: False)
+    engine = Engine(agents_dir, dataclasses.replace(cfg, stt="moonshine", tts="kokoro"), data_dir=tmp_path / "data")
+    monkeypatch.setattr(engine.downloads, "start", lambda m: started.append(("builtin", m)))
+    monkeypatch.setattr(engine.moonshine, "start", lambda m: started.append(("moonshine", m)))
+    assert engine.start_downloads() == ["whisper and kokoro", "moonshine"] and len(started) == 2
+    started.clear()
+    engine.cfg = dataclasses.replace(cfg, stt="deepgram", tts="deepgram")      # cloud speech: nothing to fetch
+    assert engine.start_downloads() == [] and started == []
+
+    def missing(m):
+        raise RuntimeError("not installed here")
+    engine.cfg = dataclasses.replace(cfg, stt="deepgram", tts="kokoro")
+    monkeypatch.setattr(engine.downloads, "start", missing)
+    assert engine.start_downloads() == []                                       # says so in the log, keeps running

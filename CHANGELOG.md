@@ -4,6 +4,10 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 
 ## Unreleased (on dev)
 
+### Getting started
+- **No API keys:** `scripts/docker-up.sh --free` runs everything on your computer: a model in Ollama (Qwen3 4B), Moonshine listening and Kokoro speaking, downloaded on the first start with progress shown. `scripts/engine-up.sh --free` does the same natively with your own Ollama. `VPE_AUTO_DOWNLOAD=on` fetches the chosen local speech models at start.
+- The README opens with a 30-second demo (import a Dialogflow CX agent, test it, grade a real phone call) and a section on free phone evals.
+
 ### Watch real calls
 - **Call checks:** grade real calls automatically. Pick an agent on the Calls page, write what a good call achieves and a few checks, and each call to it is graded by your model as it ends, with a reason per check. Filter by **Failed checks**, or grade any kept call by hand. Off until you turn it on per agent; a grader that can't be reached marks the call "Not graded", never failed.
 - **Response times:** each call keeps every turn's response time and shows p50 and p95 (and the slowest); the Calls page shows the last 7 days across all turns.

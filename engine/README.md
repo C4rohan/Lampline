@@ -453,6 +453,12 @@ one container, built from the `Dockerfile` at the top of the repo:
   dropped.
 - **Ollama on this computer:** use `http://host.docker.internal:11434/v1` as the
   model's or the embeddings' address.
+- **No keys (`--free`):** `scripts/docker-up.sh --free` also starts Ollama in its
+  own container (the `free` profile, models in the `ollama-models` volume),
+  pulls `VPE_LLM_MODEL` (`qwen3:4b`), and fills in `.env` with `VPE_LLM=ollama`,
+  `VPE_STT=moonshine`, `VPE_TTS=kokoro` and `VPE_AUTO_DOWNLOAD=on` where you
+  haven't set them, so the speech models download on the first start. It waits
+  and shows progress. `--down` stops Ollama too.
 - **Phone numbers:** they need a public https address. Create a Cloudflare named
   tunnel whose hostname points at `http://engine:7860`, put
   `CLOUDFLARE_TUNNEL_TOKEN` and `VPE_DOCKER_PUBLIC_URL=https://…` in `.env`,
@@ -504,6 +510,7 @@ one container, built from the `Dockerfile` at the top of the repo:
 | `VPE_CALL_HISTORY` | `on` | keep finished calls on the Calls page |
 | `VPE_CALL_HISTORY_DAYS` | 30 | then they're deleted, recordings included |
 | `VPE_CALL_RECORDINGS` | `off` | `on` saves voice calls as stereo WAV |
+| `VPE_AUTO_DOWNLOAD` | `off` | `on` downloads the chosen local speech models (Kokoro, Whisper, Moonshine) when the engine starts |
 | `VPE_PRICE_STT_MIN`, `VPE_PRICE_LLM_IN`, `VPE_PRICE_LLM_OUT`, `VPE_PRICE_TTS_MCHAR`, `VPE_PRICE_PHONE_MIN` | list prices | rates for each call's cost estimate: $ per minute, per 1M tokens, per 1M characters |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_FROM_NUMBER` | | outbound calls through Twilio |
 | `TELNYX_TEXML_APP_ID`, `TELNYX_FROM_NUMBER` | | outbound calls through Telnyx |

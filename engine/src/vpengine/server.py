@@ -332,6 +332,24 @@ class Engine:
             except Exception:  # noqa: BLE001
                 log.exception("after-call triggers failed")
 
+    def start_downloads(self) -> list[str]:
+        """Fetch the local speech models the settings choose and don't have yet (VPE_AUTO_DOWNLOAD=on)."""
+        from .builtin_speech import kokoro_ready, whisper_ready
+        started = []
+        try:
+            if (self.cfg.tts == "kokoro" and not kokoro_ready()) or \
+                    (self.cfg.stt == "whisper" and not whisper_ready(self.cfg.local_whisper_model)):
+                self.downloads.start(self.cfg.local_whisper_model)
+                started.append("whisper and kokoro")
+            if self.cfg.stt == "moonshine" and not moonshine_stt.ready(self.cfg.moonshine_model):
+                self.moonshine.start(self.cfg.moonshine_model)
+                started.append("moonshine")
+        except RuntimeError as exc:                  # libraries missing on this computer: say so, keep running
+            log.warning("couldn't download local speech: %s", exc)
+        if started:
+            log.warning("downloading local speech models: %s (progress on the Integrations page)", ", ".join(started))
+        return started
+
     def _cost(self, session: Session) -> dict | None:
         """The call's cost estimate from what it used (pricing.py); None if it can't be worked out."""
         try:
@@ -469,6 +487,8 @@ def create_app(engine: Engine) -> FastAPI:
             asyncio.get_running_loop().run_in_executor(None, moonshine_stt.load, engine.cfg.moonshine_model)
         if engine.cfg.stt == "parakeet" and parakeet_stt.ready(engine.cfg.parakeet_model):
             asyncio.get_running_loop().run_in_executor(None, parakeet_stt.load, engine.cfg.parakeet_model)
+        if engine.cfg.auto_download == "on":
+            engine.start_downloads()
         if engine.store is not None:            # tests drive triggers directly
             engine.automations.start()
 

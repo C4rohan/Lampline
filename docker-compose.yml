@@ -37,6 +37,12 @@ services:
       XAI_API_KEY: "${XAI_API_KEY:-}"
       OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
       OLLAMA_BASE_URL: "${OLLAMA_BASE_URL:-http://host.docker.internal:11434/v1}"
+      # Set by scripts/docker-up.sh --free (no keys: Ollama, Moonshine and Kokoro); the Integrations page wins.
+      VPE_LLM: "${VPE_LLM:-}"
+      VPE_LLM_MODEL: "${VPE_LLM_MODEL:-}"
+      VPE_STT: "${VPE_STT:-}"
+      VPE_TTS: "${VPE_TTS:-}"
+      VPE_AUTO_DOWNLOAD: "${VPE_AUTO_DOWNLOAD:-off}"
       DEEPGRAM_API_KEY: "${DEEPGRAM_API_KEY:-}"
       FISH_API_KEY: "${FISH_API_KEY:-}"
       JAMBONZ_WEBHOOK_SECRET: "${JAMBONZ_WEBHOOK_SECRET:-}"
@@ -50,6 +56,20 @@ services:
       - no-new-privileges:true
     cap_drop: [ALL]
 
+  # No keys at all: a model on this computer. scripts/docker-up.sh --free starts it and pulls the model
+  # (VPE_LLM_MODEL, qwen3:4b by default: about 2.5 GB, once).
+  ollama:
+    image: ollama/ollama:0.40.6
+    profiles: ["free"]
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c", "ollama serve & pid=$$!; sleep 3; ollama pull \"$${MODEL}\"; wait $$pid"]
+    environment:
+      MODEL: "${VPE_LLM_MODEL:-qwen3:4b}"
+    volumes:
+      - ollama-models:/root/.ollama
+    security_opt:
+      - no-new-privileges:true
+
   # Phone numbers need a public https address. Use a Cloudflare named tunnel:
   #   CLOUDFLARE_TUNNEL_TOKEN=...  and  VPE_DOCKER_PUBLIC_URL=https://voice.example.org  in .env,
   #   with the tunnel's public hostname pointing at http://engine:7860, then
@@ -62,3 +82,6 @@ services:
     environment:
       TUNNEL_TOKEN: "${CLOUDFLARE_TUNNEL_TOKEN:-}"
     depends_on: [engine]
+
+volumes:
+  ollama-models:

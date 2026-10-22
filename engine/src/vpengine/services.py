@@ -252,6 +252,7 @@ SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("embeddings_url", "VPE_EMBEDDINGS_URL", "Embeddings server (OpenAI-compatible)"),
     FieldSpec("embeddings_model", "VPE_EMBEDDINGS_MODEL", "Embeddings model"),
     FieldSpec("brand_name", "BRAND_NAME", "Workspace name"),
+    FieldSpec("auto_download", "VPE_AUTO_DOWNLOAD", "Download the chosen local speech models at start", choices=("off", "on")),
 )
 SPEC_BY_NAME = {s.name: s for s in SPECS}
 
@@ -387,6 +388,7 @@ class Config:
     embeddings_url: str = "http://localhost:11434/v1"
     embeddings_model: str = "nomic-embed-text"
     brand_name: str = "Lampline"
+    auto_download: str = "off"        # on: fetch the chosen local speech models at start (scripts --free)
     language: str = "en"
     sources: dict[str, str] = field(default_factory=dict)   # field -> "env" | "saved"
 
