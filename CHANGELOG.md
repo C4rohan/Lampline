@@ -4,6 +4,9 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 
 ## Unreleased (on dev)
 
+### Improve an agent
+- **Improve an agent** on the Evals page: your test cases run as text chats against a copy of the agent, your model rewrites the prompts of the steps where checks failed, and a change is kept only if more checks pass and no passing case breaks. Review each prompt before and after, then apply (the previous version stays in history). Tools are simulated. Inspired by Google Research's Harness².
+
 ### Shipping
 - `scripts/ship.sh` does each step: `ship.sh "message"` opens a pull request into dev, `ship.sh qa` and `ship.sh prod v0.4.0` open the promotions, `ship.sh status` shows what's waiting.
 - New workflows: `sync` carries qa and prod back into dev (and a hotfix into qa) so promotions don't conflict; `ui-build` rebuilds a stale committed UI on pull requests, Dependabot's included; `release` tags and publishes when a `Release vX.Y.Z` pull request merges into prod.
