@@ -23,6 +23,8 @@ class FakeRealtime:
         self.reply = reply
         self.seen: list[dict] = []            # client events, in order
         self.caller_turn: tuple[str, str] | None = None   # (what the caller says, tool the model calls)
+        self.speak_delay = 0.0               # seconds before answering a response.create
+        self.turn_done_delay = 0.0           # seconds before the caller turn's response.done (a slow server)
         self._appended = 0
         self.url = ""
         self._ready = threading.Event()
@@ -58,13 +60,19 @@ class FakeRealtime:
                 await self._send(ws, type="session.updated", session={})
             elif kind == "response.create":
                 instr = (evt.get("response") or {}).get("instructions") or ""
-                await self._speak(ws, instr.split("nothing else: ", 1)[1] if "nothing else: " in instr else self.reply)
+                text = instr.split("nothing else: ", 1)[1] if "nothing else: " in instr else self.reply
+                if self.speak_delay:
+                    asyncio.get_running_loop().create_task(self._speak(ws, text))
+                else:
+                    await self._speak(ws, text)
             elif kind == "input_audio_buffer.append":
                 self._appended += 1
                 if self._appended == 3 and self.caller_turn:           # the caller starts talking: their turn
                     await self._turn(ws, *self.caller_turn)
 
     async def _speak(self, ws, text: str):
+        if self.speak_delay:
+            await asyncio.sleep(self.speak_delay)
         rid, iid = _id(), _id()
         await self._send(ws, type="conversation.item.added",
                          item={"id": iid, "object": "realtime.item", "type": "message", "role": "assistant", "content": []})
@@ -85,5 +93,12 @@ class FakeRealtime:
                                "arguments": "{}"})
         await self._send(ws, type="response.function_call_arguments.done", response_id=rid, item_id=fid, output_index=0,
                          call_id=call, arguments="{}")
-        await self._send(ws, type="response.done", response={"id": rid, "object": "realtime.response", "status": "completed",
+        done = dict(type="response.done", response={"id": rid, "object": "realtime.response", "status": "completed",
                                                              "status_details": None, "output": [], "usage": USAGE})
+        if self.turn_done_delay:                                       # a slow server: the done arrives later,
+            async def later():                                        # after the client has moved on
+                await asyncio.sleep(self.turn_done_delay)
+                await self._send(ws, **done)
+            asyncio.get_running_loop().create_task(later())
+        else:
+            await self._send(ws, **done)
