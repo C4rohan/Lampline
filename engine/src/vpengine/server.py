@@ -2108,7 +2108,11 @@ def create_app(engine: Engine) -> FastAPI:
                 account = await engine.connectors.google_finish(state, code)
                 message, ok = f"Connected {account or 'your Google account'}. You can close this tab.", True
             except (ConnectorError, ConfigError) as exc:
-                message, ok = str(exc), False
+                # The details (which can include Google's own wording) go to the log, not to this unauthenticated page.
+                log.warning("Google sign-in didn't finish: %s", exc)
+                message = ("This sign-in link expired. Start again from Integrations." if "expired" in str(exc) else
+                           "Google sign-in didn't finish. The engine's log has the reason; try again from Integrations.")
+                ok = False
         page = (f"<!doctype html><meta charset=utf-8><title>Google</title><body style='font:16px system-ui;padding:40px'>"
                 f"<p>{'✓' if ok else '✗'} {html.escape(message)}</p><p><a href='/#/integrations'>Back to Integrations</a></p>")
         return HTMLResponse(page, headers={"Cache-Control": "no-store"})

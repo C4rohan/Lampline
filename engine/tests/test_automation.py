@@ -35,6 +35,8 @@ class Fake:
             return httpx.Response(200, json={"ok": True, "result": {"message_id": len(self.seen)}})
         if url == "https://oauth2.googleapis.com/token":
             form = parse_qs(request.content.decode())
+            if form.get("code") == ["bad-code"]:
+                return httpx.Response(400, json={"error": "invalid_grant", "error_description": "GOOGLE-SAYS <b>nope</b>"})
             if form.get("grant_type") == ["authorization_code"]:
                 assert form["code_verifier"][0] and form["code"] == ["the-code"]
                 payload = "eyJhbGciOiJub25lIn0." + __import__("base64").urlsafe_b64encode(
@@ -52,7 +54,7 @@ class Fake:
         if url == "https://jambonz.example.test/v1/Accounts/acct-1/Calls":
             assert request.headers["authorization"] == "Bearer jz-key-123456"
             return httpx.Response(201, json={"sid": "jz-call-1"})
-        if "api.twilio.com" in url:
+        if urlsplit(url).hostname == "api.twilio.com":
             return httpx.Response(201, json={"sid": "CA123"})
         return httpx.Response(404)
 
@@ -194,7 +196,7 @@ async def test_outbound_call_with_twilio(setup):
     engine.public_url = "https://tunnel.example.test"
     r = await engine.automations.outbound("parking", "call", "+1 555 010 1234", context={"caller_name": "Sam"})
     assert r["ok"] and "CA123" in r["detail"]
-    req = next(x for x in engine.fake.seen if "api.twilio.com" in str(x.url))
+    req = next(x for x in engine.fake.seen if urlsplit(str(x.url)).hostname == "api.twilio.com")
     form = parse_qs(req.content.decode())
     assert form["To"] == ["+15550101234"] and form["From"] == ["+15550009999"]
     q = parse_qs(urlsplit(form["Url"][0]).query)
@@ -285,6 +287,18 @@ async def test_google_sign_in(setup):
         assert "expired" in again.text                                  # a state works once
     assert engine.cfg.google_refresh_token == "1//new-refresh" and engine.cfg.google_account == "desk@example.test"
     assert engine.store.read()["google_refresh_token"] == "1//new-refresh"
+
+
+async def test_a_failed_google_sign_in_shows_no_details(setup, caplog):
+    """Google's error wording goes to the log; the unauthenticated sign-in page shows a fixed message."""
+    engine = setup([], google_refresh_token="")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(engine)), base_url="http://127.0.0.1:7860") as c:
+        start = (await c.post("/v1/oauth/google/start")).json()
+        state = parse_qs(urlsplit(start["url"]).query)["state"][0]
+        page = await c.get("/v1/oauth/google/callback", params={"state": state, "code": "bad-code"})
+    assert page.status_code == 200 and "finish" in page.text and "log has the reason" in page.text
+    assert "GOOGLE-SAYS" not in page.text and "<b>nope" not in page.text
+    assert "GOOGLE-SAYS" in caplog.text
 
 
 async def test_mcp_refresh_endpoint(setup):
