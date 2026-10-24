@@ -81,6 +81,7 @@ Dialogflow CX, CX Agent Studio, Vapi, Retell, or your IVR.
 - **Tough callers.** Background noise, accents, interruptions, long pauses, hesitant or rambling speech.
 - **The agent's speed, as callers hear it.** Typical and p95 response time, phone line included.
 - **Bring your test scripts.** Paste Hammer, Cyara or spreadsheet tests and they become runnable cases. Replay any failed call.
+- **Improve an agent from its failures.** Lampline runs your test cases as text chats, rewrites the prompts of the steps where checks failed, and keeps a change only if more checks pass and nothing that passed breaks. You review the before and after, then apply.
 
 [How to run evals →](docs/EVALS.md)
     </td>
@@ -324,6 +325,7 @@ tools, data and knowledge: [engine/README.md](engine/README.md).
 - [x] Test a phone agent for free from your laptop ([docs/PHONE-TESTING.md](docs/PHONE-TESTING.md))
 - [x] Evals: real phone calls through Google Voice, played by a Test Caller and graded ([docs/EVALS.md](docs/EVALS.md))
 - [x] Import Hammer, Cyara or spreadsheet test scripts as eval test cases ([docs/EVALS.md](docs/EVALS.md#import-test-scripts))
+- [x] Improve an agent from its failing test cases ([docs/EVALS.md](docs/EVALS.md#improve-an-agent))
 - [ ] Evals placed by Lampline through Twilio, for unattended runs
 - [x] Call history and optional recordings, on this computer ([engine/README.md](engine/README.md#call-history))
 - [ ] Published benchmarks
