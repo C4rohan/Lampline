@@ -7,6 +7,7 @@ import datetime as dt
 import hashlib
 import hmac
 import json
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
@@ -192,7 +193,11 @@ async def test_calendar_free_times_and_booking():
     day = (dt.date.today() + dt.timedelta(days=7))
     while day.weekday() == 6:
         day += dt.timedelta(days=1)
-    fake.busy = [{"start": f"{day}T13:30:00Z", "end": f"{day}T15:00:00Z"}]      # 9:30-11:00 New York (EDT/EST aside)
+    ny = ZoneInfo("America/New_York")                    # the configured zone, so daylight saving can't shift it
+
+    def utc(hour, minute):
+        return dt.datetime.combine(day, dt.time(hour, minute), ny).astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    fake.busy = [{"start": utc(9, 30), "end": utc(11, 0)}]                    # 9:30-11:00 New York, either season
     free = await c.free_times(day.isoformat(), 30)
     assert free["open"] and free["times"][0] == "9:00 AM" and len(free["times"]) >= 2
     sunday = day + dt.timedelta(days=(6 - day.weekday()))
