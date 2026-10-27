@@ -105,11 +105,11 @@ def make_realtime_llm(cfg: Config):
         async def _create_response(self):
             await self._lp_begin("run")
 
-        async def _handle_context(self, context):
+        async def _handle_context(self, context, *args, **kwargs):   # pipecat 1.13 adds the frame direction
             # A step change asks the model to go on (LLMRunFrame). Pipecat answers only when a new tool result
             # went out with it; entering a step by a rule or after a greeting has none, so start the turn here.
             before = len(self._completed_tool_calls)
-            await super()._handle_context(context)
+            await super()._handle_context(context, *args, **kwargs)
             if self.lp_run_pending and len(self._completed_tool_calls) == before:
                 await self._lp_begin("run")
             self.lp_run_pending = False
