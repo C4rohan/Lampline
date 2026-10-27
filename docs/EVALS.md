@@ -116,6 +116,44 @@ Good to know:
 - The script goes to your model like any other request. Use made-up test data,
   never real customers' details.
 
+## Improve an agent
+
+Once you have test cases, **Improve an agent** (on the Evals page) can fix the
+prompts behind the ones that fail:
+
+1. Each chosen case runs as a **text chat** against a copy of the agent. Your
+   model plays the caller from the case's *who is calling* and *what they want*,
+   and the chat is graded against the case's checks, like a call.
+2. Your model reads the failed checks and their reasons and rewrites the prompts
+   of the steps that caused them. Only prompts change: never steps, routes,
+   tools or values, and every `{{variable}}` a prompt uses is kept.
+3. Every case runs again on the changed copy. The change is **kept only if more
+   checks pass and no case that passed before fails now**. Up to three rounds,
+   each building on the last kept change.
+4. You see each changed step's prompt before and after, and **Apply** saves it.
+   The previous version stays in the agent's history, and Apply refuses if the
+   agent was edited while the run was going.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/improve-dark.webp">
+  <img src="images/improve-light.webp" width="520" alt="Improve an agent: 1 of 3 cases passed before, 3 of 3 after; the Book a visit step's prompt, before and after">
+</picture>
+
+Good to know:
+
+- **Tools are simulated** during these chats: nothing is booked, sent or looked
+  up for real.
+- Text chats test what the agent **says**, not how it sounds. Confirm a kept
+  change with a real call before you rely on it.
+- Model-played callers vary from run to run, so a small win can be luck. More
+  cases with clear checks make the result more trustworthy.
+- It uses whichever model you've set up, so it works with `--free` too; a
+  stronger model writes better prompts.
+
+The idea of improving the system around a model, its prompts, by proposing changes
+and testing them, comes from Google Research's
+[Harness²](https://github.com/google-research/harness2).
+
 ## What the extension does, and doesn't
 
 - It only acts in a Google Voice tab that Lampline itself opened for an eval.

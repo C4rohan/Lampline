@@ -26,10 +26,11 @@ _DATE = re.compile(
     r"|(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01]))\b"
 )
 _PHONE = re.compile(r"(?<!\d)(?:\+?1[ .-]?)?\(?[2-9]\d{2}\)?[ .-]?[2-9]\d{2}[ .-]?\d{4}(?!\d)")
-_EMAIL = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
+# Lengths are capped (RFC 5321: 64 before the @, 253 after) so a long run without an @ stays linear.
+_EMAIL = re.compile(r"\b[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}\b")
 _RECORD_ID = re.compile(
     r"\b(?:mrn|medical record(?: number| no\.?)?|member id|patient id|policy (?:number|no\.?))"
-    r"\s*[:#]?\s*[A-Z0-9-]{6,}\b",
+    r"\s*(?:[:#]\s*)?[A-Z0-9-]{6,}\b",      # one way to match the spaces: no slow backtracking
     re.IGNORECASE,
 )
 

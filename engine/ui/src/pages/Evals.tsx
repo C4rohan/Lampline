@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 import { Input, NativeSelect, Textarea } from "@/components/ui/input";
 import { Field } from "@/components/ui/label";
 import { Checkbox, Switch } from "@/components/ui/switch";
+import { ImproveAgent } from "@/pages/Improve";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 type Method = "google_voice" | "speaker";
@@ -556,6 +557,7 @@ export function EvalsPage() {
               )}
           </Card>
           <ImportScripts open={importing} onOpenChange={setImporting} onSaved={cases.reload} />
+          <ImproveAgent agents={all} cases={cases.data?.cases || []} />
 
           <Card className="overflow-hidden">
             <div className="border-b px-4 py-3"><h3 className="text-sm font-semibold">Past evals</h3></div>

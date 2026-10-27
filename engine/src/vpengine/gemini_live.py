@@ -17,6 +17,7 @@ Uses the Gemini API key (GEMINI_API_KEY); the model and voice are VPE_GEMINI_LIV
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 from typing import Any
 
@@ -41,10 +42,17 @@ class _Adapter(GeminiLiveLLMAdapter):
     lp_tools: Any = None
     lp_connecting = False
 
-    def get_llm_invocation_params(self, context, **kwargs):
-        params = super().get_llm_invocation_params(context, **kwargs)
+    def _lp_params(self, params):
         params["tools"] = self.lp_tools if self.lp_connecting else None
         return params
+
+    # pipecat 1.13 made this a coroutine; match whichever the installed pipecat has
+    if inspect.iscoroutinefunction(GeminiLiveLLMAdapter.get_llm_invocation_params):
+        async def get_llm_invocation_params(self, context, **kwargs):
+            return self._lp_params(await super().get_llm_invocation_params(context, **kwargs))
+    else:
+        def get_llm_invocation_params(self, context, **kwargs):
+            return self._lp_params(super().get_llm_invocation_params(context, **kwargs))
 
 
 class LamplineGeminiLive(GeminiLiveLLMService):
@@ -58,7 +66,7 @@ class LamplineGeminiLive(GeminiLiveLLMService):
         self._lp_waiting: list[tuple[str, str]] = []
         self._lp_flow = None
         self._lp_applied = ""          # the step whose instructions the model has
-        self._lp_route: tuple[str, str, dict] | None = None
+        self._lp_route: tuple[str, str, dict, dict] | None = None
         self._lp_route_timer: asyncio.Task | None = None
         self._lp_started = False
 
@@ -179,12 +187,12 @@ class LamplineGeminiLive(GeminiLiveLLMService):
             return
         self._lp_applied = name
         if self._lp_route is not None:                     # the model moved the call: tell it in the route's result
-            call_id, tool, result = self._lp_route
+            call_id, tool, result, extra = self._lp_route
             self._lp_route = None
             if self._lp_route_timer:
                 self._lp_route_timer.cancel()
             self.lp_busy, self.lp_kind = True, "run"
-            await GeminiLiveLLMService._tool_result(self, call_id, tool, {**result, "instructions": self._note()})
+            await GeminiLiveLLMService._tool_result(self, call_id, tool, {**result, "instructions": self._note()}, **extra)
             return
         # entered by a rule or a hand-over: a turn of its own; the model answers only if the flow asks it to
         if self.lp_run_pending:
@@ -193,26 +201,27 @@ class LamplineGeminiLive(GeminiLiveLLMService):
         else:
             await self._lp_send(self._note(), False)
 
-    async def _tool_result(self, tool_call_id: str, tool_name: str, tool_result_message: dict[str, Any]):
+    async def _tool_result(self, tool_call_id: str, tool_name: str, tool_result_message: dict[str, Any], **extra):
+        # `extra`: pipecat 1.13 passes is_final and spoken; 1.12 passes nothing
         if isinstance(tool_result_message, dict) and "next_step" in tool_result_message and "error" not in tool_result_message:
             # A route: hold its result until the new step's note can go with it.
-            self._lp_route = (tool_call_id, tool_name, tool_result_message)
+            self._lp_route = (tool_call_id, tool_name, tool_result_message, extra)
             self._lp_route_timer = asyncio.get_running_loop().create_task(self._lp_route_alone())
             if self.lp_step()[0] != self._lp_applied:
                 await self._lp_step_changed()
             return
-        await super()._tool_result(tool_call_id, tool_name, tool_result_message)
+        await super()._tool_result(tool_call_id, tool_name, tool_result_message, **extra)
 
     async def _lp_route_alone(self) -> None:
         await asyncio.sleep(ROUTE_WAIT)
         if self._lp_route is not None:
-            call_id, tool, result = self._lp_route
+            call_id, tool, result, extra = self._lp_route
             self._lp_route = None
-            await GeminiLiveLLMService._tool_result(self, call_id, tool, result)
+            await GeminiLiveLLMService._tool_result(self, call_id, tool, result, **extra)
 
-    async def _handle_context(self, context):
+    async def _handle_context(self, context, *args, **kwargs):   # pipecat 1.13 adds the frame direction
         before = len(self._completed_tool_calls)
-        await super()._handle_context(context)
+        await super()._handle_context(context, *args, **kwargs)
         if self.lp_run_pending and len(self._completed_tool_calls) == before and self._lp_route is None:
             self.lp_run_pending = False
             await self._lp_begin("run")

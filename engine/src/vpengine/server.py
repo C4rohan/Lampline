@@ -59,6 +59,7 @@ from .embed import Download as EmbedDownload, Embedder, MINILM
 from . import keys as keys_module
 from .history import CallHistory
 from . import evals as evals_module
+from . import improve as improve_module
 from .library import KINDS, Library, LibraryError
 from .connectors import ConnectorError, Connectors
 from .graph import Graph
@@ -168,6 +169,7 @@ class Engine:
         self.evals = evals_module.EvalStore(self.library.folder)         # eval runs, next to the calls
         self._grading = asyncio.Semaphore(2)                             # real calls graded at once (model tokens)
         self.eval_live: dict[str, Session] = {}                          # run id -> its conversation, while live
+        self.improvements: dict[str, improve_module.Job] = {}            # "improve this agent" runs, newest last
         self.keys = keys_module.KeyStore(store.path.parent / "keys.json" if store else None)   # named keys and roles
         self.connectors.library = self.library
         self.embed_download = EmbedDownload()
@@ -430,6 +432,9 @@ class Engine:
             await self._webrtc.close()
         self.library.close()
         self.history.close()
+        for job in self.improvements.values():
+            if job.task is not None and not job.task.done():
+                job.task.cancel()
         self.evals.close()
 
 
@@ -1481,6 +1486,94 @@ def create_app(engine: Engine) -> FastAPI:
             raise HTTPException(404, "no such eval run")
         return {"deleted": rid}
 
+    # -- improve an agent from its test cases -----------------------------------
+
+    def _job(jid: str) -> improve_module.Job:
+        job = engine.improvements.get(jid) if improve_module.ID.match(jid or "") else None
+        if job is None:
+            raise HTTPException(404, "no such improvement run")
+        return job
+
+    @app.post("/v1/agents/{slug}/improve", dependencies=auth)
+    async def improve_agent(slug: str, body: dict[str, Any], request: Request):
+        """Run test cases as text chats against copies of the agent, and keep prompt changes that pass more checks.
+        Tools are mocked; nothing is saved until the result is applied."""
+        _local_only(request)            # test cases and transcripts, like eval runs
+        engine.load_agent(slug)                                       # 404 when there's no such agent
+        if any(j.agent == slug and j.status == "running" for j in engine.improvements.values()):
+            raise HTTPException(409, "this agent is already being improved; wait for it or stop it")
+        wanted = body.get("case_ids")
+        every = engine.evals.cases()
+        cases = every if not wanted else [c for c in every if c["id"] in set(map(str, wanted))]
+        try:
+            rounds = improve_module.check_request(cases, body.get("rounds"))
+            doc = builder.read(_folder(slug))
+            llm = engine._make_llm() or make_llm(engine.cfg)
+        except improve_module.ImproveError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        except (builder.BuilderError, agentfs.FolderError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+        except ConfigError as exc:
+            raise HTTPException(503, str(exc)) from exc
+        job = improve_module.Job(agent=slug, base=doc, cases=cases, rounds=rounds)
+
+        def new_session(graph):
+            return engine.new_text(graph, {}, mock_tools=True, trusted=False, meta={"improve": job.id})
+
+        async def play(definition, case):
+            return await improve_module.play_case(llm, new_session, doc, definition, case)
+
+        for old in [k for k, j in engine.improvements.items() if j.status != "running"][:-9]:
+            engine.improvements.pop(old, None)                         # keep the last few finished runs
+        engine.improvements[job.id] = job
+        job.task = asyncio.get_running_loop().create_task(improve_module.run(job, llm, play))
+        return job.view()
+
+    @app.get("/v1/improve", dependencies=auth)
+    async def list_improvements(request: Request, agent: str = ""):
+        _local_only(request)
+        jobs = [j.view() for j in engine.improvements.values() if not agent or j.agent == agent]
+        return {"runs": jobs[::-1]}
+
+    @app.get("/v1/improve/{jid}", dependencies=auth)
+    async def get_improvement(jid: str, request: Request):
+        _local_only(request)
+        return _job(jid).view()
+
+    @app.post("/v1/improve/{jid}/stop", dependencies=auth)
+    async def stop_improvement(jid: str, request: Request):
+        _local_only(request)
+        job = _job(jid)
+        if job.task is not None and not job.task.done():
+            job.task.cancel()
+            await asyncio.wait({job.task}, timeout=10)
+        return job.view()
+
+    @app.post("/v1/improve/{jid}/apply", dependencies=auth)
+    async def apply_improvement(jid: str, request: Request):
+        """Save the kept prompt changes to the agent (its previous version stays in its history)."""
+        _local_only(request)
+        job = _job(jid)
+        if job.status != "done" or job.definition is None:
+            raise HTTPException(409, "there's no kept change to apply")
+        if job.applied:
+            raise HTTPException(409, "already applied")
+        folder = _folder(job.agent)
+        try:
+            current = builder.read(folder)
+        except (builder.BuilderError, agentfs.FolderError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+        if improve_module.fingerprint(current["definition"]) != improve_module.fingerprint(job.base["definition"]):
+            raise HTTPException(409, "the agent changed since this run started; run it again")
+        body = {k: current[k] for k in ("name", "context_variables", "tools", "triggers")}
+        body["definition"] = improve_module.apply_edits(current["definition"], job.edits)
+        try:
+            saved = builder.save(folder, body)
+        except (builder.BuilderError, agentfs.FolderError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+        job.applied = True
+        return {"applied": job.id, "agent": saved}
+
     # -- phone calls (Twilio and Telnyx media streams) -----------------------
 
     def _xml(body: str) -> Response:
@@ -1764,36 +1857,17 @@ def create_app(engine: Engine) -> FastAPI:
         lines = body.get("transcript") or []
         if not isinstance(lines, list):
             raise HTTPException(422, "transcript must be a list of {who, text}")
-        said = "\n".join(f"{'Caller' if str(x.get('who')) == 'caller' else 'Agent'}: {str(x.get('text') or '')[:1000]}"
-                         for x in lines[-60:] if isinstance(x, dict))
+        said = [{"who": "caller" if str(x.get("who")) == "caller" else "agent", "text": str(x.get("text") or "")}
+                for x in lines[-60:] if isinstance(x, dict)]
         try:
             llm = engine._make_llm() or make_llm(engine.cfg)
         except ConfigError as exc:
             raise HTTPException(503, str(exc)) from exc
-        instruction = "\n\n".join([
-            "You are role-playing a CALLER phoning a business, to test its voice agent. You are not the agent.",
-            f"Who you are: {persona}",
-            f"What you want from this call: {goal}" if goal else "",
-            "Speak like a real caller on the phone: one or two short sentences, plain words, no stage directions, "
-            "no quotation marks. Answer the agent's questions. When it asks for details, make up plausible ones "
-            "(a name, a day, a 555-01xx phone number); never use real people's details.",
-            "When what you wanted is done, or the agent has said goodbye, or you would hang up, set done to true "
-            "and line to null. Reply with one JSON object and nothing else.",
-        ])
-        schema = {"type": "object", "additionalProperties": False, "required": ["line", "done"],
-                  "properties": {"line": {"type": ["string", "null"]}, "done": {"type": "boolean"}}}
-        from pipecat.processors.aggregators.llm_context import LLMContext
-        ctx = LLMContext(messages=[{"role": "user", "content": (said or "(the call has just connected; the agent "
-                                                                         "hasn't spoken yet)") + "\n\nWhat does the caller say next?"}])
         try:
-            text = await asyncio.wait_for(llm.run_inference(ctx, max_tokens=200, system_instruction=instruction,
-                                                            response_schema=schema), 45)
+            line, done = await improve_module.caller_line(llm, persona, goal, said)
         except Exception as exc:  # noqa: BLE001 - shown to the person running the tests
             raise HTTPException(502, f"the model couldn't play the caller: {exc}") from exc
-        from .flow import parse_json_object
-        out = parse_json_object(text) or {}
-        line = str(out.get("line") or "").strip()[:500] or None
-        return {"line": line, "done": bool(out.get("done")) or line is None}
+        return {"line": line, "done": done}
 
     # -- users and roles -------------------------------------------------------
 
@@ -2034,7 +2108,11 @@ def create_app(engine: Engine) -> FastAPI:
                 account = await engine.connectors.google_finish(state, code)
                 message, ok = f"Connected {account or 'your Google account'}. You can close this tab.", True
             except (ConnectorError, ConfigError) as exc:
-                message, ok = str(exc), False
+                # The details (which can include Google's own wording) go to the log, not to this unauthenticated page.
+                log.warning("Google sign-in didn't finish: %s", exc)
+                message = ("This sign-in link expired. Start again from Integrations." if "expired" in str(exc) else
+                           "Google sign-in didn't finish. The engine's log has the reason; try again from Integrations.")
+                ok = False
         page = (f"<!doctype html><meta charset=utf-8><title>Google</title><body style='font:16px system-ui;padding:40px'>"
                 f"<p>{'✓' if ok else '✗'} {html.escape(message)}</p><p><a href='/#/integrations'>Back to Integrations</a></p>")
         return HTMLResponse(page, headers={"Cache-Control": "no-store"})
