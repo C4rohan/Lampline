@@ -1,0 +1,21 @@
+{
+  "name": "lampline",
+  "description": "Build, test and review phone agents with Lampline's vk CLI",
+  "owner": {
+    "name": "Rohan Salvi"
+  },
+  "plugins": [
+    {
+      "name": "lampline",
+      "source": "./",
+      "description": "Skills to build phone agents as code with vk, test them, and review a change before it goes live",
+      "homepage": "https://github.com/C4rohan/Lampline",
+      "license": "Apache-2.0",
+      "keywords": ["voice-agents", "phone", "testing", "dialogflow-cx", "pipecat"],
+      "skills": [
+        "./cli/src/vk/skills/voice-agent-builder",
+        "./cli/src/vk/skills/voice-agent-reviewer"
+      ]
+    }
+  ]
+}

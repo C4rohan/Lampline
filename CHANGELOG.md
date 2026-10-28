@@ -4,6 +4,11 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 
 ## Unreleased (on dev)
 
+### Use it from Claude Code, Cursor or Codex
+- **Claude Code plugin:** `/plugin marketplace add C4rohan/lampline`, then `/plugin install lampline@lampline`, installs the voice-agent-builder and voice-agent-reviewer skills. The marketplace points at the skills in `cli/src/vk/skills/`, so there's one copy of each.
+- **`AGENTS.md`** at the repo root, for agents that read rules files: how to build, lint and test an agent folder, and the rules (synthetic data, no secrets, approval before anything goes live).
+- **Releases by hand:** Actions → release → Run workflow tags prod with a version, for when a release pull request wasn't titled `Release vX.Y.Z`.
+
 ### Improve an agent
 - **Improve an agent** on the Evals page: your test cases run as text chats against a copy of the agent, your model rewrites the prompts of the steps where checks failed, and a change is kept only if more checks pass and no passing case breaks. Review each prompt before and after, then apply (the previous version stays in history). Tools are simulated. Inspired by Google Research's Harness².
 
