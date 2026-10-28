@@ -25,6 +25,7 @@
 <p align="center">
   <a href="#-quick-start"><b>🚀 Quick start</b></a> &nbsp;·&nbsp;
   <a href="#-test-any-phone-agent-for-free">📋 Free phone evals</a> &nbsp;·&nbsp;
+  <a href="#-use-it-from-claude-code-cursor-or-codex">🤖 From Claude Code</a> &nbsp;·&nbsp;
   <a href="#-bring-your-dialogflow-cx-and-cx-agent-studio-agents">🔁 Import from Google</a> &nbsp;·&nbsp;
   <a href="#-a-quick-tour">👀 Tour</a> &nbsp;·&nbsp;
   <a href="#-models">🧠 Models</a> &nbsp;·&nbsp;
@@ -90,6 +91,36 @@ Dialogflow CX, CX Agent Studio, Vapi, Retell, or your IVR.
 
 Only call agents you own or are allowed to test. You press Call yourself:
 Google Voice doesn't allow automated dialing.
+
+## 🤖 Use it from Claude Code, Cursor or Codex
+
+Lampline agents are plain files (`agent.yaml` and `prompts/*.md`), and `vk`
+lints and tests them from the terminal, so a coding agent can build, test and
+review a phone agent for you. Two skills teach it how:
+
+- **voice-agent-builder:** asks what the agent should do, writes the tests
+  first, builds the folder, and runs `vk lint` and `vk test` until they pass
+- **voice-agent-reviewer:** checks a change before it goes live: lint, the
+  diff, the tests, and a privacy review, then asks you to approve
+
+**Claude Code**, from the plugin marketplace in this repo:
+
+```
+/plugin marketplace add C4rohan/lampline
+/plugin install lampline@lampline
+```
+
+On Claude Code 2.1.275 or later, one line does both:
+`/plugin install lampline --marketplace C4rohan/lampline`.
+
+**Cursor, Codex and other agents** read [`AGENTS.md`](AGENTS.md). To copy the
+skills into a project instead, run `vk skills install --target claude`
+(or `--target agents`, `--target gemini`).
+
+Then ask, for example: *"Build a phone agent for a dental office that books
+cleanings, with tests"*, or *"Review my change to agents/front-desk before it
+goes live"*. `vk test` also runs the same tests against a live Dialogflow CX
+or CX Agent Studio agent (`--target dfcx` or `ces`).
 
 ## 🔁 Bring your Dialogflow CX and CX Agent Studio agents
 
@@ -303,7 +334,7 @@ vk templates install front-desk     # start from a ready-made agent
 vk lint agents/front-desk           # graph checks + a scan for real-looking patient data
 vk test agents/front-desk           # runs tests/*.yaml conversations on the engine
 vk import dfcx export.zip           # bring an agent over from Dialogflow CX or CX Agent Studio
-vk skills install --target claude   # builder + reviewer skills for Claude Code
+vk skills install --target claude   # builder + reviewer skills (or install the Claude Code plugin, above)
 ```
 
 Details in [cli/README.md](cli/README.md). The engine itself, its builder,
