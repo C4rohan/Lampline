@@ -37,3 +37,26 @@ def test_errors_vs_warnings():
     severities = {h.code: h.severity for h in phi.scan("219-09-9999 and (312) 867-5309")}
     assert severities["VK201"] == "error"
     assert severities["VK204"] == "warning"
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("MRN #00482913", "VK206"),
+    ("Patient ID   :   ZX-998877", "VK206"),
+    ("policy no. 77881234", "VK206"),
+    ("reach me at sam.lee+work@mail.co.uk", "VK205"),
+])
+def test_still_flags_after_the_speedup(text, expected):
+    assert expected in codes(text)
+
+
+@pytest.mark.parametrize("text", [
+    "MRN" + " " * 200_000,                          # spaces with no ID after them
+    "a." * 100_000,                                 # dots and letters, no @
+    "x@" + "a." * 100_000,                          # a very long domain that never ends in a TLD
+])
+def test_long_crafted_text_scans_quickly(text):
+    """These used to take time growing with the square of their length (CodeQL py/polynomial-redos)."""
+    import time
+    start = time.perf_counter()
+    phi.scan(text)
+    assert time.perf_counter() - start < 1.0
