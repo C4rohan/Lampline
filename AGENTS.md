@@ -22,15 +22,17 @@ vk import dfcx export.zip                   # from Dialogflow CX (or `ces` for C
 vk export dfcx agents/my-agent              # back to Dialogflow CX (or `ces`)
 ```
 
-`vk test` needs the engine running (`curl -fsS http://localhost:7860/v1/health`).
+Testing on Lampline needs the engine running (`curl -fsS http://localhost:7860/v1/health`).
 If it isn't, ask the person to start it: `scripts/docker-up.sh --free` runs
 everything locally with no API keys. `vk test --target dfcx --agent projects/P/locations/L/agents/ID`
 runs the same tests against a live Dialogflow CX agent with the person's own
 `gcloud` login (`--target ces` for CX Agent Studio).
 
 The full step-by-step guides are the skills in `cli/src/vk/skills/`:
-`voice-agent-builder` (new agents and changes) and `voice-agent-reviewer`
-(before a change goes live). Follow them.
+`voice-agent-builder` (new agents and changes), `voice-agent-fixer` (making
+failing tests pass), `dialogflow-tester` (testing a live Dialogflow CX or CX
+Agent Studio agent) and `voice-agent-reviewer` (before a change goes live).
+Follow them.
 
 ## Rules
 

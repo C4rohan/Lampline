@@ -312,14 +312,23 @@ and the like.
 
 ## Skills for coding agents
 
-`vk skills install --target claude` copies two skills into `.claude/skills/`
+`vk skills install --target claude` copies four skills into `.claude/skills/`
 (`agents` → `.agents/skills/`, `gemini` → `.gemini/skills/`):
 
 - **voice-agent-builder**: asks the ten setup questions, writes tests from the
   example calls, builds the folder (often from a template), lints, and
   iterates until `vk test` passes. Never merges anything toward production.
+- **voice-agent-fixer**: runs `vk test`, names the cause of each failure,
+  changes only the prompt or transition behind it, and keeps a change only if
+  more tests pass and none that passed breaks. Never edits a test to pass it.
+- **dialogflow-tester**: imports a Dialogflow CX or CX Agent Studio export,
+  writes tests for it, and runs them against the live Google agent
+  (`--target dfcx|ces`), or side by side with Lampline (`--target engine,dfcx`).
 - **voice-agent-reviewer**: lint, the diff against what's live, tests, a prompt
   and privacy review, then approves the merge only after you say yes.
+
+The same four install as a Claude Code plugin: `/plugin marketplace add C4rohan/lampline`,
+then `/plugin install lampline@lampline`.
 
 ## Develop
 
