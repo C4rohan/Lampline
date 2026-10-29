@@ -1,0 +1,70 @@
+name: prune-branches
+
+# Deletes branches that are done with:
+# - when a pull request is merged, its branch (never dev, qa or prod, never a fork's)
+# - every Monday, and by hand (Run workflow), any branch whose commits are all already in dev or prod
+#   (merged, or the same changes under other commits), unless it has an open pull request
+# A deleted branch can be restored from its pull request's page.
+
+on:
+  pull_request:
+    types: [closed]
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  merged:
+    if: >-
+      github.event_name == 'pull_request' && github.event.pull_request.merged &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !contains(fromJSON('["dev", "qa", "prod"]'), github.event.pull_request.head.ref)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete the merged branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          open=$(gh api "repos/$GITHUB_REPOSITORY/pulls?state=open&head=${GITHUB_REPOSITORY%%/*}:$BRANCH" --jq length)
+          if [ "$open" != 0 ]; then echo "$BRANCH has another open pull request; keeping it."; exit 0; fi
+          if gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$BRANCH" >/dev/null 2>&1; then
+            echo "Deleted $BRANCH" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "$BRANCH was already gone."
+          fi
+
+  sweep:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Delete branches whose work is already in dev or prod
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          keep=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" --jq '.[].head.ref' | sort -u)
+          for ref in $(git for-each-ref --format='%(refname:strip=3)' refs/remotes/origin); do
+            case "$ref" in HEAD|dev|qa|prod) continue ;; esac
+            if printf '%s\n' "$keep" | grep -qxF "$ref"; then echo "keep $ref: open pull request"; continue; fi
+            done_with=""
+            for base in dev prod; do
+              # merged, or every commit's changes already there (`git cherry` prints + for anything missing)
+              if git merge-base --is-ancestor "origin/$ref" "origin/$base" \
+                 || ! git cherry "origin/$base" "origin/$ref" | grep -q '^+'; then
+                done_with=$base; break
+              fi
+            done
+            if [ -z "$done_with" ]; then echo "keep $ref: has work that isn't in dev or prod"; continue; fi
+            if gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$ref" >/dev/null 2>&1; then
+              echo "- $ref (already in $done_with)" | tee -a "$GITHUB_STEP_SUMMARY"
+            else
+              echo "couldn't delete $ref (protected?)"
+            fi
+          done
