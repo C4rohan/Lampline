@@ -49,7 +49,7 @@ def test_engine_unreachable_is_explained(run, tmp_path, monkeypatch):
 def test_skills_install(run, tmp_path):
     code, out, _ = run("skills", "install", "--target", "claude")
     assert code == 0
-    for name in ("voice-agent-builder", "voice-agent-reviewer"):
+    for name in ("voice-agent-builder", "voice-agent-reviewer", "voice-agent-fixer", "dialogflow-tester"):
         text = (tmp_path / ".claude/skills" / name / "SKILL.md").read_text()
         assert text.startswith("---\nname: " + name)
 

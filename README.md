@@ -96,10 +96,16 @@ Google Voice doesn't allow automated dialing.
 
 Lampline agents are plain files (`agent.yaml` and `prompts/*.md`), and `vk`
 lints and tests them from the terminal, so a coding agent can build, test and
-review a phone agent for you. Two skills teach it how:
+review a phone agent for you. Four skills teach it how:
 
 - **voice-agent-builder:** asks what the agent should do, writes the tests
   first, builds the folder, and runs `vk lint` and `vk test` until they pass
+- **voice-agent-fixer:** makes failing tests pass by changing only the
+  prompts or routes behind them, and keeps a change only if more tests pass
+  and none breaks
+- **dialogflow-tester:** writes tests for an existing Dialogflow CX or CX
+  Agent Studio agent and runs them against it live, or side by side with its
+  Lampline copy
 - **voice-agent-reviewer:** checks a change before it goes live: lint, the
   diff, the tests, and a privacy review, then asks you to approve
 
@@ -118,9 +124,9 @@ skills into a project instead, run `vk skills install --target claude`
 (or `--target agents`, `--target gemini`).
 
 Then ask, for example: *"Build a phone agent for a dental office that books
-cleanings, with tests"*, or *"Review my change to agents/front-desk before it
-goes live"*. `vk test` also runs the same tests against a live Dialogflow CX
-or CX Agent Studio agent (`--target dfcx` or `ces`).
+cleanings, with tests"*, *"Make the failing tests in agents/front-desk pass"*,
+*"Write regression tests for my Dialogflow CX agent"*, or *"Review my change
+to agents/front-desk before it goes live"*.
 
 ## 🔁 Bring your Dialogflow CX and CX Agent Studio agents
 
@@ -334,7 +340,7 @@ vk templates install front-desk     # start from a ready-made agent
 vk lint agents/front-desk           # graph checks + a scan for real-looking patient data
 vk test agents/front-desk           # runs tests/*.yaml conversations on the engine
 vk import dfcx export.zip           # bring an agent over from Dialogflow CX or CX Agent Studio
-vk skills install --target claude   # builder + reviewer skills (or install the Claude Code plugin, above)
+vk skills install --target claude   # the four coding-agent skills (or install the Claude Code plugin, above)
 ```
 
 Details in [cli/README.md](cli/README.md). The engine itself, its builder,
