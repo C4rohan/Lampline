@@ -5,18 +5,19 @@
   </picture>
 </p>
 
-<h3 align="center">Open-source, self-hosted voice agents.</h3>
+<h3 align="center">Test and run phone agents on your own machine.</h3>
 
 <p align="center">
-  Bring your agents over from <b>Dialogflow CX</b> and <b>CX Agent Studio</b>, or start fresh.<br>
-  Build, test and run them on your own machine or servers, in one command,<br>
-  for about $0.02–0.17 a call instead of $0.50.
+  Write conversation tests for your phone agents, including <b>Dialogflow CX</b> and <b>CX Agent Studio</b> agents,<br>
+  run them from <b>Claude Code</b> or CI, and have real phone calls graded by an AI caller.<br>
+  Open source, and free to run with no API keys.
 </p>
 
 <p align="center">
   <a href="https://github.com/C4rohan/lampline/actions/workflows/ci.yml"><img src="https://github.com/C4rohan/lampline/actions/workflows/ci.yml/badge.svg?branch=dev" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="Apache-2.0"></a>
-  <img src="https://img.shields.io/badge/imports-Dialogflow_CX_%C2%B7_CX_Agent_Studio-2f6fb0" alt="Imports Dialogflow CX and CX Agent Studio">
+  <img src="https://img.shields.io/badge/tests-Dialogflow_CX_%C2%B7_CX_Agent_Studio-2f6fb0" alt="Tests Dialogflow CX and CX Agent Studio agents">
+  <img src="https://img.shields.io/badge/Claude_Code-plugin-d97757" alt="Claude Code plugin">
   <img src="https://img.shields.io/badge/models-20_providers-f2b84b" alt="20 model providers">
   <img src="https://img.shields.io/badge/runs-local_%26_on--prem-15212b" alt="Runs local and on-prem">
   <a href="https://codespaces.new/C4rohan/lampline"><img src="https://github.com/codespaces/badge.svg" alt="Open in GitHub Codespaces" height="20"></a>
@@ -24,8 +25,8 @@
 
 <p align="center">
   <a href="#-quick-start"><b>🚀 Quick start</b></a> &nbsp;·&nbsp;
-  <a href="#-test-any-phone-agent-for-free">📋 Free phone evals</a> &nbsp;·&nbsp;
   <a href="#-use-it-from-claude-code-cursor-or-codex">🤖 From Claude Code</a> &nbsp;·&nbsp;
+  <a href="#-test-any-phone-agent-for-free">📋 Free phone evals</a> &nbsp;·&nbsp;
   <a href="#-bring-your-dialogflow-cx-and-cx-agent-studio-agents">🔁 Import from Google</a> &nbsp;·&nbsp;
   <a href="#-a-quick-tour">👀 Tour</a> &nbsp;·&nbsp;
   <a href="#-models">🧠 Models</a> &nbsp;·&nbsp;
@@ -42,12 +43,32 @@
   <br><sub>Import a Dialogflow CX agent, test it, and grade a real phone call to it. Sample agent and made-up data; replies from Lampline's test model.</sub>
 </p>
 
-Lampline imports your Dialogflow CX and CX Agent Studio agents, flows, pages,
-playbooks, forms and tools included, and runs them on hardware you control. It gives
-you a drag-and-drop builder where LLM steps and scripted pages mix in one agent, a test console that lights up each step as the call moves, HTTP and
-MCP tools, records and document search of its own, and phone calls over Twilio,
-Telnyx or any SIP trunk through jambonz. Built on
-[Pipecat](https://github.com/pipecat-ai/pipecat).
+**Test.** An agent's tests are plain YAML: what the caller says (or a model
+playing the caller), and what must happen: which steps the call reaches, what
+the agent must or must never say, which tools it calls. `vk test` runs them on
+Lampline, or against a live Dialogflow CX or CX Agent Studio agent, and tells
+you exactly what went wrong:
+
+```text
+$ vk test agents/front-desk
+PASS  billing question goes to the billing team  (2 turn(s), 0.8s)  Greeting → Router → Billing → Transfer to staff
+PASS  emergency gets the 911 instruction  (1 turn(s), 0.7s)  Greeting → Router
+FAIL  caller asks about Saturday hours  (1 turn(s), 0.8s)  Greeting → Router
+      - expected to reach 'Hours and location'; steps were Greeting → Router
+      - expected the agent to say 'noon'
+```
+<sub>A starter template run against Lampline's stand-in test model, which is why one test fails.</sub>
+
+**Fix and review from your coding agent.** Lampline ships skills for Claude
+Code, Cursor and Codex that build an agent with tests, fix failing tests
+without breaking passing ones, test your Dialogflow agents, and review a change
+before it goes live ([set up](#-use-it-from-claude-code-cursor-or-codex)).
+
+**Run it.** The same agents take real calls on hardware you control: a
+drag-and-drop builder where LLM steps and scripted pages mix, HTTP and MCP
+tools, records and document search, and phone calls over Twilio, Telnyx or any
+SIP trunk through jambonz. Import from Dialogflow CX and CX Agent Studio, or
+export back, whenever you like. Built on [Pipecat](https://github.com/pipecat-ai/pipecat).
 
 <table>
   <tr>
