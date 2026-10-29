@@ -1,19 +1,27 @@
 name: release
 
-# Merging a pull request titled "Release vX.Y.Z" into prod tags that commit
-# and publishes a GitHub release with notes built from the merged pull requests.
+# Tags prod and publishes a GitHub release with notes built from the merged pull requests:
+# - automatically, when a pull request titled "Release vX.Y.Z" merges into prod
+# - or by hand: Actions → release → Run workflow, with the version (tags prod as it is now)
 
 on:
   pull_request:
     branches: [prod]
     types: [closed]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to tag on prod, like v0.4.1"
+        required: true
 
 permissions:
   contents: write
 
 jobs:
   tag:
-    if: github.event.pull_request.merged && startsWith(github.event.pull_request.title, 'Release v')
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged && startsWith(github.event.pull_request.title, 'Release v'))
     runs-on: ubuntu-latest
     steps:
       - name: Tag and publish
@@ -21,9 +29,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TITLE: ${{ github.event.pull_request.title }}
           SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          INPUT: ${{ inputs.version }}
         run: |
-          version=$(echo "$TITLE" | grep -oE '^Release v[0-9]+\.[0-9]+\.[0-9]+' | cut -d' ' -f2)
-          if [ -z "$version" ]; then echo "No version in '$TITLE'; nothing to tag."; exit 0; fi
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            version="$INPUT"
+            SHA=$(gh api "repos/$GITHUB_REPOSITORY/commits/prod" --jq .sha)
+          else
+            version=$(echo "$TITLE" | grep -oE '^Release v[0-9]+\.[0-9]+\.[0-9]+' | cut -d' ' -f2)
+          fi
+          if ! echo "$version" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Not a version like v1.2.3: '$version'; nothing to tag."
+            [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && exit 1 || exit 0
+          fi
           if gh release view "$version" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "$version already exists."; exit 0
           fi
