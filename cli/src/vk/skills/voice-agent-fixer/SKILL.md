@@ -48,9 +48,11 @@ anything, for example:
   exact wording): don't change it yourself. Explain and ask the person.
 
 Models phrase things differently each run. Before calling a failure real,
-run that one test again: `vk test agents/<name> -k "<test name>"`. If it
-passes on the second run, report it as **flaky**, which usually means two
-conditions overlap, rather than "fixing" a test that already works.
+run it a few more times: `vk test agents/<name> -k "<test name>" --repeat 3`.
+If it passes on some runs (`flaky: true` in the JSON), report it as **flaky**,
+which usually means two conditions overlap, rather than "fixing" a test that
+mostly works. When you judge a change in step 3, `--repeat 2` or `3` makes
+the before-and-after comparison more trustworthy.
 
 ## 2. Change as little as possible
 
