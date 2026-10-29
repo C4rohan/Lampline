@@ -39,12 +39,13 @@ Two sections are notes for you and your tools, not part of the agent itself:
 | Command | What it does |
 |---|---|
 | `vk lint DIR... [--format json] [--strict]` | Offline checks; exit 1 on errors (`--strict`: on warnings too) |
-| `vk test DIR [-k TEXT] [--url URL] [--format json] [-v] [--live-tools]` | Run `tests/*.yaml` conversations on the engine, with the folder as it is on disk |
+| `vk test DIR [-k TEXT] [--url URL] [--format json] [-v] [--live-tools] [--repeat N] [--allow-flaky]` | Run `tests/*.yaml` conversations on the engine, with the folder as it is on disk |
 | `vk test DIR --target dfcx\|ces\|engine,dfcx --agent RESOURCE` | Run the same tests against your live Dialogflow CX agent or CX Agent Studio app, or side by side with the engine |
 | `vk templates list` / `vk templates install NAME [--dir D] [--name N]` | Starter agents |
 | `vk import dfcx\|ces\|auto EXPORT [--dir D] [--name N]` | Turn a Dialogflow CX or CX Agent Studio export (zip or folder) into an agent folder, offline. See [Import](#import) |
 | `vk export ces\|dfcx DIR [--out F] [--folder]` | Write an agent folder as a CX Agent Studio app or a Dialogflow CX agent, offline. See [Export](#export) |
-| `vk skills install --target claude\|agents\|gemini` | Install the builder and reviewer skills |
+| `vk skills install --target claude\|agents\|gemini` | Install the coding-agent skills (builder, fixer, Dialogflow tester, reviewer) |
+| `vk mcp [--dir agents] [--url URL]` | Serve the agent folders and their tests to MCP clients over stdio ([MCP server](#mcp-server)) |
 
 Changes reach real callers when the folder does: review them as pull requests
 and promote dev → qa → prod ([docs/BRANCHES.md](../docs/BRANCHES.md)), with
@@ -105,8 +106,27 @@ expect:
 The caller answers the agent's questions with made-up details and stops when
 its goal is met, the agent says goodbye, or `max_turns` runs out. It says
 something different every run, so keep `expect` to what any good conversation
-must do, and run it a few times after changing the agent. A file has either
-`turns` or a `caller`, not both.
+must do, and run it a few times after changing the agent (`--repeat`, below).
+A file has either `turns` or a `caller`, not both.
+
+### Catch flaky tests
+
+Models answer differently from run to run, so one passing run proves little.
+`--repeat N` runs every test N times (up to 10). For example:
+
+```
+$ vk test agents/front-desk --repeat 3
+PASS  billing question goes to the billing team  (2 turn(s), 2.4s, passed 3 of 3 runs)  Greeting → Router → Billing
+FLAKY  caller asks about Saturday hours  (1 turn(s), 2.5s, passed 2 of 3 runs)  Greeting → Router
+      - expected to reach 'Hours and location'; steps were Greeting → Router
+
+1 passed, 0 failed, 1 flaky
+```
+
+A flaky test shows its failing run, which usually points at two transition
+conditions that overlap. It fails the run like a failed test does; add
+`--allow-flaky` to let it pass. With `--format json`, each test has `runs`,
+`passes` and `flaky`.
 
 ### Test the original Google agent, side by side
 
@@ -329,6 +349,50 @@ and the like.
 
 The same four install as a Claude Code plugin: `/plugin marketplace add C4rohan/lampline`,
 then `/plugin install lampline@lampline`.
+
+## MCP server
+
+`vk mcp` serves your agent folders to MCP clients that don't run a terminal,
+like Claude Desktop and Cursor, over stdio. Its tools:
+
+| Tool | What it does |
+|---|---|
+| `list_agents` | the agent folders, with their step and test counts |
+| `lint_agent` | `vk lint`, as findings |
+| `run_tests` | `vk test` (same JSON as `--format json`), with an optional `match` and `repeat` |
+| `read_prompt` | one step's prompt, plus every step's name and id |
+| `write_prompt` | replace one step's prompt |
+| `list_failed_calls` | real calls whose call checks failed: when, and which checks failed and why |
+
+On purpose, it can't change steps, routes, tools, triggers or webhooks (they
+can use secrets or contact people), and it never returns call transcripts or
+callers' numbers: MCP results go to the model. A prompt write is refused if it
+drops a `{{variable}}` the step uses, or if it looks like real personal data.
+It only reads inside the agents folder.
+
+**Claude Code:**
+
+```bash
+claude mcp add lampline -- vk mcp --dir "$PWD/agents"
+```
+
+**Claude Desktop** (`claude_desktop_config.json`) or **Cursor** (`.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "lampline": {
+      "command": "vk",
+      "args": ["mcp", "--dir", "/full/path/to/your/agents"],
+      "env": { "VK_ENGINE_URL": "http://localhost:7860" }
+    }
+  }
+}
+```
+
+Use the full path to `vk` (`which vk`) if the app can't find it. `run_tests`
+and `list_failed_calls` need the engine running; add `VK_ENGINE_KEY` to `env`
+if it uses a key.
 
 ## Develop
 

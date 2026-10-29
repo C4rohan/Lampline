@@ -34,6 +34,10 @@ failing tests pass), `dialogflow-tester` (testing a live Dialogflow CX or CX
 Agent Studio agent) and `voice-agent-reviewer` (before a change goes live).
 Follow them.
 
+MCP clients can use `vk mcp` instead of a terminal: it serves the same
+lint and test commands, plus reading and changing one step's prompt
+([cli/README.md](cli/README.md#mcp-server)).
+
 ## Rules
 
 - **Synthetic data only:** made-up names, 555-01xx phone numbers, no real

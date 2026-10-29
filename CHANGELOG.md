@@ -4,6 +4,10 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 
 ## Unreleased (on dev)
 
+### Tests
+- **`vk mcp`:** an MCP server (stdio) for Claude Desktop, Cursor and other MCP clients: list agents, lint, run tests, read and change one step's prompt, and list real calls that failed their checks (summaries only, never transcripts or callers' numbers). It can't change steps, routes, tools, triggers or webhooks, refuses a prompt that drops a `{{variable}}` or looks like real personal data, and stays inside the agents folder. No new dependencies.
+- **`vk test --repeat N`** runs every test N times (up to 10) and reports a test that passes only some of the time as **FLAKY**, with its failing run's reasons and transcript. Flaky tests fail the run unless `--allow-flaky`. The JSON gains `runs`, `passes` and `flaky`. The fixer and Dialogflow-tester skills use it.
+
 ### Use it from Claude Code, Cursor or Codex
 - **Claude Code plugin:** `/plugin marketplace add C4rohan/lampline`, then `/plugin install lampline@lampline`, installs Lampline's coding-agent skills. The marketplace points at the skills in `cli/src/vk/skills/`, so there's one copy of each.
 - **Two new skills:** **voice-agent-fixer** makes failing tests pass by changing only the prompts or routes behind them, keeping a change only if more tests pass and none breaks; **dialogflow-tester** writes tests for an existing Dialogflow CX or CX Agent Studio agent and runs them against it live, or side by side with its Lampline copy. Both ship with `vk skills install` and the plugin.
