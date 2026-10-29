@@ -39,7 +39,7 @@ Two sections are notes for you and your tools, not part of the agent itself:
 | Command | What it does |
 |---|---|
 | `vk lint DIR... [--format json] [--strict]` | Offline checks; exit 1 on errors (`--strict`: on warnings too) |
-| `vk test DIR [-k TEXT] [--url URL] [--format json] [-v] [--live-tools]` | Run `tests/*.yaml` conversations on the engine, with the folder as it is on disk |
+| `vk test DIR [-k TEXT] [--url URL] [--format json] [-v] [--live-tools] [--repeat N] [--allow-flaky]` | Run `tests/*.yaml` conversations on the engine, with the folder as it is on disk |
 | `vk test DIR --target dfcx\|ces\|engine,dfcx --agent RESOURCE` | Run the same tests against your live Dialogflow CX agent or CX Agent Studio app, or side by side with the engine |
 | `vk templates list` / `vk templates install NAME [--dir D] [--name N]` | Starter agents |
 | `vk import dfcx\|ces\|auto EXPORT [--dir D] [--name N]` | Turn a Dialogflow CX or CX Agent Studio export (zip or folder) into an agent folder, offline. See [Import](#import) |
@@ -105,8 +105,27 @@ expect:
 The caller answers the agent's questions with made-up details and stops when
 its goal is met, the agent says goodbye, or `max_turns` runs out. It says
 something different every run, so keep `expect` to what any good conversation
-must do, and run it a few times after changing the agent. A file has either
-`turns` or a `caller`, not both.
+must do, and run it a few times after changing the agent (`--repeat`, below).
+A file has either `turns` or a `caller`, not both.
+
+### Catch flaky tests
+
+Models answer differently from run to run, so one passing run proves little.
+`--repeat N` runs every test N times (up to 10). For example:
+
+```
+$ vk test agents/front-desk --repeat 3
+PASS  billing question goes to the billing team  (2 turn(s), 2.4s, passed 3 of 3 runs)  Greeting → Router → Billing
+FLAKY  caller asks about Saturday hours  (1 turn(s), 2.5s, passed 2 of 3 runs)  Greeting → Router
+      - expected to reach 'Hours and location'; steps were Greeting → Router
+
+1 passed, 0 failed, 1 flaky
+```
+
+A flaky test shows its failing run, which usually points at two transition
+conditions that overlap. It fails the run like a failed test does; add
+`--allow-flaky` to let it pass. With `--format json`, each test has `runs`,
+`passes` and `flaky`.
 
 ### Test the original Google agent, side by side
 

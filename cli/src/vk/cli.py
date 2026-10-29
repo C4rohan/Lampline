@@ -213,12 +213,33 @@ def cmd_export(args) -> int:
     return 0
 
 
+def _run_repeated(client, sc, context, repeat: int, label: str) -> scenario.Result:
+    """Run one test `repeat` times. It passes only if every run passed; when some runs fail, the first failing
+    run's transcript and reasons are kept, since that's the one worth reading."""
+    results = []
+    for _ in range(max(1, repeat)):
+        try:
+            results.append(scenario.run(client, sc, context))
+        except ApiError as exc:
+            results.append(scenario.Result(sc, scenario.Transcript(), [f"{label} error: {exc}"], 0.0))
+    if repeat <= 1:
+        return results[0]
+    shown = next((r for r in results if not r.passed), results[-1])
+    return scenario.Result(sc, shown.transcript, shown.failures, sum(r.seconds for r in results),
+                           runs=len(results), passes=sum(r.passed for r in results))
+
+
+def _mark(r: scenario.Result) -> str:
+    return "FLAKY" if r.flaky else "PASS" if r.passed else "FAIL"
+
+
 def _print_result(r: scenario.Result, verbose: bool) -> None:
-    mark = "PASS" if r.passed else "FAIL"
+    mark = _mark(r)
     steps = " → ".join(n["name"] or n["id"] for n in r.transcript.nodes) or "no steps"
     turns = sum(1 for who, _ in r.transcript.lines if who == "caller") if r.scenario.caller else len(r.scenario.turns)
     kind = ", model caller" if r.scenario.caller else ""
-    _out(f"{mark}  {r.scenario.name}  ({turns} turn(s){kind}, {r.seconds:.1f}s)  {steps}")
+    runs = f", passed {r.passes} of {r.runs} runs" if r.passes is not None else ""
+    _out(f"{mark}  {r.scenario.name}  ({turns} turn(s){kind}, {r.seconds:.1f}s{runs})  {steps}")
     for f in r.failures:
         _out(f"      - {f}")
     if verbose or not r.passed:
@@ -239,6 +260,9 @@ def cmd_test(args) -> int:
     if not scenarios:
         _err(f"no tests found in {folder}/tests/*.yaml" + (f" matching {args.k!r}" if args.k else ""))
         return 1
+    if not 1 <= args.repeat <= 10:
+        _err("error: --repeat is 1 to 10")
+        return 1
     url = args.url or os.environ.get("VK_ENGINE_URL") or "http://localhost:7860"
     targets = [t.strip() for t in (args.target or "engine").split(",") if t.strip()]
     bad = [t for t in targets if t not in ("engine", "dfcx", "ces")]
@@ -250,13 +274,24 @@ def cmd_test(args) -> int:
     return _test_targets(args, agent, folder, scenarios, url.rstrip("/"), targets)
 
 
+def _summary(results) -> str:
+    flaky = sum(r.flaky for r in results)
+    failed = sum(not r.passed for r in results) - flaky
+    return f"{sum(r.passed for r in results)} passed, {failed} failed" + (f", {flaky} flaky" if flaky else "")
+
+
+def _code(args, results) -> int:
+    """1 when anything failed. A flaky test counts as failing too, unless --allow-flaky."""
+    bad = [r for r in results if not r.passed and not (r.flaky and args.allow_flaky)]
+    return 1 if bad else 0
+
+
 def _report(args, results) -> int:
-    failed = sum(not r.passed for r in results)
     if args.format == "json":
         _out(json.dumps([r.as_dict() for r in results], indent=2, ensure_ascii=False))
     else:
-        _out(f"\n{len(results) - failed} passed, {failed} failed")
-    return 1 if failed else 0
+        _out("\n" + _summary(results))
+    return _code(args, results)
 
 
 def _test_on_engine(args, agent, folder: Path, scenarios, url: str) -> int:
@@ -278,10 +313,7 @@ def _test_on_engine(args, agent, folder: Path, scenarios, url: str) -> int:
             _out(f"engine {url}: {cfg.get('llm')} {cfg.get('model')}\n")
         results = []
         for sc in scenarios:
-            try:
-                result = scenario.run(c, sc, agent.context_variables)
-            except ApiError as exc:
-                result = scenario.Result(sc, scenario.Transcript(), [f"engine error: {exc}"], 0.0)
+            result = _run_repeated(c, sc, agent.context_variables, args.repeat, "engine")
             results.append(result)
             if args.format == "text":
                 _print_result(result, args.verbose)
@@ -329,10 +361,7 @@ def _test_targets(args, agent, folder: Path, scenarios, url: str, targets: list[
                 _out(f"== {label}\n")
             results = []
             for sc in scenarios:
-                try:
-                    result = scenario.run(client, sc, agent.context_variables)
-                except ApiError as exc:
-                    result = scenario.Result(sc, scenario.Transcript(), [f"{target} error: {exc}"], 0.0)
+                result = _run_repeated(client, sc, agent.context_variables, args.repeat, target)
                 results.append(result)
                 if args.format == "text":
                     _print_result(result, args.verbose)
@@ -340,8 +369,7 @@ def _test_targets(args, agent, folder: Path, scenarios, url: str, targets: list[
                 client.close()
             by_target[target] = results
             if args.format == "text":
-                failed = sum(not r.passed for r in results)
-                _out(f"\n{len(results) - failed} passed, {failed} failed\n")
+                _out("\n" + _summary(results) + "\n")
     finally:
         if engine is not None:
             engine.close()
@@ -353,10 +381,10 @@ def _test_targets(args, agent, folder: Path, scenarios, url: str, targets: list[
         _out("Side by side")
         _out("  " + "test".ljust(width) + "  " + "  ".join(n.ljust(6) for n in names))
         for i, sc in enumerate(scenarios):
-            marks = ["PASS" if by_target[n][i].passed else "FAIL" for n in names]
+            marks = [_mark(by_target[n][i]) for n in names]
             differ = "  ← differs" if len(set(marks)) > 1 else ""
             _out("  " + sc.name.ljust(width) + "  " + "  ".join(m.ljust(6) for m in marks) + differ)
-    return 1 if any(not r.passed for rs in by_target.values() for r in rs) else 0
+    return _code(args, [r for rs in by_target.values() for r in rs])
 
 
 # --- parser ----------------------------------------------------------------------
@@ -379,6 +407,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="the engine (default: VK_ENGINE_URL or http://localhost:7860); the folder runs as it is on disk")
     s.add_argument("--format", choices=["text", "json"], default="text")
     s.add_argument("-v", "--verbose", action="store_true", help="print transcripts of passing tests too")
+    s.add_argument("--repeat", type=int, default=1, metavar="N",
+                   help="run every test N times (1-10); a test that passes only some of the time is reported as flaky")
+    s.add_argument("--allow-flaky", action="store_true", help="with --repeat: flaky tests don't fail the run")
     s.add_argument("--live-tools", action="store_true",
                    help="call tools' real services instead of their mock responses")
     s.add_argument("--target", default="engine", metavar="TARGETS",

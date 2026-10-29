@@ -87,9 +87,10 @@ vk test agents/<name> --target ces --agent projects/P/locations/L/apps/ID --form
 ```
 
 For each failure, read `failures`, `steps` and `transcript`, and say plainly
-what the Google agent did differently. Run a failing test once more
-(`-k "<test name>"`) before reporting it: a test that passes the second time
-is **flaky**, which usually means two routes overlap.
+what the Google agent did differently. Run a failing test a few more times
+(`-k "<test name>" --repeat 3`) before reporting it: a test that passes on
+some runs is **flaky** (`flaky: true` in the JSON), which usually means two
+routes overlap.
 
 ## 4. Moving to Lampline? Compare side by side
 
