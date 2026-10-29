@@ -106,16 +106,26 @@ class Result:
     transcript: Transcript
     failures: list[str]
     seconds: float
+    runs: int = 1                 # with `vk test --repeat N`: how many times it ran
+    passes: int | None = None     # and how many of those passed (None: one run)
 
     @property
     def passed(self) -> bool:
         return not self.failures
+
+    @property
+    def flaky(self) -> bool:
+        """Passed on some runs and failed on others: the agent's behaviour isn't settled."""
+        return self.passes is not None and 0 < self.passes < self.runs
 
     def as_dict(self) -> dict:
         return {
             "name": self.scenario.name,
             "file": self.scenario.path,
             "passed": self.passed,
+            "runs": self.runs,
+            "passes": self.runs if self.passes is None and self.passed else (self.passes or 0),
+            "flaky": self.flaky,
             "failures": self.failures,
             "seconds": round(self.seconds, 2),
             "steps": [n["name"] or n["id"] for n in self.transcript.nodes],

@@ -108,3 +108,51 @@ def test_every_template_is_lint_clean_and_round_trips(tmp_path):
         assert run_lint(agent, tpl) == [], tpl.name
         afs.write(agent, tmp_path / tpl.name)
         assert afs.load(tmp_path / tpl.name).definition == agent.definition
+
+
+def _flaky_runs(monkeypatch, pattern):
+    """scenario.run passes or fails in turn, following `pattern` (True = pass), like a model that varies."""
+    from vk import cli, scenario
+    real, seen = scenario.run, iter(pattern * 10)
+
+    def run(client, sc, context):
+        result = real(client, sc, context)
+        return result if next(seen) else scenario.Result(sc, result.transcript, ["expected the agent to say 'noon'"],
+                                                         result.seconds)
+    monkeypatch.setattr(cli.scenario, "run", run)
+
+
+def test_repeat_reports_flaky_tests(run, tmp_path, monkeypatch):
+    import json
+    make_folder(tmp_path, {"hours": {"name": "hours question", "turns": [{"user": "hello"}]}})
+    _flaky_runs(monkeypatch, [True, False, True])
+    code, out, _ = run("test", "agents/front-desk", "--repeat", "3")
+    assert code == 1 and "FLAKY  hours question" in out and "passed 2 of 3 runs" in out
+    assert "expected the agent to say 'noon'" in out and "0 passed, 0 failed, 1 flaky" in out
+    _flaky_runs(monkeypatch, [True, False, True])
+    code, out, _ = run("test", "agents/front-desk", "--repeat", "3", "--allow-flaky", "--format", "json")
+    [r] = json.loads(out)
+    assert code == 0 and r["runs"] == 3 and r["passes"] == 2 and r["flaky"] is True and r["passed"] is False
+
+
+def test_repeat_passed_and_failed_every_time(run, tmp_path, monkeypatch):
+    import json
+    make_folder(tmp_path, {"t": {"name": "t", "turns": [{"user": "hello"}]}})
+    code, out, _ = run("test", "agents/front-desk", "--repeat", "2", "--format", "json")
+    [r] = json.loads(out)
+    assert code == 0 and r == {**r, "runs": 2, "passes": 2, "flaky": False, "passed": True}
+    _flaky_runs(monkeypatch, [False])
+    code, out, _ = run("test", "agents/front-desk", "--repeat", "2", "--allow-flaky")
+    assert code == 1 and "FAIL  t" in out and "passed 0 of 2 runs" in out and "0 passed, 1 failed" in out
+
+
+def test_repeat_is_bounded_and_one_run_is_unchanged(run, tmp_path):
+    import json
+    make_folder(tmp_path, {"t": {"name": "t", "turns": [{"user": "hello"}]}})
+    code, _, err = run("test", "agents/front-desk", "--repeat", "11")
+    assert code == 1 and "--repeat is 1 to 10" in err
+    code, out, _ = run("test", "agents/front-desk", "--format", "json")
+    [r] = json.loads(out)
+    assert code == 0 and r["runs"] == 1 and r["passes"] == 1 and r["flaky"] is False
+    code, out, _ = run("test", "agents/front-desk")
+    assert "runs)" not in out and "1 passed, 0 failed" in out and "flaky" not in out
