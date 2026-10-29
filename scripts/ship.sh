@@ -3,7 +3,7 @@
 #
 #   scripts/ship.sh "What this change does"   commit what you've changed, push, open a pull request into dev
 #   scripts/ship.sh qa                        open the dev -> qa pull request (a release candidate)
-#   scripts/ship.sh prod v0.4.0               open the qa -> prod pull request; merging it tags v0.4.0
+#   scripts/ship.sh prod                      open the qa -> prod pull request; merging it releases VERSION
 #   scripts/ship.sh sync                      carry prod and qa back into dev (the sync workflow does this for you)
 #   scripts/ship.sh status                    what's waiting where
 #
@@ -63,12 +63,17 @@ QA checklist: docs/BRANCHES.md"
     ;;
 
   prod)
-    version="${2:-}"
-    [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "give the version: scripts/ship.sh prod v0.4.0"
     git fetch -q --tags origin
-    git rev-parse -q --verify "refs/tags/$version" >/dev/null && die "$version is already tagged"
     [ -n "$(git rev-list origin/prod..origin/qa)" ] || die "prod already has everything on qa"
-    open_pr prod qa "Release $version" "Merging this tags $version and publishes the release.
+    version="v$(git show origin/qa:VERSION | tr -d '[:space:]')"
+    [ -z "${2:-}" ] || [ "${2#v}" = "${version#v}" ] || die "qa is at $version; to release ${2}, run scripts/version.sh set ${2#v} on dev first"
+    if git rev-parse -q --verify "refs/tags/$version" >/dev/null; then
+      note="$version is already released, so merging this updates prod without a new release. For one, run scripts/version.sh set X.Y.Z on dev first."
+      echo "ship: $note"
+    else
+      note="Merging this releases $version (the VERSION file)."
+    fi
+    open_pr prod qa "Release $version" "$note
 
 $(prs_between prod qa)"
     ;;

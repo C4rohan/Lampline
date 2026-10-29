@@ -21,6 +21,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: shellcheck
         run: shellcheck -S warning scripts/*.sh
+      - name: Every copy of the version matches VERSION
+        run: scripts/version.sh check
 
 
 

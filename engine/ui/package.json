@@ -1,7 +1,7 @@
 {
   "name": "vpengine-ui",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.5.0",
   "type": "module",
   "description": "The engine's web UI. Built into ../src/vpengine/static (committed), so running the engine needs no Node.",
   "scripts": {

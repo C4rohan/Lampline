@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vpengine"
-version = "0.3.0"
+version = "0.5.0"
 description = "Voice agent engine for agent.yaml folders, built on Pipecat"
 readme = "README.md"
 license = "Apache-2.0"
