@@ -70,6 +70,17 @@ def cmd_lint(args) -> int:
 SKILL_TARGETS = {"claude": ".claude/skills", "agents": ".agents/skills", "gemini": ".gemini/skills"}
 
 
+def cmd_mcp(args) -> int:
+    from .mcp_server import Server
+    root = Path(args.dir)
+    if not root.is_dir():
+        _err(f"error: {root}/ isn't a folder; run vk mcp where your agents/ folder is, or pass --dir")
+        return 1
+    _err(f"vk mcp: serving {root.resolve()} over stdio (engine {args.url or os.environ.get('VK_ENGINE_URL') or 'http://localhost:7860'})")
+    Server(root, url=args.url, transport=getattr(args, "_transport", None)).serve()
+    return 0
+
+
 def cmd_skills_install(args) -> int:
     dest_root = Path(args.dest or SKILL_TARGETS[args.target])
     src_root = resources.files("vk") / "skills"
@@ -450,6 +461,12 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--language", default="en", help="Dialogflow CX: the agent's default language")
     s.add_argument("--force", action="store_true", help="overwrite")
     s.set_defaults(func=cmd_export)
+
+    s = sub.add_parser("mcp", help="serve the agent folders and their tests to MCP clients (Claude Desktop, Cursor), over stdio")
+    s.add_argument("--dir", default="agents", help="the folder of agent folders (default: agents)")
+    s.add_argument("--url", "--engine", dest="url", metavar="URL",
+                   help="the engine, for run_tests and list_failed_calls (default: VK_ENGINE_URL or http://localhost:7860)")
+    s.set_defaults(func=cmd_mcp)
 
     skills = sub.add_parser("skills", help="coding-agent skills")
     ssub = skills.add_subparsers(dest="skills_command", required=True)

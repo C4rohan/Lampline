@@ -123,6 +123,11 @@ On Claude Code 2.1.275 or later, one line does both:
 skills into a project instead, run `vk skills install --target claude`
 (or `--target agents`, `--target gemini`).
 
+**Claude Desktop, Cursor and other MCP clients:** `vk mcp` serves your agent
+folders as tools: list, lint, run tests, read and change a step's prompt, and
+see which real calls failed their checks
+([set up](cli/README.md#mcp-server)).
+
 Then ask, for example: *"Build a phone agent for a dental office that books
 cleanings, with tests"*, *"Make the failing tests in agents/front-desk pass"*,
 *"Write regression tests for my Dialogflow CX agent"*, or *"Review my change
