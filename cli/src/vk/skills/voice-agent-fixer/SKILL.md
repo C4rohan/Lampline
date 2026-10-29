@@ -65,6 +65,12 @@ the before-and-after comparison more trustworthy.
 - Don't add or remove steps, tools, triggers or webhooks unless the person
   asks; those change what the agent can reach.
 - Prompts are spoken: short sentences, no lists or markdown read aloud.
+- **Fix the behaviour, not the test's wording.** Write conditions and prompts
+  in general terms that cover the kind of caller a test stands for. Don't copy
+  a test's phrases into them ("chocolate", "hit by a car", "Saturday" from a
+  test file): that passes the test without making the agent better, and the
+  reviewer will flag it as overfitting. Ask yourself whether the change would
+  still help a caller who said the same thing in other words.
 
 ## 3. Re-run everything and decide
 
@@ -87,7 +93,11 @@ costs a few model calls.
 
 In plain language:
 
-1. Before and after: how many tests passed (and which were flaky).
+1. Before and after: how many tests passed (and which were flaky). If the
+   engine's model is `stand-in` or another test model (check `vk test`'s first
+   line, or `curl $VK_ENGINE_URL/v1/health`), say so: it matches words rather
+   than understanding them, so results there say little about real callers,
+   and a fix shouldn't be tuned to it.
 2. Each change: the step, what you changed and why, as a short diff.
 3. What's still failing and your best guess why.
 
