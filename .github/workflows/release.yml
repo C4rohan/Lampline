@@ -1,47 +1,39 @@
 name: release
 
-# Tags prod and publishes a GitHub release with notes built from the merged pull requests:
-# - automatically, when a pull request titled "Release vX.Y.Z" merges into prod
-# - or by hand: Actions → release → Run workflow, with the version (tags prod as it is now)
+# Every push to prod releases the version in VERSION, unless that version is already tagged:
+# it tags the commit and publishes a GitHub release with notes built from the merged pull requests.
+# So a release starts on dev, with `scripts/version.sh set X.Y.Z`; merging that into prod ships it.
+# Run by hand too (Actions → release → Run workflow) to release prod as it is now.
 
 on:
-  pull_request:
+  push:
     branches: [prod]
-    types: [closed]
   workflow_dispatch:
-    inputs:
-      version:
-        description: "Version to tag on prod, like v0.4.1"
-        required: true
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
   tag:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.pull_request.merged && startsWith(github.event.pull_request.title, 'Release v'))
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: prod
       - name: Tag and publish
         env:
           GH_TOKEN: ${{ github.token }}
-          TITLE: ${{ github.event.pull_request.title }}
-          SHA: ${{ github.event.pull_request.merge_commit_sha }}
-          INPUT: ${{ inputs.version }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-            version="$INPUT"
-            SHA=$(gh api "repos/$GITHUB_REPOSITORY/commits/prod" --jq .sha)
-          else
-            version=$(echo "$TITLE" | grep -oE '^Release v[0-9]+\.[0-9]+\.[0-9]+' | cut -d' ' -f2)
-          fi
-          if ! echo "$version" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "Not a version like v1.2.3: '$version'; nothing to tag."
-            [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && exit 1 || exit 0
-          fi
+          scripts/version.sh check
+          version="v$(scripts/version.sh)"
           if gh release view "$version" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "$version already exists."; exit 0
+            echo "$version is already released; bump VERSION on dev (scripts/version.sh set X.Y.Z) for the next one."
+            exit 0
           fi
-          gh release create "$version" -R "$GITHUB_REPOSITORY" --target "$SHA" --title "$version" --generate-notes
+          gh release create "$version" -R "$GITHUB_REPOSITORY" --target "$(git rev-parse HEAD)" \
+            --title "$version" --generate-notes
+          echo "Released $version" >> "$GITHUB_STEP_SUMMARY"
