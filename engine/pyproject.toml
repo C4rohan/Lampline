@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vpengine"
-version = "0.3.0"
+version = "0.5.0"
 description = "Voice agent engine for agent.yaml folders, built on Pipecat"
 readme = "README.md"
 license = "Apache-2.0"
@@ -12,7 +12,7 @@ requires-python = ">=3.11"
 dependencies = [
     "vpd-vk",                                   # agent folder format (../cli)
     # Not the [webrtc] extra: it adds OpenCV, which is only for receiving video.
-    "pipecat-ai[anthropic,aws,deepgram,fish,google,kokoro,openai,websocket,silero,whisper]==1.13.0",   # aws and google: Bedrock, Gemini, Vertex AI
+    "pipecat-ai[anthropic,aws,deepgram,fish,google,kokoro,openai,websocket,silero,whisper]==1.15.0",   # aws and google: Bedrock, Gemini, Vertex AI
     "aiortc>=1.14,<2",                           # browser calls (audio only)
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
