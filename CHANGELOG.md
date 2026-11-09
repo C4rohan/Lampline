@@ -4,6 +4,10 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 
 ## Unreleased (on dev)
 
+### Shipping
+- **One version number:** `VERSION` at the root, copied into both packages, the web app and the citation by `scripts/version.sh set X.Y.Z`; CI fails if a copy differs. `vk --version` and the engine's health check had been reporting 0.3.0. This release is 0.5.0.
+- **Releases follow the version, not the pull request's title:** every push to prod releases `VERSION` if it isn't tagged yet. `scripts/ship.sh prod` takes the version from there too.
+
 ### Tests
 - **`vk mcp`:** an MCP server (stdio) for Claude Desktop, Cursor and other MCP clients: list agents, lint, run tests, read and change one step's prompt, and list real calls that failed their checks (summaries only, never transcripts or callers' numbers). It can't change steps, routes, tools, triggers or webhooks, refuses a prompt that drops a `{{variable}}` or looks like real personal data, and stays inside the agents folder. No new dependencies.
 - **`vk test --repeat N`** runs every test N times (up to 10) and reports a test that passes only some of the time as **FLAKY**, with its failing run's reasons and transcript. Flaky tests fail the run unless `--allow-flaky`. The JSON gains `runs`, `passes` and `flaky`. The fixer and Dialogflow-tester skills use it.

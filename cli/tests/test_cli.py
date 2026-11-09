@@ -156,3 +156,14 @@ def test_repeat_is_bounded_and_one_run_is_unchanged(run, tmp_path):
     assert code == 0 and r["runs"] == 1 and r["passes"] == 1 and r["flaky"] is False
     code, out, _ = run("test", "agents/front-desk")
     assert "runs)" not in out and "1 passed, 0 failed" in out and "flaky" not in out
+
+
+def test_version_matches_the_version_file(capsys):
+    """vk --version is the release's version (VERSION at the repo root)."""
+    import pytest as _pytest
+    from vk import __version__, cli
+    root = Path(__file__).resolve().parents[2]
+    assert __version__ == (root / "VERSION").read_text().strip()
+    with _pytest.raises(SystemExit):
+        cli.main(["--version"])
+    assert capsys.readouterr().out.strip() == f"vk {__version__}"

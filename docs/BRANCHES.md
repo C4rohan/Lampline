@@ -18,11 +18,17 @@ CI (`.github/workflows/ci.yml`) runs on every push and pull request to all three
 ```bash
 scripts/ship.sh "Fix the transfer message"   # commit, push, open a pull request into dev
 scripts/ship.sh qa                           # open dev -> qa, listing the pull requests in it
-scripts/ship.sh prod v0.4.0                  # open qa -> prod; merging it tags v0.4.0 and publishes the release
+scripts/ship.sh prod                         # open qa -> prod; merging it releases the version in VERSION
 scripts/ship.sh status                       # what's waiting where
 ```
 
 Add `--check` to run CI's tests first. You still review and merge every pull request yourself.
+
+**Releasing a new version:** on dev, run `scripts/version.sh set 0.6.0` (it
+updates `VERSION` and every copy: both packages, the web app and the
+citation), commit it, and promote as usual. When it reaches prod, the
+`release` workflow tags `v0.6.0` and publishes the release. Without a bump,
+merges into prod just update prod. CI fails if any copy of the version differs.
 
 What runs on its own:
 
@@ -31,7 +37,7 @@ What runs on its own:
 | `ci` | every push and pull request to dev, qa, prod | tests, UI build check, secret scan, Docker image |
 | `sync` | something lands on qa or prod | merges it back into dev, and opens a prod -> qa pull request after a hotfix, so the next promotion never conflicts |
 | `ui-build` | a pull request into dev changes `engine/ui` | rebuilds the committed UI if it's stale and pushes it to the branch (Dependabot's weekly update too) |
-| `release` | a pull request titled `Release vX.Y.Z` merges into prod, or **Actions → release → Run workflow** with a version | tags prod and publishes a GitHub release with notes |
+| `release` | anything lands on prod, or **Actions → release → Run workflow** | releases the version in `VERSION` if it isn't tagged yet: tags prod and publishes a GitHub release with notes |
 
 ## QA checklist
 
