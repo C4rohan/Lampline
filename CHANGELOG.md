@@ -4,6 +4,10 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 
 ## Unreleased (on dev)
 
+### Docs
+- **[Test a Dialogflow CX agent in 10 minutes](docs/TEST-DIALOGFLOW.md):** a step-by-step guide from install to a failing test explained, with no Docker needed for scripted tests.
+- **README:** the install line and both ways in (just the tests, or the whole platform) are on the first screen, and the quick start is now the first section.
+
 ### Install
 - **`pipx install lampline`** installs the `vk` command from PyPI: no clone needed to lint, test, import and export agents, test a Dialogflow CX agent, or run the MCP server. Each release publishes it automatically, with no stored token (PyPI trusted publishing). The package was `vpd-vk`, only installable from a clone.
 - `vk ... | head` no longer prints a traceback when the reader closes the pipe.
