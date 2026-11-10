@@ -135,7 +135,9 @@ conditions that overlap. It fails the run like a failed test does; add
 ### Test the original Google agent, side by side
 
 The same test files run against a live Dialogflow CX agent or CX Agent Studio
-app, so a folder you imported can be checked against the original:
+app, so a folder you imported can be checked against the original. New to
+this? Follow the step-by-step guide:
+[Test a Dialogflow CX agent in 10 minutes](https://github.com/C4rohan/Lampline/blob/prod/docs/TEST-DIALOGFLOW.md).
 
 ```bash
 gcloud auth login                       # your own Google account; vk uses `gcloud auth print-access-token`
