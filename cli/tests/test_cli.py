@@ -167,3 +167,14 @@ def test_version_matches_the_version_file(capsys):
     with _pytest.raises(SystemExit):
         cli.main(["--version"])
     assert capsys.readouterr().out.strip() == f"vk {__version__}"
+
+
+def test_a_closed_pipe_is_not_an_error(monkeypatch):
+    """`vk templates list | head -1` ends quietly instead of printing a traceback."""
+    from vk import cli
+
+    def gone(msg=""):
+        raise BrokenPipeError
+    monkeypatch.setattr(cli, "_out", gone)
+    monkeypatch.setattr(cli.os, "dup2", lambda *a: None)
+    assert cli.main(["templates", "list"]) == 0

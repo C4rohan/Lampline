@@ -6,8 +6,12 @@ engine's drag-and-drop builder. Agents are folders the engine runs as they are
 on disk, so there's nothing to upload: edit, lint, test, commit.
 
 ```bash
-pip install -e cli            # from the repo root; Python 3.10+
+pipx install lampline         # installs the vk command; Python 3.10+
 ```
+
+`pip install lampline` works too, and `uvx --from lampline vk --help` runs it
+without installing. Working on Lampline itself? From a clone of the repo:
+`pip install -e cli`.
 
 `vk test` talks to a running engine: `VK_ENGINE_URL` (default
 `http://localhost:7860`) and, when the engine needs one, its API key in
@@ -48,7 +52,7 @@ Two sections are notes for you and your tools, not part of the agent itself:
 | `vk mcp [--dir agents] [--url URL]` | Serve the agent folders and their tests to MCP clients over stdio ([MCP server](#mcp-server)) |
 
 Changes reach real callers when the folder does: review them as pull requests
-and promote dev → qa → prod ([docs/BRANCHES.md](../docs/BRANCHES.md)), with
+and promote dev → qa → prod ([docs/BRANCHES.md](https://github.com/C4rohan/Lampline/blob/prod/docs/BRANCHES.md)), with
 `vk lint` and `vk test` in CI.
 
 Exit codes: 0 ok, 1 failure (including lint errors), 2 bad usage.
@@ -183,7 +187,7 @@ Side by side
 | `bilingual-front-desk` | English and Spanish front desk that answers in the caller's language |
 | `appointment-finder` | Root agent with an HTTP tool that looks up open times (mock answers until you add a URL) |
 | `nurse-callback` | A scripted page that takes a callback request word for word: exact lines, a form, rule transfers, and no model calls at all |
-| `test-caller` | An AI caller with a persona and a goal, for testing another phone agent from your laptop ([docs/PHONE-TESTING.md](../docs/PHONE-TESTING.md)); its Start waits for the other side to speak first |
+| `test-caller` | An AI caller with a persona and a goal, for testing another phone agent from your laptop ([docs/PHONE-TESTING.md](https://github.com/C4rohan/Lampline/blob/prod/docs/PHONE-TESTING.md)); its Start waits for the other side to speak first |
 
 Each comes with prompts, tests, a fictional business (Riverside Clinic) in
 `context_variables`, and `setup.real_data: false`. Edit the context variables
@@ -207,7 +211,7 @@ your computer, reads only the export, and never runs code from it.
 |---|---|
 | start flow | Start (greeting from the welcome route), then a "Main menu" step with the flow's routes |
 | flows | a flow name on their steps; a start page that only passes the caller on is skipped |
-| pages | [scripted pages](../engine/README.md#scripted-pages-and-flows): the entry message is said word for word; an entry webhook runs on entry (`on_entry`), a webhook on the form-complete route once the form is complete (`on_done`) |
+| pages | [scripted pages](https://github.com/C4rohan/Lampline/blob/prod/engine/README.md#scripted-pages-and-flows): the entry message is said word for word; an entry webhook runs on entry (`on_entry`), a webhook on the form-complete route once the form is complete (`on_done`) |
 | form parameters | form fields (`@sys.number` → number, `@sys.date` → date, custom entities → choices with synonyms, regexp entities → patterns, DTMF → keypad); reprompts carry over |
 | intent routes | transfers the model decides, from the intent's description or up to four English training phrases |
 | condition routes | rules (`$session.params.age >= 18` → `age >= 18`); `$page.params.status = "FINAL"` → otherwise; expressions with functions become transfers for the model (review these) |

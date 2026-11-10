@@ -30,7 +30,7 @@ data: these calls run on their real Google project and its logs.
 ## 1. Make the folder
 
 ```bash
-pip install -e cli                                     # if vk isn't installed
+pipx install lampline                                  # if vk isn't installed (or: pip install lampline)
 vk import dfcx export.zip --dir agents/<name>          # or: vk import ces app-export.zip
 vk lint agents/<name>
 ```

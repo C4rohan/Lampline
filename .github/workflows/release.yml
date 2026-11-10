@@ -4,6 +4,7 @@ name: release
 # it tags the commit and publishes a GitHub release with notes built from the merged pull requests.
 # So a release starts on dev, with `scripts/version.sh set X.Y.Z`; merging that into prod ships it.
 # Run by hand too (Actions → release → Run workflow) to release prod as it is now.
+# A new release also publishes the vk CLI to PyPI as `lampline` (pipx install lampline).
 
 on:
   push:
@@ -20,11 +21,15 @@ permissions:
 jobs:
   tag:
     runs-on: ubuntu-latest
+    outputs:
+      released: ${{ steps.release.outputs.released }}
+      version: ${{ steps.release.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: prod
       - name: Tag and publish
+        id: release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -37,3 +42,36 @@ jobs:
           gh release create "$version" -R "$GITHUB_REPOSITORY" --target "$(git rev-parse HEAD)" \
             --title "$version" --generate-notes
           echo "Released $version" >> "$GITHUB_STEP_SUMMARY"
+          { echo "released=true"; echo "version=$version"; } >> "$GITHUB_OUTPUT"
+
+  # The vk CLI on PyPI, as `lampline`. No token is stored: PyPI trusts this workflow
+  # (pypi.org → the project's Publishing settings → trusted publisher: owner C4rohan,
+  # repository Lampline, workflow release.yml, environment pypi).
+  pypi:
+    needs: tag
+    if: needs.tag.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.tag.outputs.version }}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Build the package
+        run: |
+          python -m pip install --quiet build==1.2.2.post1
+          python -m build cli --outdir dist
+          ls -l dist
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+        with:
+          packages-dir: dist
+      - name: If publishing failed
+        if: failure()
+        run: |
+          echo "PyPI didn't accept the upload. The usual cause: the trusted publisher isn't set up yet." >> "$GITHUB_STEP_SUMMARY"
+          echo "On pypi.org: Your account → Publishing → add a publisher for project 'lampline' with owner C4rohan, repository Lampline, workflow release.yml, environment pypi. Then re-run this job." >> "$GITHUB_STEP_SUMMARY"
