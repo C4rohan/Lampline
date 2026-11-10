@@ -361,7 +361,7 @@ builder. Each agent is a folder: `agent.yaml` for the graph and one Markdown
 file per prompt, so changes are reviewable in git.
 
 ```bash
-pip install -e cli                  # installs the `vk` command
+pipx install lampline               # installs the `vk` command (from a clone: pip install -e cli)
 vk templates install front-desk     # start from a ready-made agent
 vk lint agents/front-desk           # graph checks + a scan for real-looking patient data
 vk test agents/front-desk           # runs tests/*.yaml conversations on the engine

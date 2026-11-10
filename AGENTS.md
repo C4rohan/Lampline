@@ -13,7 +13,7 @@ An agent folder lives under `agents/<name>/`:
   model-played `caller:` with a persona and goal)
 
 ```bash
-pip install -e cli                          # the vk command
+pipx install lampline                       # the vk command (in this repo: pip install -e cli)
 vk templates list                           # starter agents
 vk templates install front-desk --dir agents/my-agent --name "My Agent"
 vk lint agents/my-agent --format json       # offline checks; must have zero errors
