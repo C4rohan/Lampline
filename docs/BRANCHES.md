@@ -37,7 +37,7 @@ What runs on its own:
 | `ci` | every push and pull request to dev, qa, prod | tests, UI build check, secret scan, Docker image |
 | `sync` | something lands on qa or prod | merges it back into dev, and opens a prod -> qa pull request after a hotfix, so the next promotion never conflicts |
 | `ui-build` | a pull request into dev changes `engine/ui` | rebuilds the committed UI if it's stale and pushes it to the branch (Dependabot's weekly update too) |
-| `release` | anything lands on prod, or **Actions → release → Run workflow** | releases the version in `VERSION` if it isn't tagged yet: tags prod and publishes a GitHub release with notes |
+| `release` | anything lands on prod, or **Actions → release → Run workflow** | releases the version in `VERSION` if it isn't tagged yet: tags prod, publishes a GitHub release with notes, and publishes the `vk` CLI to PyPI as `lampline` |
 | `prune-branches` | a pull request merges, every Monday, or **Run workflow** | deletes the merged branch; the weekly sweep deletes any branch whose work is already in dev or prod, unless it has an open pull request (restore one from its pull request's page) |
 
 ## QA checklist

@@ -489,6 +489,14 @@ def main(argv: list[str] | None = None, *, transport=None) -> int:
     except ApiError as exc:
         _err(f"error: {exc}")
         return 1
+    except BrokenPipeError:
+        # The reader went away (`vk templates list | head`). Not an error: stop quietly, and point stdout
+        # at nothing so Python's exit doesn't complain while flushing it.
+        try:
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        except (OSError, ValueError):
+            pass
+        return 0
 
 
 if __name__ == "__main__":

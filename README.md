@@ -26,6 +26,7 @@
 <p align="center">
   <a href="#-quick-start"><b>🚀 Quick start</b></a> &nbsp;·&nbsp;
   <a href="#-use-it-from-claude-code-cursor-or-codex">🤖 From Claude Code</a> &nbsp;·&nbsp;
+  <a href="docs/TEST-DIALOGFLOW.md">🧪 Test a Dialogflow agent</a> &nbsp;·&nbsp;
   <a href="#-test-any-phone-agent-for-free">📋 Free phone evals</a> &nbsp;·&nbsp;
   <a href="#-bring-your-dialogflow-cx-and-cx-agent-studio-agents">🔁 Import from Google</a> &nbsp;·&nbsp;
   <a href="#-a-quick-tour">👀 Tour</a> &nbsp;·&nbsp;
@@ -42,6 +43,13 @@
   <img src="docs/images/hero.gif" width="900" alt="30 seconds: import a Dialogflow CX export, open it in the builder, chat with it while its steps light up, then a real phone call to it played by the Test Caller and graded Passed">
   <br><sub>Import a Dialogflow CX agent, test it, and grade a real phone call to it. Sample agent and made-up data; replies from Lampline's test model.</sub>
 </p>
+
+```bash
+pipx install lampline            # the vk command: lint, test, import, export
+```
+
+Have a Dialogflow CX agent? [Test it in 10 minutes](docs/TEST-DIALOGFLOW.md).
+Want the whole platform? [Quick start](#-quick-start): one command, no API keys.
 
 **Test.** An agent's tests are plain YAML: what the caller says (or a model
 playing the caller), and what must happen: which steps the call reaches, what
@@ -80,6 +88,50 @@ export back, whenever you like. Built on [Pipecat](https://github.com/pipecat-ai
     <td valign="top"><b>🧩 Agents as code</b><br>Every agent is a folder of YAML and Markdown: reviewed in git, tested with <code>vk</code>, exported back to Google's tools whenever you like.</td>
   </tr>
 </table>
+
+## 🚀 Quick start
+
+**Just the tests** (Python 3.10+; no Docker, no clone):
+
+```bash
+pipx install lampline                                     # the vk command
+vk templates install front-desk --dir agents/front-desk   # a starter agent with tests
+vk lint agents/front-desk                                 # offline checks
+```
+
+From here you can [test your Dialogflow CX agent in 10 minutes](docs/TEST-DIALOGFLOW.md),
+or start the engine below and run `vk test agents/front-desk`.
+
+**The whole platform** (builder, test calls, phone calls). Needs Docker with
+Compose v2 (Docker Desktop is fine). **No API keys or accounts:**
+
+```bash
+git clone https://github.com/C4rohan/lampline && cd lampline
+scripts/docker-up.sh --free          # everything on this computer: Ollama, Moonshine and Kokoro
+```
+
+`--free` runs the model (Qwen3 4B in Ollama) and speech (Moonshine listening,
+Kokoro speaking) on your own computer. The first start downloads about 3 GB and
+shows progress; after that it starts in seconds. Replies are slower and simpler
+than a cloud model's, and you can switch to any provider on the Integrations
+page whenever you like. On a Mac, the native route is faster, because Ollama
+uses the GPU outside Docker: install [Ollama](https://ollama.com), then
+`scripts/engine-up.sh --free`.
+
+Have API keys? Run `scripts/docker-up.sh` without `--free`. Either way it prints
+a link like `http://localhost:7860/#/?key=…`: open it once and the page
+remembers the key. Pick your model and voice on the Integrations page (or put keys like `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `DEEPGRAM_API_KEY` in
+`.env`; see `.env.example`). Your agents are in `./agents` (edit them, keep them
+in git) and everything else the engine keeps, settings with your keys, records,
+knowledge and downloaded models, is in `./.vpe-data`.
+`scripts/docker-up.sh --down` stops it; `--logs` follows its log. Plain
+`docker compose up -d --build` works too once `.env` has `VPE_DOCKER_API_KEY`.
+Details: [engine/README.md](engine/README.md#docker).
+
+Prefer no Docker? `scripts/engine-up.sh` runs the engine natively (Python 3.11+)
+at http://localhost:7860, which also lets browser calls reach it directly.
+Free, private speech: Integrations → Whisper and Kokoro → **Download models**,
+or Moonshine for listening, which transcribes while the caller talks.
 
 ## 📋 Test any phone agent for free
 
@@ -250,38 +302,6 @@ The full mapping, both ways, and what doesn't carry over yet:
 | **Local and on-prem** | ✅ Available | One Docker container, or the engine natively, on any machine you control |
 | **Google Cloud** | 🔜 Coming soon | A one-command deployment to your own Google Cloud project |
 
-## 🚀 Quick start
-
-Needs Docker with Compose v2 (Docker Desktop is fine). **No API keys or accounts:**
-
-```bash
-git clone https://github.com/C4rohan/lampline && cd lampline
-scripts/docker-up.sh --free          # everything on this computer: Ollama, Moonshine and Kokoro
-```
-
-`--free` runs the model (Qwen3 4B in Ollama) and speech (Moonshine listening,
-Kokoro speaking) on your own computer. The first start downloads about 3 GB and
-shows progress; after that it starts in seconds. Replies are slower and simpler
-than a cloud model's, and you can switch to any provider on the Integrations
-page whenever you like. On a Mac, the native route is faster, because Ollama
-uses the GPU outside Docker: install [Ollama](https://ollama.com), then
-`scripts/engine-up.sh --free`.
-
-Have API keys? Run `scripts/docker-up.sh` without `--free`. Either way it prints
-a link like `http://localhost:7860/#/?key=…`: open it once and the page
-remembers the key. Pick your model and voice on the Integrations page (or put keys like `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `DEEPGRAM_API_KEY` in
-`.env`; see `.env.example`). Your agents are in `./agents` (edit them, keep them
-in git) and everything else the engine keeps, settings with your keys, records,
-knowledge and downloaded models, is in `./.vpe-data`.
-`scripts/docker-up.sh --down` stops it; `--logs` follows its log. Plain
-`docker compose up -d --build` works too once `.env` has `VPE_DOCKER_API_KEY`.
-Details: [engine/README.md](engine/README.md#docker).
-
-Prefer no Docker? `scripts/engine-up.sh` runs the engine natively (Python 3.11+)
-at http://localhost:7860, which also lets browser calls reach it directly.
-Free, private speech: Integrations → Whisper and Kokoro → **Download models**,
-or Moonshine for listening, which transcribes while the caller talks.
-
 ## 🧠 Models
 
 Pick one on the Integrations page; each starts on a sensible default model you
@@ -361,7 +381,7 @@ builder. Each agent is a folder: `agent.yaml` for the graph and one Markdown
 file per prompt, so changes are reviewable in git.
 
 ```bash
-pip install -e cli                  # installs the `vk` command
+pipx install lampline               # installs the `vk` command (from a clone: pip install -e cli)
 vk templates install front-desk     # start from a ready-made agent
 vk lint agents/front-desk           # graph checks + a scan for real-looking patient data
 vk test agents/front-desk           # runs tests/*.yaml conversations on the engine
