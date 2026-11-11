@@ -4,6 +4,14 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 
 ## Unreleased (on dev)
 
+### Docs
+- **[Test a Dialogflow CX agent in 10 minutes](docs/TEST-DIALOGFLOW.md):** a step-by-step guide from install to a failing test explained, with no Docker needed for scripted tests.
+- **README:** the install line and both ways in (just the tests, or the whole platform) are on the first screen, and the quick start is now the first section.
+
+### Install
+- **`pipx install lampline`** installs the `vk` command from PyPI: no clone needed to lint, test, import and export agents, test a Dialogflow CX agent, or run the MCP server. Each release publishes it automatically, with no stored token (PyPI trusted publishing). The package was `vpd-vk`, only installable from a clone.
+- `vk ... | head` no longer prints a traceback when the reader closes the pipe.
+
 ### Shipping
 - **One version number:** `VERSION` at the root, copied into both packages, the web app and the citation by `scripts/version.sh set X.Y.Z`; CI fails if a copy differs. `vk --version` and the engine's health check had been reporting 0.3.0. This release is 0.5.0.
 - **Releases follow the version, not the pull request's title:** every push to prod releases `VERSION` if it isn't tagged yet. `scripts/ship.sh prod` takes the version from there too.
