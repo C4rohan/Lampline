@@ -4,6 +4,9 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 
 ## Unreleased (on dev)
 
+### Shipping
+- The release workflow publishes to PyPI whenever the current version isn't there yet, so a publish that failed or was skipped is retried by the next run instead of being lost once the GitHub release exists.
+
 ### Docs
 - **[Test a Dialogflow CX agent in 10 minutes](docs/TEST-DIALOGFLOW.md):** a step-by-step guide from install to a failing test explained, with no Docker needed for scripted tests.
 - **README:** the install line and both ways in (just the tests, or the whole platform) are on the first screen, and the quick start is now the first section.
