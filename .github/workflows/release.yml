@@ -4,7 +4,7 @@ name: release
 # it tags the commit and publishes a GitHub release with notes built from the merged pull requests.
 # So a release starts on dev, with `scripts/version.sh set X.Y.Z`; merging that into prod ships it.
 # Run by hand too (Actions → release → Run workflow) to release prod as it is now.
-# A new release also publishes the vk CLI to PyPI as `lampline` (pipx install lampline).
+# It also publishes the vk CLI to PyPI as `lampline` (pipx install lampline) whenever that version isn't there yet.
 
 on:
   push:
@@ -24,6 +24,7 @@ jobs:
     outputs:
       released: ${{ steps.release.outputs.released }}
       version: ${{ steps.release.outputs.version }}
+      pypi: ${{ steps.release.outputs.pypi }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,21 +36,31 @@ jobs:
         run: |
           scripts/version.sh check
           version="v$(scripts/version.sh)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
           if gh release view "$version" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "$version is already released; bump VERSION on dev (scripts/version.sh set X.Y.Z) for the next one."
-            exit 0
+          else
+            gh release create "$version" -R "$GITHUB_REPOSITORY" --target "$(git rev-parse HEAD)" \
+              --title "$version" --generate-notes
+            echo "Released $version" >> "$GITHUB_STEP_SUMMARY"
+            echo "released=true" >> "$GITHUB_OUTPUT"
           fi
-          gh release create "$version" -R "$GITHUB_REPOSITORY" --target "$(git rev-parse HEAD)" \
-            --title "$version" --generate-notes
-          echo "Released $version" >> "$GITHUB_STEP_SUMMARY"
-          { echo "released=true"; echo "version=$version"; } >> "$GITHUB_OUTPUT"
+          # PyPI is checked on its own, so a publish that failed (or was skipped) is retried by any later run.
+          code=$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/lampline/${version#v}/json" || true)
+          if [ "$code" = 200 ]; then
+            echo "lampline ${version#v} is already on PyPI."
+          elif [ "$code" = 404 ]; then
+            echo "pypi=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Couldn't check PyPI (HTTP $code); not publishing this run. Run the workflow again."
+          fi
 
   # The vk CLI on PyPI, as `lampline`. No token is stored: PyPI trusts this workflow
   # (pypi.org → the project's Publishing settings → trusted publisher: owner C4rohan,
   # repository Lampline, workflow release.yml, environment pypi).
   pypi:
     needs: tag
-    if: needs.tag.outputs.released == 'true'
+    if: needs.tag.outputs.pypi == 'true'
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
