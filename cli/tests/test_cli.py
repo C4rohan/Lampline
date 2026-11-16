@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from xml.etree import ElementTree
 
 import yaml
 
@@ -78,6 +79,34 @@ def test_templates_list_and_install(run, tmp_path):
     assert run("templates", "install", "nope")[0] == 1
 
 
+def test_junit_report_records_pass_and_failure_with_transcripts(run, tmp_path):
+    folder = make_folder(tmp_path, {
+        "passes": {"name": "greeting <&>", "turns": [{"user": "café & <hello>\x01"}]},
+        "fails": {
+            "name": "missing answer",
+            "turns": [{"user": "hello"}],
+            "expect": {"says": ["<never & now>"]},
+        },
+    })
+    code, out, err = run("test", str(folder), "--format", "junit")
+    assert code == 1 and not err
+    report = ElementTree.fromstring(out)
+    assert report.tag == "testsuites"
+    assert report.attrib["tests"] == "2"
+    assert report.attrib["failures"] == "1"
+    suite = report.find("testsuite")
+    assert suite.attrib["name"] == "engine"
+    assert suite.attrib["tests"] == "2"
+    assert suite.attrib["failures"] == "1"
+    cases = {case.attrib["name"]: case for case in suite.findall("testcase")}
+    passed = cases["greeting <&>"]
+    assert passed.attrib["file"] == "passes.yaml"
+    assert passed.find("failure") is None
+    assert "caller: café & <hello>�" in passed.findtext("system-out")
+    assert "<never & now>" in cases["missing answer"].findtext("failure")
+    assert "caller: hello" in cases["missing answer"].findtext("system-out")
+
+
 def test_template_then_test(run, tmp_path):
     run("templates", "install", "appointment-scheduling", "--dir", "sched")
     code, out, _ = run("test", "sched", "-k", "redirected")
@@ -133,6 +162,21 @@ def test_repeat_reports_flaky_tests(run, tmp_path, monkeypatch):
     code, out, _ = run("test", "agents/front-desk", "--repeat", "3", "--allow-flaky", "--format", "json")
     [r] = json.loads(out)
     assert code == 0 and r["runs"] == 3 and r["passes"] == 2 and r["flaky"] is True and r["passed"] is False
+
+
+def test_junit_report_respects_allow_flaky(run, tmp_path, monkeypatch):
+    folder = make_folder(tmp_path, {"hours": {"name": "hours question", "turns": [{"user": "hello"}]}})
+    _flaky_runs(monkeypatch, [True, False])
+    code, out, _ = run("test", str(folder), "--repeat", "2", "--format", "junit")
+    assert code == 1 and ElementTree.fromstring(out).attrib["failures"] == "1"
+
+    _flaky_runs(monkeypatch, [True, False])
+    code, out, _ = run("test", str(folder), "--repeat", "2", "--allow-flaky", "--format", "junit")
+    report = ElementTree.fromstring(out)
+    assert code == 0 and report.attrib["failures"] == "0"
+    case = report.find("./testsuite/testcase")
+    assert case.find("failure") is None
+    assert "Flaky (allowed): 1 of 2 runs passed" in case.findtext("system-out")
 
 
 def test_repeat_passed_and_failed_every_time(run, tmp_path, monkeypatch):

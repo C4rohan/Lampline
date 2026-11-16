@@ -21,6 +21,7 @@ import shutil
 import sys
 from importlib import resources
 from pathlib import Path
+from xml.etree import ElementTree
 
 from vk import __version__, agentfs, scenario
 from vk.engine_client import ApiError, EngineClient
@@ -291,15 +292,50 @@ def _summary(results) -> str:
     return f"{sum(r.passed for r in results)} passed, {failed} failed" + (f", {flaky} flaky" if flaky else "")
 
 
+def _test_failed(args, result: scenario.Result) -> bool:
+    return not result.passed and not (result.flaky and args.allow_flaky)
+
+
 def _code(args, results) -> int:
     """1 when anything failed. A flaky test counts as failing too, unless --allow-flaky."""
-    bad = [r for r in results if not r.passed and not (r.flaky and args.allow_flaky)]
-    return 1 if bad else 0
+    return int(any(_test_failed(args, result) for result in results))
+
+
+_XML_INVALID = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff\ufffe\uffff]")
+
+
+def _print_junit(args, by_target: dict[str, list[scenario.Result]]) -> None:
+    """Write one XML test suite per target and a test case per scenario file."""
+    report = ElementTree.Element("testsuites")
+    total_tests = total_failures = 0
+    for target, results in by_target.items():
+        failures = sum(_test_failed(args, result) for result in results)
+        total_tests += len(results)
+        total_failures += failures
+        suite = ElementTree.SubElement(report, "testsuite", name=target, tests=str(len(results)),
+                                       failures=str(failures), time=f"{sum(r.seconds for r in results):.3f}")
+        for result in results:
+            test_file = _XML_INVALID.sub("\ufffd", Path(result.scenario.path).name)
+            case = ElementTree.SubElement(suite, "testcase", name=_XML_INVALID.sub("\ufffd", result.scenario.name),
+                                          classname=f"{target}.{test_file}", file=test_file,
+                                          time=f"{result.seconds:.3f}")
+            transcript = [f"{who}: {text}" for who, text in result.transcript.lines]
+            failure_text = _XML_INVALID.sub("\ufffd", "\n".join(result.failures))
+            if _test_failed(args, result):
+                ElementTree.SubElement(case, "failure").text = failure_text
+            elif result.flaky:
+                transcript.append(f"Flaky (allowed): {result.passes} of {result.runs} runs passed\n{failure_text}")
+            ElementTree.SubElement(case, "system-out").text = _XML_INVALID.sub("\ufffd", "\n".join(transcript))
+    report.set("tests", str(total_tests))
+    report.set("failures", str(total_failures))
+    _out(ElementTree.tostring(report, encoding="us-ascii", xml_declaration=True).decode("ascii"))
 
 
 def _report(args, results) -> int:
     if args.format == "json":
         _out(json.dumps([r.as_dict() for r in results], indent=2, ensure_ascii=False))
+    elif args.format == "junit":
+        _print_junit(args, {"engine": results})
     else:
         _out("\n" + _summary(results))
     return _code(args, results)
@@ -386,6 +422,8 @@ def _test_targets(args, agent, folder: Path, scenarios, url: str, targets: list[
             engine.close()
     if args.format == "json":
         _out(json.dumps({t: [r.as_dict() for r in rs] for t, rs in by_target.items()}, indent=2, ensure_ascii=False))
+    elif args.format == "junit":
+        _print_junit(args, by_target)
     elif len(by_target) > 1:
         names = list(by_target)
         width = max(len(sc.name) for sc in scenarios)
@@ -416,7 +454,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("-k", help="only run tests whose name or file contains this text")
     s.add_argument("--url", "--engine", dest="url", metavar="URL",
                    help="the engine (default: VK_ENGINE_URL or http://localhost:7860); the folder runs as it is on disk")
-    s.add_argument("--format", choices=["text", "json"], default="text")
+    s.add_argument("--format", choices=["text", "json", "junit"], default="text")
     s.add_argument("-v", "--verbose", action="store_true", help="print transcripts of passing tests too")
     s.add_argument("--repeat", type=int, default=1, metavar="N",
                    help="run every test N times (1-10); a test that passes only some of the time is reported as flaky")
