@@ -16,7 +16,7 @@ dependencies = [
     "aiortc>=1.14,<2",                           # browser calls (audio only)
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
-    "pypdf>=6.0.0,<7",                               # reading PDFs into knowledge bases (BSD-3-Clause, pure Python)
+    "pypdf>=6.0.0,<8",                               # reading PDFs into knowledge bases (BSD-3-Clause, pure Python)
     "onnx-asr==0.12.0",                              # Parakeet speech to text on this computer (MIT; uses the onnxruntime Kokoro already needs)
 ]
 
