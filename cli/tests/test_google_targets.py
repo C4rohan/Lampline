@@ -105,6 +105,23 @@ def test_side_by_side_with_the_engine(google, tmp_path):
     assert "caller reschedules" in out.split("Side by side")[1]
 
 
+def test_junit_report_groups_cases_by_target(google, tmp_path):
+    from xml.etree import ElementTree
+
+    folder = make_folder(tmp_path, {"r": SCRIPTED})
+    code, out, _ = google.run("test", str(folder), "--target", "engine,dfcx", "--agent", DFCX,
+                              "--format", "junit")
+    assert code == 1, out
+    report = ElementTree.fromstring(out)
+    assert report.attrib["tests"] == "2"
+    assert report.attrib["failures"] == "1"
+    suites = {suite.attrib["name"]: suite for suite in report.findall("testsuite")}
+    assert set(suites) == {"engine", "dfcx"}
+    assert suites["engine"].attrib["failures"] == "1"
+    assert suites["dfcx"].attrib["failures"] == "0"
+    assert all(suite.find("testcase").attrib["name"] == "caller reschedules" for suite in suites.values())
+
+
 def test_a_model_caller_on_google_uses_the_engine_model(google, engine, tmp_path):
     engine.caller_script = ["I want to reschedule my visit", "Friday is fine, bye"]
     doc = {"name": "model", "caller": {"persona": "Sam, busy, wants a new day"}, "expect": {"reaches": "Reschedule", "ends": True}}
