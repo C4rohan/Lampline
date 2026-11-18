@@ -90,6 +90,8 @@ def test_a_phone_call_runs_on_gemini_live(cfg, agents_dir, tmp_path, monkeypatch
         config = fake.configs[0]
         instruction = str(config.system_instruction)
         assert gemini_live.STEPS[:40] in instruction
+        if graph.start.prompt:
+            assert graph.start.prompt[:30] in instruction                  # the first step's own prompt too
         get = lambda o, k: o.get(k) if isinstance(o, dict) else getattr(o, k, None)       # noqa: E731
         names = {get(f, "name") for t in config.tools for f in (get(t, "function_declarations") or [])}
         assert route.tool_name in names
@@ -168,3 +170,26 @@ async def test_step_notes_without_a_route_and_routes_alone(monkeypatch):
         assert fake.tool_responses[-1] == {"id": "fc_9", "name": "to_bye", "response": {"status": "ok", "next_step": "Other"}}
         await llm._tool_result("fc_10", "lookup", {"ok": True, "result": "3 spaces"})   # an ordinary tool: straight through
         assert fake.tool_responses[-1]["id"] == "fc_10"
+
+
+async def test_a_step_change_keeps_how_steps_work_for_a_reconnect():
+    """The flow sends each step's prompt as a settings change. Gemini can't apply it live, but a reconnect
+    connects with it, so it must still say how steps work."""
+    from pipecat.processors.aggregators.llm_context import LLMContext
+    from pipecat.services.llm_service import LLMSettings
+
+    llm = gemini_live.LamplineGeminiLive(api_key="k")
+
+    class Step:
+        name = "Billing"
+
+    class Flow:
+        current = Step()
+        system_prompt = "Explain the late fee."
+        context = LLMContext()
+
+    llm._lp_flow = Flow()
+    await llm._update_settings(LLMSettings(system_instruction="Explain the late fee."))
+    for instruction in (llm._system_instruction_from_init, getattr(llm._settings, "system_instruction", None)):
+        if instruction is not None:
+            assert instruction.startswith("Explain the late fee.") and gemini_live.STEPS in instruction

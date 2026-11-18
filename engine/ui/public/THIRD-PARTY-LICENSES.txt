@@ -2304,7 +2304,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-lucide-react 1.70.0 (ISC)
+lucide-react 1.72.0 (ISC)
 ------------------------------------------------------------
 ISC License
 
