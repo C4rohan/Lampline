@@ -39,6 +39,10 @@ in istupakov's ONNX exports, downloaded from Hugging Face at run time and not
 redistributed here. Qwen3-TTS runs on a server you set up; nothing of it is
 included here.
 
+Call audio is resampled for speech to text with python-soxr
+(https://github.com/dofuuz/python-soxr, LGPL-2.1-or-later), used as an
+unmodified library and installed from PyPI; it is not redistributed here.
+
 The engine reads PDFs with pypdf (BSD-3-Clause), installed from PyPI. For
 knowledge search it can download sentence-transformers/all-MiniLM-L6-v2
 (Apache-2.0) from Hugging Face at run time; the model is not redistributed here.

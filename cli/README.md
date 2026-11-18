@@ -43,7 +43,7 @@ Two sections are notes for you and your tools, not part of the agent itself:
 | Command | What it does |
 |---|---|
 | `vk lint DIR... [--format json] [--strict]` | Offline checks; exit 1 on errors (`--strict`: on warnings too) |
-| `vk test DIR [-k TEXT] [--url URL] [--format json] [-v] [--live-tools] [--repeat N] [--allow-flaky]` | Run `tests/*.yaml` conversations on the engine, with the folder as it is on disk |
+| `vk test DIR [-k TEXT] [--url URL] [--format FORMAT] [-v] [--live-tools] [--repeat N] [--allow-flaky]` | Run `tests/*.yaml` conversations on the engine, with the folder as it is on disk |
 | `vk test DIR --target dfcx\|ces\|engine,dfcx --agent RESOURCE` | Run the same tests against your live Dialogflow CX agent or CX Agent Studio app, or side by side with the engine |
 | `vk templates list` / `vk templates install NAME [--dir D] [--name N]` | Starter agents |
 | `vk import dfcx\|ces\|auto EXPORT [--dir D] [--name N]` | Turn a Dialogflow CX or CX Agent Studio export (zip or folder) into an agent folder, offline. See [Import](#import) |
@@ -87,6 +87,29 @@ FAIL  caller asks about Saturday hours  (1 turn(s), 1.9s)  Greeting → Router
       - expected to reach 'Hours and location'; steps were Greeting → Router
           caller: What time are you open on Saturday?
            agent: ...
+```
+
+### Publish a JUnit report
+
+Run `vk test agents/front-desk --format junit > results.xml` to write one test case
+per scenario file in each target's suite. Failures include the unmet expectations,
+and each test case includes its transcript in `system-out`. The command keeps the
+usual failure exit code and honors `--allow-flaky`.
+
+In a GitHub Actions job that already has `vk` installed and the test engine running,
+upload the report even when a scenario fails. Use synthetic test data because
+people with access to the artifact can read the transcripts.
+
+```yaml
+steps:
+  - name: Test the front desk
+    run: vk test agents/front-desk --format junit > results.xml
+  - name: Upload the test report
+    if: always()
+    uses: actions/upload-artifact@v7
+    with:
+      name: front-desk-test-results
+      path: results.xml
 ```
 
 ### Let a model play the caller
