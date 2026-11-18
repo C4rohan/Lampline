@@ -4,6 +4,9 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 
 ## Unreleased (on dev)
 
+### Engine
+- **Pipecat 1.16.** Speech to speech on Gemini Live keeps its step instructions: Pipecat 1.16 builds the system instruction itself (adding its own guidance for tools that keep running), and the step's prompt and how steps work are now its base. A step change keeps that guidance for a reconnect too. `soxr`, which resamples call audio for Whisper and Parakeet, is now a direct dependency, since Pipecat no longer brings it.
+
 ### Shipping
 - The release workflow publishes to PyPI whenever the current version isn't there yet, so a publish that failed or was skipped is retried by the next run instead of being lost once the GitHub release exists.
 

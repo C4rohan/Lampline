@@ -88,11 +88,19 @@ class LamplineGeminiLive(GeminiLiveLLMService):
         self._lp_flow = flow
         self._context = context
         name, prompt, _ = self.lp_step()
-        self._system_instruction_from_init = f"{prompt}\n\n{STEPS}".strip()
+        self._lp_instruction(prompt)
         self._lp_applied = name
         adapter = self.get_llm_adapter()
         adapter.lp_tools = adapter.from_standard_tools(all_tools) if all_tools.standard_tools else None
         await self._connect()
+
+    def _lp_instruction(self, prompt: str) -> None:
+        """The system instruction for the next connect: the step's prompt, then how steps work."""
+        instruction = f"{prompt}\n\n{STEPS}".strip()
+        self._system_instruction_from_init = instruction          # pipecat 1.15 and earlier read this
+        if hasattr(self, "_compose_system_instruction"):           # pipecat 1.16 builds it from a base prompt,
+            self._base_system_instruction = instruction            # adding its own guidance (async tools, ...)
+            self._compose_system_instruction()
 
     async def _connect(self, session_resumption_handle: str | None = None):
         adapter = self.get_llm_adapter()
@@ -178,6 +186,8 @@ class LamplineGeminiLive(GeminiLiveLLMService):
 
     async def _update_settings(self, delta):
         changed = await LLMService._update_settings(self, delta)    # stored; Gemini can't apply them live
+        if "system_instruction" in changed:                         # keep how steps work in it, for a reconnect
+            self._lp_instruction(self.lp_step()[1])
         await self._lp_step_changed()
         return changed
 
