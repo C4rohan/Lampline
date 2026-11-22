@@ -67,6 +67,15 @@ async def test_a_google_voice_run_gets_a_one_call_bridge(setup):
     assert [x["id"] for x in listed] == [run["id"]] and "transcript" not in listed[0]
 
 
+async def test_the_tough_caller_personas_are_listed(setup):
+    _, c = setup
+    r = await c.get("/v1/evals/personas")
+    assert r.status_code == 200, r.text
+    shipped = r.json()["personas"]
+    assert len(shipped) >= 6 and all(p["name"] and p["description"] and p["persona"] for p in shipped)
+    assert "angry-wants-human" in {p["name"] for p in shipped}
+
+
 async def test_bad_runs_are_refused(setup):
     _, c = setup
     assert (await c.post("/v1/evals", json={**RUN, "method": "twilio"})).status_code == 422

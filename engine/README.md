@@ -856,6 +856,7 @@ The folder runs as it is on disk: nothing to save or deploy first.
 | GET / POST | `/v1/evals/cases` | saved test cases; save `{cases: [{name, persona, goal, criteria, number, notes}], source}` |
 | POST | `/v1/evals/cases/convert` | `{text, filename}`: test cases read from a test script (Hammer, Cyara, CSV, notes) by your model; nothing is saved |
 | DELETE | `/v1/evals/cases/{id}` | delete a test case |
+| GET | `/v1/evals/personas` | the tough-caller personas vk ships (`{name, description, persona}`), the Evals page's presets |
 | POST | `/v1/evals/bridge/offer` | the Lampline Phone Bridge extension's WebRTC offer, with its one-call token in `X-Lampline-Bridge` |
 | POST | `/v1/tests/caller` | `{persona, goal, transcript}`: what a model-played test caller says next (`vk test`) |
 | GET | `/v1/me` | who this key is, and its role |
