@@ -1,0 +1,10 @@
+name: caller asks about hours and the address (model plays the caller)
+caller:
+  persona: Robin, planning dinner with a friend, wants to know when the restaurant closes and where it is
+  goal: find out the closing time and the street address
+  opening: Hi, how late are you open tonight?
+  max_turns: 6
+expect:
+  reaches: Hours and location
+  not_reaches: [Reservations]
+  says: [Example Street]
