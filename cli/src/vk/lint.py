@@ -32,6 +32,7 @@ FLOW_TYPES = {"startCall", "agentNode", "endCall"}
 CALL_VARIABLES = {"caller_phone"}          # set by the engine on every phone call
 TRANSFER_PHONE = re.compile(r"^\+[1-9]\d{6,14}$")
 TRANSFER_SIP = re.compile(r"^sips?:[^\s@<>\"]+@[A-Za-z0-9.\-\[\]:]+(;[^\s<>\"]*)?$")
+HEADER_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9.!%*_+`'\-~]*$")   # a letter, then RFC 3261 token characters
 DETACHED_TYPES = {"globalNode", "trigger", "webhook", "qa"}  # never connected by edges
 DEFAULT_PROMPT_BUDGET = 8000  # characters (~2,000 tokens)
 
@@ -360,7 +361,7 @@ def lint(agent: Agent, folder: str | Path | None = None) -> list[Finding]:
         to = data.get("transfer_to")
         where = _node_label(node)
         if to in (None, ""):
-            if data.get("transfer_details") or data.get("transfer_uui"):
+            if data.get("transfer_details") or data.get("transfer_uui") or data.get("transfer_header_prefix"):
                 add(Finding("VK134", "warning", "transfer details are set but transfer_to is empty, so nothing is transferred", where))
             continue
         if node.get("type") != "endCall":
@@ -384,6 +385,13 @@ def lint(agent: Agent, folder: str | Path | None = None) -> list[Finding]:
                 add(Finding("VK134", "warning", f"transfer_details sends {var}, but nothing provides it", where))
         if data.get("transfer_uui") and not str(to).startswith(("sip:", "sips:")):
             add(Finding("VK134", "warning", "User-to-User data only travels to a SIP address, not a phone number", where))
+        prefix = str(data.get("transfer_header_prefix") or "").strip()
+        if prefix:
+            if not HEADER_NAME.match(prefix):
+                add(Finding("VK134", "error", "transfer_header_prefix must start a valid SIP header name: a letter, then "
+                                              "letters, digits or - . ! % * _ + ` ' ~ (empty means no prefix)", where))
+            elif not str(to).startswith(("sip:", "sips:")):
+                add(Finding("VK134", "warning", "SIP headers only travel to a SIP address, not a phone number", where))
 
     # --- VK120-122 triggers ---------------------------------------------------------
     from . import triggers as triggerspec

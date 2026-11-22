@@ -6,11 +6,14 @@ export type StepData = {
   extraction_enabled?: boolean; extraction_prompt?: string; extraction_variables?: { name: string; type?: string; prompt?: string }[];
   tools?: string[];
   transfer_to?: string; transfer_details?: string[]; transfer_uui?: string;   // end steps: hand the caller to a person
+  transfer_header_prefix?: string;                                            // "" = send the detail headers with no prefix
   [k: string]: unknown;
 };
 
 /** A phone number (+15551234567) or a SIP address (sip:desk@pbx.example.com); {{variables}} allowed. */
 export const TRANSFER_TO = /^(\+[1-9]\d{6,14}|sips?:[^\s@<>"]+@[A-Za-z0-9.\-[\]:]+(;[^\s<>"]*)?|.*\{\{.+\}\}.*)$/;
+/** A valid start of a SIP header name: a letter, then RFC 3261 token characters. Empty (no prefix) is checked separately. */
+export const HEADER_NAME = /^[A-Za-z][A-Za-z0-9.!%*_+`'\-~]*$/;
 export type DefNode = { id: string; type: NodeType; position: { x: number; y: number }; data: StepData; [k: string]: unknown };
 export type EdgeData = { label?: string; condition?: string; transition_speech?: string; after_greeting?: boolean; [k: string]: unknown };
 export type DefEdge = { id: string; source: string; target: string; data: EdgeData; [k: string]: unknown };

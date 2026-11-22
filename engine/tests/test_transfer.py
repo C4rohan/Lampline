@@ -52,6 +52,19 @@ def test_details_are_safe_one_line_ascii_headers():
     assert t.uui == "acct billing" and t.uui_header() == "acct billing".encode().hex() + ";encoding=hex"
 
 
+def test_the_detail_headers_prefix_is_choosable():
+    variables = {"caller_name": "Sam"}
+    t = tr.build(end_step(transfer_to="sip:desk@pbx.example.com"), variables, "s1", render)
+    assert t.headers() == {"X-Lampline-Session": "s1", "X-Lampline-caller_name": "Sam"}      # the default
+    t = tr.build(end_step(transfer_to="sip:desk@pbx.example.com", transfer_header_prefix="X-Cisco-"), variables, "s1", render)
+    assert t.headers() == {"X-Cisco-Session": "s1", "X-Cisco-caller_name": "Sam"}
+    t = tr.build(end_step(transfer_to="sip:desk@pbx.example.com", transfer_header_prefix=""), variables, "s1", render)
+    assert t.headers() == {"Session": "s1", "caller_name": "Sam"}                            # empty: no prefix
+    for bad in ("X Bad", "X:Evil", "1-2-3", "X-Evil\r\nX-Injected:"):
+        with pytest.raises(ValueError, match="isn't a valid SIP header prefix"):
+            tr.build(end_step(transfer_to="sip:desk@pbx.example.com", transfer_header_prefix=bad), variables, "s1", render)
+
+
 def test_without_a_list_it_sends_what_the_call_collected():
     t = tr.build(end_step(transfer_to="+15551234567"), {"business_name": "Riverside", "caller_name": "Sam"}, "s1",
                  render, collected=["caller_name"])

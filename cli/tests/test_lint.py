@@ -146,3 +146,20 @@ def test_transfer_to_what_the_caller_said_is_flagged():
     var = appt["data"]["extraction_variables"][0]["name"]
     staff["data"]["transfer_to"] = "{{" + var + "}}"
     assert any(f.code == "VK134" and "caller says" in f.message for f in lint(a))
+
+
+def test_transfer_header_prefix_is_checked():
+    a = agentfs.load(resources.files("vk") / "templates" / "front-desk")
+    staff = next(n for n in a.definition["nodes"] if n["data"]["name"] == "Transfer to staff")
+    staff["data"]["transfer_header_prefix"] = "X-Cisco-"          # set but unused: transfer_to is empty
+    findings = [f for f in lint(a) if f.code == "VK134"]
+    assert any("transfer_to is empty" in f.message for f in findings)
+    staff["data"]["transfer_to"] = "sip:staff@pbx.example.com"
+    assert not [f for f in lint(a) if f.code == "VK134"]          # a valid prefix on a SIP address: quiet
+    staff["data"]["transfer_header_prefix"] = "X Bad:"
+    assert any(f.code == "VK134" and f.severity == "error" and "transfer_header_prefix" in f.message for f in lint(a))
+    staff["data"]["transfer_header_prefix"] = ""                  # empty means no prefix: allowed
+    assert not [f for f in lint(a) if f.code == "VK134"]
+    staff["data"]["transfer_header_prefix"] = "X-Cisco-"
+    staff["data"]["transfer_to"] = "+15551234567"                 # a phone number carries no headers
+    assert any(f.code == "VK134" and "SIP address" in f.message for f in lint(a))

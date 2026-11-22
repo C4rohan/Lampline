@@ -604,10 +604,14 @@ The person picking up gets what the agent collected. On a SIP address the
 details travel as SIP headers: `X-Lampline-Session` (the session ID, to look
 the call up afterwards) and `X-Lampline-<name>` for each detail, ASCII and at
 most 200 characters each. Choose which details to send, or leave the list
-empty to send everything this call collected. For Avaya and Cisco, the step
-can also send User-to-User data (`transfer_uui`, hex encoded as RFC 7433
-describes), which their screen pops read. A phone number on the public
-network can't carry headers; the details stay in the call's `transfer` event,
+empty to send everything this call collected. The `X-Lampline-` prefix can
+change — `transfer_header_prefix` sets it (`X-Cisco-`, say) or empties it,
+for phone systems that map chosen header names into what the agent's screen
+shows; Cisco CVP, for example, passes picked SIP headers into call variables.
+For Avaya and Cisco, the step can also send User-to-User data
+(`transfer_uui`, hex encoded as RFC 7433 describes), which their screen pops
+read. A phone number on the public network can't carry headers; the details
+stay in the call's `transfer` event,
 and after-call triggers can send them on (`{{transferred_to}}`, `{{details}}`,
 `{{session_id}}`).
 

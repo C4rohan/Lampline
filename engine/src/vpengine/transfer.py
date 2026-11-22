@@ -6,6 +6,7 @@ An end step's data may say:
     transfer_to: "sip:desk@pbx.example.com"    # a SIP address on your phone system or contact center
     transfer_details: [caller_name, reason]    # what to send; empty: everything collected
     transfer_uui: "{{account_id}}"             # optional User-to-User data (Avaya, Cisco)
+    transfer_header_prefix: "X-Cisco-"         # prefix on the detail headers (default X-Lampline-, "" = none)
 
 When the call reaches the step, the agent says its line, then the carrier
 connects the caller instead of hanging up:
@@ -16,8 +17,10 @@ connects the caller instead of hanging up:
 - jambonz: the listen verb's actionHook answers with a dial verb and headers.
 
 Details travel as SIP headers: X-Lampline-Session (the session ID, to look the
-call up afterwards) and X-Lampline-<name> per detail. A phone number on the
-public network can't carry headers, so for those the details stay in the
+call up afterwards) and X-Lampline-<name> per detail. Some phone systems map
+chosen header names into what the agent's screen shows (Cisco CVP reads them
+into call variables), so the step can pick the prefix — or none. A phone number
+on the public network can't carry headers, so for those the details stay in the
 call's events (and any after-call trigger), keyed by the same session ID.
 """
 
@@ -33,6 +36,7 @@ from xml.sax.saxutils import escape
 PHONE = re.compile(r"^\+[1-9]\d{6,14}$")
 SIP = re.compile(r"^sips?:[^\s@<>\"]+@[A-Za-z0-9.\-\[\]:]+(;[^\s<>\"]*)?$")
 HEADER_PREFIX = "X-Lampline-"
+HEADER_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9.!%*_+`'\-~]*$")     # a letter, then RFC 3261 token characters
 MAX_VALUE = 200
 MAX_HEADERS = 12
 TARGET_UNSAFE = re.compile(r"[^0-9A-Za-z+*#._\-]")
@@ -42,8 +46,13 @@ def valid_target(to: str) -> bool:
     return bool(PHONE.match(to) or SIP.match(to))
 
 
-def _header_name(name: str) -> str:
-    return HEADER_PREFIX + (re.sub(r"[^A-Za-z0-9_\-]", "", name)[:40] or "detail")
+def valid_prefix(prefix: str) -> bool:
+    """A step's SIP header prefix: empty (no prefix) or the start of a valid header name."""
+    return prefix == "" or bool(HEADER_NAME.match(prefix))
+
+
+def _header_name(name: str, prefix: str = HEADER_PREFIX) -> str:
+    return prefix + (re.sub(r"[^A-Za-z0-9_\-]", "", name)[:40] or "detail")
 
 
 def _header_value(value: Any) -> str:
@@ -65,16 +74,17 @@ class Transfer:
     session_id: str
     details: dict[str, str] = field(default_factory=dict)
     uui: str = ""
+    prefix: str = HEADER_PREFIX
 
     @property
     def sip(self) -> bool:
         return self.to.startswith(("sip:", "sips:"))
 
     def headers(self) -> dict[str, str]:
-        out = {f"{HEADER_PREFIX}Session": self.session_id}
+        out = {f"{self.prefix}Session": self.session_id}
         for name, value in list(self.details.items())[:MAX_HEADERS]:
             if value:
-                out[_header_name(name)] = value
+                out[_header_name(name, self.prefix)] = value
         return out
 
     def uui_header(self) -> str:
@@ -149,7 +159,11 @@ def build(step, variables: dict[str, Any], session_id: str, render, collected: l
     names = [str(n) for n in wanted] if isinstance(wanted, list) and wanted else list(collected if collected is not None else variables)
     details = {n: _header_value(variables[n]) for n in names if variables.get(n) not in (None, "", [], {})}
     uui = _header_value(render(str(step.data.get("transfer_uui") or ""), variables)) if step.data.get("transfer_uui") else ""
-    return Transfer(to=to, session_id=session_id, details=details, uui=uui)
+    prefix = HEADER_PREFIX if step.data.get("transfer_header_prefix") is None else str(step.data["transfer_header_prefix"]).strip()
+    if not valid_prefix(prefix):
+        raise ValueError(f"{step.name}: “{prefix}” isn't a valid SIP header prefix (a letter, then letters, digits "
+                         "or - . ! % * _ + ` ' ~), like X-Cisco-, or empty for no prefix")
+    return Transfer(to=to, session_id=session_id, details=details, uui=uui, prefix=prefix)
 
 
 class PendingTransfers:
