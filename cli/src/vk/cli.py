@@ -313,7 +313,8 @@ def _print_junit(args, by_target: dict[str, list[scenario.Result]]) -> None:
         total_tests += len(results)
         total_failures += failures
         suite = ElementTree.SubElement(report, "testsuite", name=target, tests=str(len(results)),
-                                       failures=str(failures), time=f"{sum(r.seconds for r in results):.3f}")
+                                       failures=str(failures), errors="0", skipped="0",
+                                       time=f"{sum(r.seconds for r in results):.3f}")
         for result in results:
             test_file = _XML_INVALID.sub("\ufffd", Path(result.scenario.path).name)
             case = ElementTree.SubElement(suite, "testcase", name=_XML_INVALID.sub("\ufffd", result.scenario.name),
@@ -328,6 +329,8 @@ def _print_junit(args, by_target: dict[str, list[scenario.Result]]) -> None:
             ElementTree.SubElement(case, "system-out").text = _XML_INVALID.sub("\ufffd", "\n".join(transcript))
     report.set("tests", str(total_tests))
     report.set("failures", str(total_failures))
+    report.set("errors", "0")
+    report.set("skipped", "0")
     _out(ElementTree.tostring(report, encoding="us-ascii", xml_declaration=True).decode("ascii"))
 
 

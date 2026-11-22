@@ -97,19 +97,22 @@ and each test case includes its transcript in `system-out`. The command keeps th
 usual failure exit code and honors `--allow-flaky`.
 
 In a GitHub Actions job that already has `vk` installed and the test engine running,
-upload the report even when a scenario fails. Use synthetic test data because
-people with access to the artifact can read the transcripts.
+publish the report as a check run so a failing scenario shows up next to the rest of
+the team's tests (the job needs `checks: write` permission for the check run, and
+the reporter step fails the job when the report has a failed test). Use synthetic
+test data because people who can read the report can read the transcripts.
 
 ```yaml
 steps:
   - name: Test the front desk
-    run: vk test agents/front-desk --format junit > results.xml
-  - name: Upload the test report
+    run: vk test agents/front-desk --format junit | tee results.xml
+  - name: Publish the test report
     if: always()
-    uses: actions/upload-artifact@v7
+    uses: dorny/test-reporter@v3
     with:
-      name: front-desk-test-results
+      name: front-desk-tests
       path: results.xml
+      reporter: java-junit
 ```
 
 ### Let a model play the caller
