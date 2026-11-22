@@ -59,6 +59,9 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 ### Speech to speech
 - **Gemini Live** next to OpenAI Realtime (Integrations → Speech to speech → Gemini Live; `VPE_REALTIME_PROVIDER=gemini`, `VPE_GEMINI_LIVE_MODEL`, `VPE_GEMINI_LIVE_VOICE`), with your Gemini API key. Gemini Live can't change its instructions mid-call, so Lampline connects with the first step's instructions and every step's tools, and hands each new step's instructions to the model as a note from the call system (in the route's result when the model moved the call). Experimental: test an agent before real calls.
 
+### CLI
+- **pre-commit hook:** a `.pre-commit-hooks.yaml` adds a `vk-lint` hook for [pre-commit](https://pre-commit.com/), so a broken agent folder — or real-looking personal data the VK2xx rules flag — is caught before it's committed. `vk lint` also takes a folder of agent folders now (`vk lint agents` lints every agent in `agents/`).
+
 ## v0.3.0
 
 Test real phone calls, graded: an Evals tab, test scripts that turn into test cases, and Google agents side by side.

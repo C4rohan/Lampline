@@ -55,12 +55,31 @@ def _print_findings(findings, fmt: str) -> None:
 
 # --- commands --------------------------------------------------------------------
 
+def _agent_folders(dirs: list[str]) -> list[Path]:
+    """Each DIR is an agent folder, or a folder of agent folders like agents/: lint them all."""
+    folders = []
+    for arg in dirs:
+        p = Path(arg)
+        if (p / agentfs.AGENT_FILE).is_file():
+            folders.append(p)
+            continue
+        if p.is_dir():
+            nested = sorted(f.parent for f in p.glob(f"*/{agentfs.AGENT_FILE}"))
+            if nested:
+                folders.extend(nested)
+                continue
+            raise agentfs.FolderError(f"{p}: no {agentfs.AGENT_FILE} here or in a folder directly inside")
+        raise agentfs.FolderError(f"{p / agentfs.AGENT_FILE} not found (is this an agent folder?)")
+    return folders
+
+
 def cmd_lint(args) -> int:
     worst = 0
-    for folder in args.dirs:
+    folders = _agent_folders(args.dirs)
+    for folder in folders:
         agent = _load_folder(folder)
         findings = lint(agent, folder)
-        if len(args.dirs) > 1 and args.format == "text":
+        if len(folders) > 1 and args.format == "text":
             _out(f"== {folder}")
         _print_findings(findings, args.format)
         if has_errors(findings) or (args.strict and findings):
@@ -444,7 +463,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="command", required=True)
 
     s = sub.add_parser("lint", help="check agent folders offline")
-    s.add_argument("dirs", nargs="+")
+    s.add_argument("dirs", nargs="+", metavar="DIR",
+                   help="agent folders, or folders of agent folders (agents/ lints every agent in it)")
     s.add_argument("--format", choices=["text", "json"], default="text")
     s.add_argument("--strict", action="store_true", help="fail on warnings too")
     s.set_defaults(func=cmd_lint)

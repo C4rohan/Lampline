@@ -34,6 +34,29 @@ def test_lint_several_folders(run, tmp_path):
     assert code == 0 and f"== {a}" in out and f"== {b}" in out
 
 
+def test_lint_a_folder_of_agents(run, tmp_path):
+    """`vk lint agents` lints every agent folder directly inside agents/."""
+    make_folder(tmp_path, name="a")
+    make_folder(tmp_path, name="b")
+    code, out, _ = run("lint", "agents")
+    assert code == 0 and out.count("no problems found") == 2
+
+
+def test_lint_folder_of_agents_still_fails(run, tmp_path):
+    folder = make_folder(tmp_path, name="a")
+    make_folder(tmp_path, name="b")
+    billing = folder / "prompts/billing.md"
+    billing.write_text(billing.read_text() + "Test caller SSN 219-09-9999.\n")
+    code, out, _ = run("lint", "agents")
+    assert code == 1 and "VK201" in out
+
+
+def test_lint_folder_without_agents(run, tmp_path):
+    (tmp_path / "empty").mkdir()
+    code, _, err = run("lint", "empty")
+    assert code == 1 and "no agent.yaml here" in err
+
+
 def test_errors_are_friendly(run, tmp_path):
     code, _, err = run("lint", "does-not-exist")
     assert code == 1 and "agent.yaml not found" in err

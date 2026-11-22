@@ -1,0 +1,17 @@
+# Hooks for https://pre-commit.com/ users who keep Lampline agents under agents/.
+# In that repo's .pre-commit-config.yaml:
+#   repos:
+#     - repo: https://github.com/C4rohan/lampline
+#       rev: v0.5.1
+#       hooks:
+#         - id: vk-lint
+- id: vk-lint
+  name: vk lint
+  description: >-
+    Run `vk lint` on the agent folders under agents/ when files there change:
+    the offline VK checks, including the VK2xx scan for real-looking personal data.
+  entry: vk lint
+  language: python
+  files: ^agents/
+  args: [agents]
+  pass_filenames: false

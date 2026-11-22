@@ -42,7 +42,7 @@ Two sections are notes for you and your tools, not part of the agent itself:
 
 | Command | What it does |
 |---|---|
-| `vk lint DIR... [--format json] [--strict]` | Offline checks; exit 1 on errors (`--strict`: on warnings too) |
+| `vk lint DIR... [--format json] [--strict]` | Offline checks; exit 1 on errors (`--strict`: on warnings too). Each DIR is an agent folder, or a folder of agent folders (`vk lint agents` lints every agent in `agents/`) |
 | `vk test DIR [-k TEXT] [--url URL] [--format FORMAT] [-v] [--live-tools] [--repeat N] [--allow-flaky]` | Run `tests/*.yaml` conversations on the engine, with the folder as it is on disk |
 | `vk test DIR --target dfcx\|ces\|engine,dfcx --agent RESOURCE` | Run the same tests against your live Dialogflow CX agent or CX Agent Studio app, or side by side with the engine |
 | `vk templates list` / `vk templates install NAME [--dir D] [--name N]` | Starter agents |
@@ -358,6 +358,37 @@ control: it cannot prove text is free of patient data. Use synthetic data.
 The graph rules (VK0xx) catch what would stop an agent running: a missing or
 second Start step, routes to steps that don't exist, steps nobody can reach,
 and the like.
+
+### Lint on every commit
+
+With [pre-commit](https://pre-commit.com/) installed, the repo's `vk-lint` hook
+runs `vk lint` before each commit, so a broken agent folder — or real-looking
+personal data the VK2xx rules flag — is caught before it's committed. In the
+repo that holds your `agents/` folder, add to `.pre-commit-config.yaml`:
+
+```yaml
+repos:
+  - repo: https://github.com/C4rohan/lampline
+    rev: v0.5.1                          # a release tag or branch
+    hooks:
+      - id: vk-lint
+```
+
+When anything under `agents/` is staged, the hook runs `vk lint agents` —
+every agent folder in `agents/` — and blocks the commit on lint errors. Agents
+somewhere else, or extra flags? `files`, `args` and `stages` work like any
+pre-commit hook:
+
+```yaml
+      - id: vk-lint
+        files: ^voice-agents/         # run when these files change
+        args: [voice-agents]          # and lint this folder of agent folders
+```
+
+```yaml
+      - id: vk-lint
+        args: [agents, --strict]      # fail on warnings too (args replaces the default)
+```
 
 ## Skills for coding agents
 
