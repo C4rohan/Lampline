@@ -1,0 +1,10 @@
+name: caller changes their reservation
+turns:
+  - user: Hi, can I change my reservation for this Friday?
+    expect: {reaches: Reservations}
+  - user: It's under Sam Example. Move it to Saturday at 7, still four people.
+  - user: Yes, that's right. Thanks, that's all.
+expect:
+  reaches: [Router, Reservations, Goodbye]
+  not_reaches: [Transfer to manager]
+  ends: true

@@ -1,0 +1,9 @@
+name: party of twelve gets a person
+turns:
+  - user: Hi, I need to book a table for twelve people on Saturday.
+  - user: It's Alex Example, you can reach me at (312) 555-0142 if you need to.
+expect:
+  reaches: [Transfer to manager]
+  not_reaches: [Goodbye]
+  says: [manager]
+  ends: true

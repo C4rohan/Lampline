@@ -1,0 +1,10 @@
+name: caller books a table for two
+turns:
+  - user: Hi, I'd like to book a table for two.
+    expect: {reaches: Reservations}
+  - user: Friday night around 7. The name is Jordan Example.
+  - user: Yes, that's right. That's everything, thanks.
+expect:
+  reaches: [Router, Reservations, Goodbye]
+  not_reaches: [Transfer to manager]
+  ends: true
