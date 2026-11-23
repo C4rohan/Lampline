@@ -58,7 +58,8 @@ function TransferSection({ b, n }: { b: BuilderApi; n: DefNode }) {
         invalid={!!to && !TRANSFER_TO.test(to)}
         onChange={(v) => set((x) => { if (v.trim()) x.data.transfer_to = v.trim(); else { delete x.data.transfer_to; delete x.data.transfer_details; delete x.data.transfer_uui; delete x.data.transfer_header_prefix; } }, "tto")}
         hint={!to ? "Empty: the call ends here. A phone number or SIP address: after this step speaks, the caller is connected there instead."
-          : sip ? `The details below go along as SIP headers (${prefix}<name>, ${prefix}Session for the session ID).`
+          : sip ? (prefix ? `The details below go along as SIP headers (${prefix}<name>, ${prefix}Session for the session ID).`
+            : "The details below go along as SIP headers with no prefix and no session header; names like To or Via are refused.")
           : "The phone network can't carry details, so they stay in this call's record and any after-call trigger. Use a SIP address to send them along."} />
       {to && (
         <>

@@ -608,6 +608,9 @@ empty to send everything this call collected. The `X-Lampline-` prefix can
 change — `transfer_header_prefix` sets it (`X-Cisco-`, say) or empties it,
 for phone systems that map chosen header names into what the agent's screen
 shows; Cisco CVP, for example, passes picked SIP headers into call variables.
+With no prefix the Session header is left off, and a detail may not take the
+name of a real SIP header like `To` or `Via` — it would ride over the call's
+own.
 For Avaya and Cisco, the step can also send User-to-User data
 (`transfer_uui`, hex encoded as RFC 7433 describes), which their screen pops
 read. A phone number on the public network can't carry headers; the details

@@ -33,6 +33,32 @@ CALL_VARIABLES = {"caller_phone"}          # set by the engine on every phone ca
 TRANSFER_PHONE = re.compile(r"^\+[1-9]\d{6,14}$")
 TRANSFER_SIP = re.compile(r"^sips?:[^\s@<>\"]+@[A-Za-z0-9.\-\[\]:]+(;[^\s<>\"]*)?$")
 HEADER_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9.!%*_+`'\-~]*$")   # a letter, then RFC 3261 token characters
+# Standard SIP header names, lowercased — keep in sync with vpengine.transfer.RESERVED_HEADERS.
+SIP_RESERVED_HEADERS = frozenset({
+    "accept", "accept-encoding", "accept-language", "alert-info", "allow",
+    "authentication-info", "authorization", "call-id", "call-info", "contact",
+    "content-disposition", "content-encoding", "content-language",
+    "content-length", "content-type", "cseq", "date", "error-info", "expires",
+    "from", "in-reply-to", "max-forwards", "mime-version", "min-expires",
+    "organization", "priority", "proxy-authenticate", "proxy-authorization",
+    "proxy-require", "record-route", "reply-to", "require", "retry-after",
+    "route", "server", "subject", "supported", "timestamp", "to",
+    "unsupported", "user-agent", "via", "warning", "www-authenticate",
+    "a", "b", "c", "d", "e", "f", "i", "j", "k", "l", "m", "o", "r", "s",
+    "t", "u", "v", "x", "y",
+    "refer-to", "referred-by", "replaces", "session-expires", "min-se",
+    "event", "allow-events", "subscription-state", "reason", "diversion",
+    "history-info", "p-asserted-identity", "p-preferred-identity", "privacy",
+    "remote-party-id", "user-to-user", "path", "service-route", "identity",
+    "identity-info", "join", "session-id", "p-early-media", "rseq", "rack",
+    "answer-mode", "priv-answer-mode", "target-dialog", "resource-priority",
+    "accept-contact", "reject-contact", "request-disposition",
+})
+
+
+def _sip_header_name(name: str, prefix: str) -> str:
+    """The SIP header a detail name becomes — mirrors vpengine.transfer._header_name."""
+    return prefix + (re.sub(r"[^A-Za-z0-9_\-]", "", str(name))[:40] or "detail")
 DETACHED_TYPES = {"globalNode", "trigger", "webhook", "qa"}  # never connected by edges
 DEFAULT_PROMPT_BUDGET = 8000  # characters (~2,000 tokens)
 
@@ -385,13 +411,24 @@ def lint(agent: Agent, folder: str | Path | None = None) -> list[Finding]:
                 add(Finding("VK134", "warning", f"transfer_details sends {var}, but nothing provides it", where))
         if data.get("transfer_uui") and not str(to).startswith(("sip:", "sips:")):
             add(Finding("VK134", "warning", "User-to-User data only travels to a SIP address, not a phone number", where))
-        prefix = str(data.get("transfer_header_prefix") or "").strip()
+        raw_prefix = data.get("transfer_header_prefix")
+        prefix = "" if raw_prefix is None else str(raw_prefix).strip()
+        prefix_ok = True
         if prefix:
             if not HEADER_NAME.match(prefix):
                 add(Finding("VK134", "error", "transfer_header_prefix must start a valid SIP header name: a letter, then "
                                               "letters, digits or - . ! % * _ + ` ' ~ (empty means no prefix)", where))
+                prefix_ok = False
             elif not str(to).startswith(("sip:", "sips:")):
                 add(Finding("VK134", "warning", "SIP headers only travel to a SIP address, not a phone number", where))
+        if prefix_ok and (str(to).startswith(("sip:", "sips:")) or template_variables(to)):
+            sent = set(details) if isinstance(details, list) and details else (
+                (provided - set(agent.context_variables or {})) | CALL_VARIABLES)
+            bad = sorted(n for n in sent if _sip_header_name(n, prefix).lower() in SIP_RESERVED_HEADERS)
+            if bad:
+                add(Finding("VK134", "error", f"with header prefix “{prefix or '(none)'}”, {', '.join(bad)} would "
+                                              "become a real SIP header the call already uses — choose a "
+                                              "transfer_header_prefix or rename it", where))
 
     # --- VK120-122 triggers ---------------------------------------------------------
     from . import triggers as triggerspec

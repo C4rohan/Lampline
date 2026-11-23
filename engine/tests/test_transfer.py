@@ -59,10 +59,24 @@ def test_the_detail_headers_prefix_is_choosable():
     t = tr.build(end_step(transfer_to="sip:desk@pbx.example.com", transfer_header_prefix="X-Cisco-"), variables, "s1", render)
     assert t.headers() == {"X-Cisco-Session": "s1", "X-Cisco-caller_name": "Sam"}
     t = tr.build(end_step(transfer_to="sip:desk@pbx.example.com", transfer_header_prefix=""), variables, "s1", render)
-    assert t.headers() == {"Session": "s1", "caller_name": "Sam"}                            # empty: no prefix
+    assert t.headers() == {"caller_name": "Sam"}                                             # empty: no prefix, no bare Session
     for bad in ("X Bad", "X:Evil", "1-2-3", "X-Evil\r\nX-Injected:"):
         with pytest.raises(ValueError, match="isn't a valid SIP header prefix"):
             tr.build(end_step(transfer_to="sip:desk@pbx.example.com", transfer_header_prefix=bad), variables, "s1", render)
+
+
+def test_unprefixed_details_cannot_take_real_sip_header_names():
+    for bad in ("To", "via", "CALL-ID", "m", "Content-Type"):     # RFC 3261 headers incl. compact forms
+        with pytest.raises(ValueError, match="real SIP header"):
+            tr.build(end_step(transfer_to="sip:desk@pbx.example.com", transfer_header_prefix="",
+                              transfer_details=[bad]), {bad: "x"}, "s1", render)
+    # the same names are fine under any prefix, and a phone target carries no headers so nothing is refused
+    for bad in ("To", "via"):
+        t = tr.build(end_step(transfer_to="sip:desk@pbx.example.com", transfer_header_prefix="P-",
+                              transfer_details=[bad]), {bad: "x"}, "s1", render)
+        assert t.headers() == {"P-Session": "s1", f"P-{bad}": "x"}
+        tr.build(end_step(transfer_to="+15551234567", transfer_header_prefix="", transfer_details=[bad]), {bad: "x"},
+                 "s1", render)
 
 
 def test_without_a_list_it_sends_what_the_call_collected():

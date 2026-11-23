@@ -19,9 +19,12 @@ connects the caller instead of hanging up:
 Details travel as SIP headers: X-Lampline-Session (the session ID, to look the
 call up afterwards) and X-Lampline-<name> per detail. Some phone systems map
 chosen header names into what the agent's screen shows (Cisco CVP reads them
-into call variables), so the step can pick the prefix — or none. A phone number
-on the public network can't carry headers, so for those the details stay in the
-call's events (and any after-call trigger), keyed by the same session ID.
+into call variables), so the step can pick the prefix — or none. With no
+prefix the Session header is left off, and a detail may not take the name of a
+real SIP header (To, Via, ...): it would ride over the call's own. A phone
+number on the public network can't carry headers, so for those the details
+stay in the call's events (and any after-call trigger), keyed by the same
+session ID.
 """
 
 from __future__ import annotations
@@ -37,6 +40,32 @@ PHONE = re.compile(r"^\+[1-9]\d{6,14}$")
 SIP = re.compile(r"^sips?:[^\s@<>\"]+@[A-Za-z0-9.\-\[\]:]+(;[^\s<>\"]*)?$")
 HEADER_PREFIX = "X-Lampline-"
 HEADER_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9.!%*_+`'\-~]*$")     # a letter, then RFC 3261 token characters
+# Standard SIP header names — RFC 3261, its compact forms, and common
+# extensions — lowercased. A detail header taking one of these would ride over
+# the call's own, so build() refuses the collision. Keep in sync with vk.lint.
+RESERVED_HEADERS = frozenset({
+    # RFC 3261 §20
+    "accept", "accept-encoding", "accept-language", "alert-info", "allow",
+    "authentication-info", "authorization", "call-id", "call-info", "contact",
+    "content-disposition", "content-encoding", "content-language",
+    "content-length", "content-type", "cseq", "date", "error-info", "expires",
+    "from", "in-reply-to", "max-forwards", "mime-version", "min-expires",
+    "organization", "priority", "proxy-authenticate", "proxy-authorization",
+    "proxy-require", "record-route", "reply-to", "require", "retry-after",
+    "route", "server", "subject", "supported", "timestamp", "to",
+    "unsupported", "user-agent", "via", "warning", "www-authenticate",
+    # compact forms (RFC 3261 §7.3.3 and later registrations)
+    "a", "b", "c", "d", "e", "f", "i", "j", "k", "l", "m", "o", "r", "s",
+    "t", "u", "v", "x", "y",
+    # common extensions
+    "refer-to", "referred-by", "replaces", "session-expires", "min-se",
+    "event", "allow-events", "subscription-state", "reason", "diversion",
+    "history-info", "p-asserted-identity", "p-preferred-identity", "privacy",
+    "remote-party-id", "user-to-user", "path", "service-route", "identity",
+    "identity-info", "join", "session-id", "p-early-media", "rseq", "rack",
+    "answer-mode", "priv-answer-mode", "target-dialog", "resource-priority",
+    "accept-contact", "reject-contact", "request-disposition",
+})
 MAX_VALUE = 200
 MAX_HEADERS = 12
 TARGET_UNSAFE = re.compile(r"[^0-9A-Za-z+*#._\-]")
@@ -81,7 +110,7 @@ class Transfer:
         return self.to.startswith(("sip:", "sips:"))
 
     def headers(self) -> dict[str, str]:
-        out = {f"{self.prefix}Session": self.session_id}
+        out = {f"{self.prefix}Session": self.session_id} if self.prefix else {}
         for name, value in list(self.details.items())[:MAX_HEADERS]:
             if value:
                 out[_header_name(name, self.prefix)] = value
@@ -163,6 +192,11 @@ def build(step, variables: dict[str, Any], session_id: str, render, collected: l
     if not valid_prefix(prefix):
         raise ValueError(f"{step.name}: “{prefix}” isn't a valid SIP header prefix (a letter, then letters, digits "
                          "or - . ! % * _ + ` ' ~), like X-Cisco-, or empty for no prefix")
+    if to.startswith(("sip:", "sips:")):            # only a SIP address carries headers at all
+        bad = sorted(n for n in details if _header_name(n, prefix).lower() in RESERVED_HEADERS)
+        if bad:
+            raise ValueError(f"{step.name}: with header prefix “{prefix or '(none)'}”, {', '.join(bad)} would become "
+                             "a real SIP header the call already uses — choose a transfer_header_prefix or rename it")
     return Transfer(to=to, session_id=session_id, details=details, uui=uui, prefix=prefix)
 
 
