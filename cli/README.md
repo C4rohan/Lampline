@@ -143,6 +143,10 @@ steps:
       path: results.xml
 ```
 
+To publish the report as a check run instead — a failing scenario shows up next to
+the rest of the team's tests — swap the upload step for `dorny/test-reporter` with
+`reporter: java-junit` (the job needs `checks: write` permission).
+
 ### Let a model play the caller
 
 For conversations you don't want to script line by line, describe the caller
