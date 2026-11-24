@@ -9,7 +9,7 @@ import { Field } from "@/components/ui/label";
 import { Checkbox, Toggle } from "@/components/ui/switch";
 import type { BuilderApi } from "./useBuilder";
 import type { DefEdge, DefNode, Doc, NodeType, Param, Tool } from "./model";
-import { findingsFor, kindLabel, renameTool, rootId, text, TOOL_NAME, toolName, TRANSFER_TO, TYPES, usesTool, VAR_NAME } from "./model";
+import { findingsFor, HEADER_NAME, kindLabel, renameTool, rootId, text, TOOL_NAME, toolName, TRANSFER_TO, TYPES, usesTool, VAR_NAME } from "./model";
 import { InsertChips, JsonField, PairsEditor, Section, TextField } from "./fields";
 import { allVariables, FlowField, isScripted, ModeSwitch, RouteKind, routeKind, RULE_LABEL, ScriptEditor } from "./script";
 
@@ -51,13 +51,15 @@ function TransferSection({ b, n }: { b: BuilderApi; n: DefNode }) {
   const names = ["caller_phone", ...allVariables(doc).filter((v) => !consts.has(v) && v !== "caller_phone")];
   const picked = Array.isArray(d.transfer_details) ? d.transfer_details : [];
   const sip = /^sips?:/.test(to);
+  const prefix = d.transfer_header_prefix === undefined ? "X-Lampline-" : text(d.transfer_header_prefix).trim();
   return (
     <Section title="Transfer to a person">
       <TextField label="Transfer the call to" value={text(d.transfer_to)} placeholder="+15551234567 or sip:desk@pbx.example.com" insert={Object.keys(doc.context_variables)}
         invalid={!!to && !TRANSFER_TO.test(to)}
-        onChange={(v) => set((x) => { if (v.trim()) x.data.transfer_to = v.trim(); else { delete x.data.transfer_to; delete x.data.transfer_details; delete x.data.transfer_uui; } }, "tto")}
+        onChange={(v) => set((x) => { if (v.trim()) x.data.transfer_to = v.trim(); else { delete x.data.transfer_to; delete x.data.transfer_details; delete x.data.transfer_uui; delete x.data.transfer_header_prefix; } }, "tto")}
         hint={!to ? "Empty: the call ends here. A phone number or SIP address: after this step speaks, the caller is connected there instead."
-          : sip ? "The details below go along as SIP headers (X-Lampline-…), with a session ID for the full record."
+          : sip ? (prefix ? `The details below go along as SIP headers (${prefix}<name>, ${prefix}Session for the session ID).`
+            : "The details below go along as SIP headers with no prefix and no session header; names like To or Via are refused.")
           : "The phone network can't carry details, so they stay in this call's record and any after-call trigger. Use a SIP address to send them along."} />
       {to && (
         <>
@@ -76,6 +78,10 @@ function TransferSection({ b, n }: { b: BuilderApi; n: DefNode }) {
             </div>
             <p className="text-[12.5px] text-muted-foreground">{picked.length ? `${picked.length} selected.` : "None ticked: everything the call collected."}</p>
           </div>
+          {sip && <TextField label="SIP header prefix" value={prefix} mono placeholder="X-Lampline-"
+            invalid={!!prefix && !HEADER_NAME.test(prefix)}
+            onChange={(v) => set((x) => { const p = v.trim(); if (p === "X-Lampline-") delete x.data.transfer_header_prefix; else x.data.transfer_header_prefix = p; }, "tprefix")}
+            hint="The detail headers' names start with this — X-Lampline- by default. Cisco reads chosen headers into call variables, so X-Cisco- (or empty, for no prefix) can fit what your phone system maps." />}
           {sip && <TextField label="User-to-User data (optional)" value={text(d.transfer_uui)} insert={names} placeholder="e.g. {{account_id}}"
             onChange={(v) => set((x) => { if (v.trim()) x.data.transfer_uui = v; else delete x.data.transfer_uui; }, "tuui")}
             hint="For phone systems that read the User-to-User header, like Avaya and Cisco. Sent hex encoded." />}
