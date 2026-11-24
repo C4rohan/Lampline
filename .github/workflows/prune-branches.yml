@@ -7,7 +7,10 @@ name: prune-branches
 # A deleted branch can be restored from its pull request's page.
 
 on:
-  pull_request:
+  # pull_request_target, not pull_request: a contributor's pull request from a fork would
+  # otherwise start a run that waits for approval and fails once the pull request closes.
+  # Safe here: the job for it is skipped for forks, and it never checks out their code.
+  pull_request_target:
     types: [closed]
   schedule:
     - cron: "17 6 * * 1"
@@ -20,7 +23,7 @@ permissions:
 jobs:
   merged:
     if: >-
-      github.event_name == 'pull_request' && github.event.pull_request.merged &&
+      github.event_name == 'pull_request_target' && github.event.pull_request.merged &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       !contains(fromJSON('["dev", "qa", "prod"]'), github.event.pull_request.head.ref)
     runs-on: ubuntu-latest
@@ -39,7 +42,7 @@ jobs:
           fi
 
   sweep:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request_target'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
