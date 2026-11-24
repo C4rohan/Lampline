@@ -226,6 +226,54 @@ def node_refs(scenario: Scenario) -> list[tuple[str, str]]:
     return refs
 
 
+def coverage(definition: dict, transcripts: list[Transcript]) -> dict:
+    """Which declared steps and routes the transcripts did and didn't go through.
+
+    A step counts when a call can ever reach it: its type is a flow step
+    (the detached types — persona, trigger, webhook, qa — can't appear in a
+    transcript and aren't counted). A route is a (source, target) step-id
+    pair from the folder's edges; several declared routes between the same
+    two steps can't be told apart in a transcript, so they count once.
+    Consecutive steps count as a route only inside one transcript — tests
+    and repeated runs are never stitched together.
+    """
+    from vk.lint import FLOW_TYPES
+
+    names: dict[str, str] = {}
+    steps: list[str] = []               # declared flow steps, in folder order
+    for node in definition.get("nodes") or []:
+        if node.get("id") is None:
+            continue
+        sid = str(node["id"])
+        names.setdefault(sid, str((node.get("data") or {}).get("name") or node["id"]))
+        if node.get("type") in FLOW_TYPES and sid not in steps:
+            steps.append(sid)
+    routes, route_set = [], set()
+    for edge in definition.get("edges") or []:
+        if not isinstance(edge, dict):
+            continue
+        pair = (str(edge.get("source")), str(edge.get("target")))
+        if pair not in route_set:
+            route_set.add(pair)
+            routes.append(pair)
+    step_set = set(steps)
+    seen_steps: set[str] = set()
+    seen_routes: set[tuple[str, str]] = set()
+    for transcript in transcripts:
+        ids = [str(n["id"]) for n in transcript.nodes]
+        seen_steps.update(i for i in ids if i in step_set)
+        seen_routes.update(p for p in zip(ids, ids[1:]) if p in route_set)
+    return {
+        "steps": {"covered": len(seen_steps), "total": len(steps),
+                  "never_reached": [{"id": sid, "name": names.get(sid, sid)}
+                                    for sid in steps if sid not in seen_steps]},
+        "routes": {"covered": len(seen_routes), "total": len(routes),
+                   "never_taken": [{"source": s, "target": t,
+                                    "text": f"{names.get(s, s)} → {names.get(t, t)}"}
+                                   for s, t in routes if (s, t) not in seen_routes]},
+    }
+
+
 # --- checking --------------------------------------------------------------------
 
 def _matches(node: dict, ref: str) -> bool:

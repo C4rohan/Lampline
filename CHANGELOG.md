@@ -4,6 +4,9 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 
 ## Unreleased (on dev)
 
+### Tests
+- **`vk test --coverage`** lists the steps and routes no test went through, in the terminal or as a `coverage` object in `--format json` (engine target only) (#106).
+
 ### Shipping
 - Merging a contributor's pull request from a fork no longer leaves a failed `prune-branches` run on it: the workflow runs on `pull_request_target`, which needs no approval, and still never touches a fork's branch.
 

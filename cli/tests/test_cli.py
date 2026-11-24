@@ -272,6 +272,113 @@ def test_repeat_is_bounded_and_one_run_is_unchanged(run, tmp_path):
     assert "runs)" not in out and "1 passed, 0 failed" in out and "flaky" not in out
 
 
+_MINI = {
+    "vk_format": 1,
+    "nodes": [
+        {"id": "s", "type": "startCall",
+         "data": {"name": "Greeting", "greeting": "Hi there.", "prompt": "Greet the caller."}},
+        {"id": "m", "type": "agentNode", "data": {"name": "Menu", "prompt": "Route the caller."}},
+        {"id": "b", "type": "agentNode", "data": {"name": "Billing", "prompt": "Answer billing questions."}},
+        {"id": "d", "type": "endCall", "data": {"name": "Done", "prompt": "Say goodbye."}},
+        {"id": "g", "type": "globalNode", "data": {"name": "Persona", "prompt": "You are Ava."}},
+    ],
+    "edges": [
+        {"id": "s-m", "source": "s", "target": "m", "data": {"label": "greeted", "condition": "Greeted."}},
+        {"id": "m-b", "source": "m", "target": "b", "data": {"label": "billing", "condition": "Billing."}},
+        {"id": "b-m", "source": "b", "target": "m", "data": {"label": "menu", "condition": "More questions."}},
+        {"id": "m-d", "source": "m", "target": "d", "data": {"label": "done", "condition": "Nothing else."}},
+        {"id": "b-d", "source": "b", "target": "d", "data": {"label": "finish", "condition": "Billing done."}},
+        # a second route between the same two steps can't be told apart in a transcript
+        {"id": "m-d-2", "source": "m", "target": "d", "data": {"label": "hang up", "condition": "Caller hangs up."}},
+    ],
+}
+
+
+def _mini_folder(tmp_path, tests):
+    """An agent folder from _MINI (every route is reachable by the keyword fake engine)."""
+    from vk import agentfs
+
+    folder = tmp_path / "agents" / "mini"
+    agentfs.write(agentfs.Agent(name="Mini", definition=_MINI, context_variables={}), folder)
+    (folder / "tests").mkdir(exist_ok=True)
+    for test_name, doc in tests.items():
+        (folder / "tests" / f"{test_name}.yaml").write_text(yaml.safe_dump(doc, sort_keys=False))
+    return folder
+
+
+def test_coverage_lists_never_reached_steps_and_routes(run, tmp_path):
+    folder = make_folder(tmp_path, {
+        "billing": {"name": "billing question", "turns": [{"user": "billing"}]},
+    })
+    code, out, _ = run("test", str(folder), "--coverage")
+    assert code == 0
+    assert "coverage: 3 of 5 steps, 2 of 7 routes" in out
+    assert "never reached: Reschedule, Goodbye" in out
+    assert "Router → Reschedule" in out and "Reschedule → Router" in out
+    assert "Billing → Goodbye" in out and "Persona" not in out   # a global step is never counted
+
+
+def test_coverage_full_when_tests_touch_everything(run, tmp_path):
+    folder = _mini_folder(tmp_path, {
+        "billing_then_done": {"name": "billing then done",
+                              "turns": [{"user": "billing"}, {"user": "menu"}, {"user": "done"}]},
+        "just_billing": {"name": "billing only", "turns": [{"user": "billing"}, {"user": "finish"}]},
+    })
+    code, out, _ = run("test", str(folder), "--coverage")
+    assert code == 0 and "coverage: 4 of 4 steps, 5 of 5 routes" in out
+    assert "never reached" not in out and "routes not taken" not in out
+
+
+def test_coverage_json_wraps_results(run, tmp_path):
+    folder = _mini_folder(tmp_path, {
+        "billing": {"name": "billing", "turns": [{"user": "billing"}, {"user": "finish"}]},
+    })
+    code, out, _ = run("test", str(folder), "--coverage", "--format", "json")
+    assert code == 0
+    doc = json.loads(out)
+    [result] = doc["results"]
+    assert result["name"] == "billing" and result["steps"] == ["Greeting", "Menu", "Billing", "Done"]
+    cov = doc["coverage"]
+    assert cov["steps"] == {"covered": 4, "total": 4, "never_reached": []}
+    assert cov["routes"]["covered"] == 3 and cov["routes"]["total"] == 5
+    assert {r["text"] for r in cov["routes"]["never_taken"]} == {"Billing → Menu", "Menu → Done"}
+
+
+def test_no_coverage_flag_keeps_output_unchanged(run, tmp_path):
+    folder = _mini_folder(tmp_path, {"t": {"name": "t", "turns": [{"user": "billing"}]}})
+    code, out, _ = run("test", str(folder))
+    assert code == 0 and "coverage" not in out
+    code, out, _ = run("test", str(folder), "--format", "json")
+    assert code == 0 and isinstance(json.loads(out), list)   # still a bare list, no wrapper
+
+
+def test_coverage_is_engine_text_or_json_only(run, tmp_path):
+    folder = _mini_folder(tmp_path, {"t": {"name": "t", "turns": [{"user": "hi"}]}})
+    code, _, err = run("test", str(folder), "--coverage", "--target", "dfcx", "--agent", "p/l/a")
+    assert code == 1 and "engine" in err
+    code, _, err = run("test", str(folder), "--coverage", "--format", "junit")
+    assert code == 1 and "junit" in err
+
+
+def test_coverage_aggregates_every_repeated_run(run, tmp_path, monkeypatch):
+    """--repeat N: all N transcripts count, and only consecutive steps inside one run count as a route."""
+    from vk import cli, scenario
+
+    folder = _mini_folder(tmp_path, {"t": {"name": "t", "turns": [{"user": "hi"}]}})
+    real, calls = scenario.run, iter([["s", "m", "b", "x", "d"], ["s", "m", "d"]])
+
+    def once(client, sc, context):
+        result = real(client, sc, context)
+        result.transcript.nodes = [{"id": i, "name": i} for i in next(calls)]
+        return result
+
+    monkeypatch.setattr(cli.scenario, "run", once)
+    code, out, _ = run("test", str(folder), "--repeat", "2", "--coverage")
+    # run 1 covers s->m and m->b (x isn't a declared step and breaks b->d); run 2 adds m->d
+    assert code == 0 and "coverage: 4 of 4 steps, 3 of 5 routes" in out
+    assert "Billing → Done" in out          # b-x-d in run 1 never counted as the b->d route
+
+
 def test_version_matches_the_version_file(capsys):
     """vk --version is the release's version (VERSION at the repo root)."""
     import pytest as _pytest
