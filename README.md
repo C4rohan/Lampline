@@ -133,6 +133,25 @@ at http://localhost:7860, which also lets browser calls reach it directly.
 Free, private speech: Integrations → Whisper and Kokoro → **Download models**,
 or Moonshine for listening, which transcribes while the caller talks.
 
+**On Windows (WSL 2)** the same scripts run inside a WSL 2 distro:
+
+```bash
+wsl --install -d Ubuntu-24.04           # once, from PowerShell; then open the distro
+sudo apt install python3-venv           # Ubuntu's python3 can't make a venv without it
+git clone https://github.com/C4rohan/lampline && cd lampline
+scripts/engine-up.sh                    # then open http://localhost:7860 in a Windows browser
+```
+
+Clone inside the distro: Git for Windows checks the scripts out with CRLF line
+endings, which won't run under Linux, and the Windows files under `/mnt/c` are
+slow. WSL 2 forwards `localhost`, so the app opens in a Windows browser at the
+same address, and the microphone prompt for test calls works the same way
+(localhost is a secure context). `--free` works too: install
+[Ollama](https://ollama.com) inside the distro — the Windows app isn't reachable
+from WSL. For the Docker route, enable the distro under Docker Desktop →
+Settings → Resources → WSL Integration, then `scripts/docker-up.sh` works as on
+Linux.
+
 ## 📋 Test any phone agent for free
 
 Lampline's **Evals** tab phones a voice agent over a real phone line, plays the

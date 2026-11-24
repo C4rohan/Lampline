@@ -2304,7 +2304,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-lucide-react 1.72.0 (ISC)
+lucide-react 1.77.0 (ISC)
 ------------------------------------------------------------
 ISC License
 
@@ -2531,7 +2531,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-tailwind-merge 3.7.0 (MIT)
+tailwind-merge 3.7.1 (MIT)
 ------------------------------------------------------------
 MIT License
 
