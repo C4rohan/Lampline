@@ -43,6 +43,7 @@ Two sections are notes for you and your tools, not part of the agent itself:
 | Command | What it does |
 |---|---|
 | `vk lint DIR... [--format json] [--strict]` | Offline checks; exit 1 on errors (`--strict`: on warnings too) |
+| `vk graph DIR` | Print a Mermaid flowchart of the agent's steps and routes, offline. See [Graph](#graph) |
 | `vk test DIR [-k TEXT] [--url URL] [--format FORMAT] [-v] [--live-tools] [--repeat N] [--allow-flaky]` | Run `tests/*.yaml` conversations on the engine, with the folder as it is on disk |
 | `vk test DIR --target dfcx\|ces\|engine,dfcx --agent RESOURCE` | Run the same tests against your live Dialogflow CX agent or CX Agent Studio app, or side by side with the engine |
 | `vk templates list` / `vk templates install NAME [--dir D] [--name N]` | Starter agents |
@@ -56,6 +57,36 @@ and promote dev → qa → prod ([docs/BRANCHES.md](https://github.com/C4rohan/L
 `vk lint` and `vk test` in CI.
 
 Exit codes: 0 ok, 1 failure (including lint errors), 2 bad usage.
+
+## Graph
+
+`vk graph DIR` prints a Mermaid flowchart you can paste into a `mermaid` code block
+on GitHub. Start, agent, end, and global steps have distinct styles. Each arrow
+shows its route label when present.
+
+```bash
+vk templates install appointment-scheduling
+vk graph agents/appointment-scheduling
+```
+
+```mermaid
+flowchart TD
+    s1["Greeting"]:::startStep
+    s2["Collect details"]:::agentStep
+    s3["Confirm"]:::agentStep
+    s4["Request booked"]:::endStep
+    s5["Not scheduling"]:::endStep
+    s6["Persona"]:::globalStep
+    s1 -->|"wants appointment"| s2
+    s1 -->|"other request"| s5
+    s2 -->|"details collected"| s3
+    s3 -->|"details confirmed"| s4
+    s3 -->|"details need changes"| s2
+    classDef startStep fill:#dcfce7,stroke:#15803d,color:#14241a
+    classDef agentStep fill:#dbeafe,stroke:#1d4ed8,color:#172554
+    classDef endStep fill:#fee2e2,stroke:#b91c1c,color:#450a0a
+    classDef globalStep fill:#f3e8ff,stroke:#7e22ce,color:#3b0764
+```
 
 ## Tests
 

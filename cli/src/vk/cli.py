@@ -1,6 +1,7 @@
 """vk command line.
 
     vk lint agents/front-desk [--format json] [--strict]
+    vk graph agents/front-desk
     vk test agents/front-desk [-k reschedule] [--url http://localhost:7860]   # tests/*.yaml through the engine's text chat
     vk templates list | vk templates install front-desk [--dir agents/x]
     vk import dfcx|ces EXPORT [--dir agents/x]          # Dialogflow CX or CX Agent Studio export -> folder
@@ -66,6 +67,56 @@ def cmd_lint(args) -> int:
         if has_errors(findings) or (args.strict and findings):
             worst = 1
     return worst
+
+
+_GRAPH_STYLES = {
+    "startCall": ("startStep", "fill:#dcfce7,stroke:#15803d,color:#14241a"),
+    "agentNode": ("agentStep", "fill:#dbeafe,stroke:#1d4ed8,color:#172554"),
+    "endCall": ("endStep", "fill:#fee2e2,stroke:#b91c1c,color:#450a0a"),
+    "globalNode": ("globalStep", "fill:#f3e8ff,stroke:#7e22ce,color:#3b0764"),
+}
+
+
+def _mermaid_label(value: object) -> str:
+    text = re.sub(r"\r\n?|\n", " ", str(value))
+    # Mermaid decodes decimal entities after parsing the quoted label.
+    escaped = re.sub(r'["|\[\]#&<>\x60\\%]', lambda match: f"#{ord(match[0])};", text)
+    return f'"{escaped}"'
+
+
+def cmd_graph(args) -> int:
+    definition = _load_folder(args.dir).definition
+    step_ids: dict[str, str] = {}
+    lines = ["flowchart TD"]
+    for index, node in enumerate(definition.get("nodes") or [], start=1):
+        raw_id = node.get("id")
+        key = str(raw_id)
+        if raw_id is None or not key.strip():
+            raise agentfs.FolderError(f"step {index} needs an ID")
+        if key in step_ids:
+            raise agentfs.FolderError(f"duplicate step ID {key!r}")
+        step_id = step_ids[key] = f"s{index}"
+        name = (node.get("data") or {}).get("name") or key
+        style = _GRAPH_STYLES.get(str(node.get("type")))
+        suffix = f":::{style[0]}" if style else ""
+        lines.append(f"    {step_id}[{_mermaid_label(name)}]{suffix}")
+
+    for index, edge in enumerate(definition.get("edges") or [], start=1):
+        if not isinstance(edge, dict):
+            raise agentfs.FolderError(f"route {index} needs source and target step IDs")
+        source, target = edge.get("source"), edge.get("target")
+        start = step_ids.get(str(source)) if source is not None else None
+        end = step_ids.get(str(target)) if target is not None else None
+        if start is None or end is None:
+            raise agentfs.FolderError(f"route {index} ({source!r} to {target!r}) must connect known step IDs")
+        label = (edge.get("data") or {}).get("label")
+        arrow = f"-->|{_mermaid_label(label)}|" if label is not None and str(label).strip() else "-->"
+        lines.append(f"    {start} {arrow} {end}")
+
+    for name, style in _GRAPH_STYLES.values():
+        lines.append(f"    classDef {name} {style}")
+    _out("\n".join(lines))
+    return 0
 
 
 SKILL_TARGETS = {"claude": ".claude/skills", "agents": ".agents/skills", "gemini": ".gemini/skills"}
@@ -448,6 +499,10 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--format", choices=["text", "json"], default="text")
     s.add_argument("--strict", action="store_true", help="fail on warnings too")
     s.set_defaults(func=cmd_lint)
+
+    s = sub.add_parser("graph", help="print an agent folder as a Mermaid flowchart")
+    s.add_argument("dir")
+    s.set_defaults(func=cmd_graph)
 
     s = sub.add_parser("test", help="run the folder's tests/*.yaml conversations on the engine")
     s.add_argument("dir")
