@@ -80,6 +80,39 @@ and all. The result shows the typical (p50), slow (p95) and slowest response.
 For your own Lampline agents, the Calls page shows the same measured inside
 the engine, so the difference is what the phone line adds.
 
+## Tough-caller personas
+
+Ready-made callers that are hard to handle, as presets on the Evals page (next
+to **Make the caller tougher**). Picking one fills **Who is calling**; the goal
+stays yours to write. Every persona is a made-up person and about behaviour —
+how they talk — not identity.
+
+| Persona | How they talk |
+|---|---|
+| `angry-wants-human` | Already fed up; curt, asks for a real person or a manager early, calms down only when the agent actually helps |
+| `elderly-repeats` | An elderly caller who asks for things to be repeated or said more slowly, and reads details back to check them |
+| `rambling-story` | Tells the whole story first; the actual request only comes out a couple of turns in, inside another sentence |
+| `english-second-language` | Simple words and short sentences; asks what long words mean and repeats back what they heard |
+| `changes-mind` | Asks for one thing, then changes their mind after the agent has already done some work on it |
+| `scattered-details` | Gives details in whatever order they come to mind; sometimes answers a different question, so the agent asks again |
+
+The same personas work in `vk test` files, by name — a `caller:` block whose
+`persona` matches one of them uses its text (anything else is still used as
+written, so inline personas keep working):
+
+```yaml
+name: angry caller reaches a person
+caller:
+  persona: angry-wants-human
+  goal: get to a real person or have the problem fixed
+expect:
+  reaches: Transfer
+```
+
+The personas ship with vk in `cli/src/vk/personas/` (a name, a description and
+the persona text per file), and the engine serves them at
+`GET /v1/evals/personas` for the presets.
+
 ## Replay a call
 
 - **A failed eval:** press **Run again** for the same eval (same caller options
@@ -184,7 +217,8 @@ and testing them, comes from Google Research's
   `POST /v1/evals/replay` (`{run_id, exact}` or `{call_id}`) returns a draft eval and saves nothing.
   `GET /v1/evals/cases`, `POST /v1/evals/cases` (save `{cases, source}`),
   `POST /v1/evals/cases/convert` (`{text, filename}` → cases, nothing saved),
-  `DELETE /v1/evals/cases/{id}`, `POST /v1/evals`, `GET /v1/evals`, `GET /v1/evals/{id}`,
+  `DELETE /v1/evals/cases/{id}`, `GET /v1/evals/personas` (the tough-caller
+  personas vk ships), `POST /v1/evals`, `GET /v1/evals`, `GET /v1/evals/{id}`,
   `POST /v1/evals/{id}/offer` (phone on speaker), `POST /v1/evals/{id}/stop`,
   `DELETE /v1/evals/{id}`, and `POST /v1/evals/bridge/offer` (the extension,
   with its one-call token in `X-Lampline-Bridge`). See

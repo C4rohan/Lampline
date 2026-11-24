@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CheckCircle2, CircleSlash, ClipboardCheck, FileUp, Headphones, ListChecks, Loader2, Phone, PhoneOff, Plus, Puzzle, Repeat, RotateCcw, Trash2, XCircle, Zap } from "lucide-react";
+import { CheckCircle2, CircleSlash, ClipboardCheck, FileUp, Headphones, ListChecks, Loader2, Phone, PhoneOff, Plus, Puzzle, Repeat, RotateCcw, Trash2, Users, XCircle, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { api, type AgentSummary } from "@/lib/api";
 import { useLoad } from "@/lib/app";
@@ -26,6 +26,7 @@ type Run = {
 };
 type Bridge = { found: boolean; version?: string };
 type Tough = { noise: string; level: string; voice: string; style: string; interrupt: string; pauses: string; seed?: number };
+type Persona = { name: string; description: string; persona: string };
 type Draft = { persona: string; goal: string; criteria: string[]; number: string; caller: Tough | null; case_id: string };
 const TOUGH: [keyof Tough, string, [string, string][]][] = [
   ["noise", "Background noise", [["", "None"], ["room", "Busy room"], ["street", "Street"], ["car", "Car"]]],
@@ -183,6 +184,7 @@ export function EvalsPage() {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const cases = useLoad(() => api<{ cases: Case[] }>("GET", "/v1/evals/cases"));
+  const personas = useLoad(() => api<{ personas: Persona[] }>("GET", "/v1/evals/personas"));
   const [importing, setImporting] = useState(false);
   const rt = useRef<{ es?: EventSource; pc?: RTCPeerConnection; mic?: MediaStream; poll?: number; runId?: string }>({});
   const logRef = useRef<HTMLDivElement>(null);
@@ -432,6 +434,24 @@ export function EvalsPage() {
             <Textarea id="ev-criteria" rows={4} value={field("criteria")} onChange={(e) => set("criteria", e.target.value)} disabled={!!live}
               placeholder={"The agent asks for the caller's name\nThe agent offers a Friday morning time\nThe agent confirms the change before hanging up"} />
           </Field>
+          {!!personas.data?.personas.length && (
+            <div className="grid gap-2">
+              <span className="flex items-center gap-2 text-sm font-medium"><Users className="size-4 text-muted-foreground" />Tough-caller personas</span>
+              <div className="flex flex-wrap gap-1.5">
+                {personas.data.personas.map((p) => (
+                  <button key={p.name} type="button" title={p.description} disabled={!!live} onClick={() => set("persona", p.persona)}
+                    className={cn("rounded-full border px-3 py-1 text-[13px] transition-colors",
+                      field("persona") === p.persona ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-muted/50")}>
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[12.5px] text-muted-foreground">
+                Ready-made callers that are hard to handle; picking one fills <em>Who is calling</em> (the goal stays yours to write).
+                The same names work in tests: <code>{"caller: {persona: " + personas.data.personas[0].name + ", goal: …}"}</code>
+              </p>
+            </div>
+          )}
           <details className="group rounded-lg border" open={toughCount > 0 || undefined}>
             <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-sm font-medium">
               <Zap className="size-4 text-muted-foreground" />Make the caller tougher

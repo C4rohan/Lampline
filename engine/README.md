@@ -604,10 +604,17 @@ The person picking up gets what the agent collected. On a SIP address the
 details travel as SIP headers: `X-Lampline-Session` (the session ID, to look
 the call up afterwards) and `X-Lampline-<name>` for each detail, ASCII and at
 most 200 characters each. Choose which details to send, or leave the list
-empty to send everything this call collected. For Avaya and Cisco, the step
-can also send User-to-User data (`transfer_uui`, hex encoded as RFC 7433
-describes), which their screen pops read. A phone number on the public
-network can't carry headers; the details stay in the call's `transfer` event,
+empty to send everything this call collected. The `X-Lampline-` prefix can
+change — `transfer_header_prefix` sets it (`X-Cisco-`, say) or empties it,
+for phone systems that map chosen header names into what the agent's screen
+shows; Cisco CVP, for example, passes picked SIP headers into call variables.
+With no prefix the Session header is left off, and a detail may not take the
+name of a real SIP header like `To` or `Via` — it would ride over the call's
+own.
+For Avaya and Cisco, the step can also send User-to-User data
+(`transfer_uui`, hex encoded as RFC 7433 describes), which their screen pops
+read. A phone number on the public network can't carry headers; the details
+stay in the call's `transfer` event,
 and after-call triggers can send them on (`{{transferred_to}}`, `{{details}}`,
 `{{session_id}}`).
 
@@ -856,6 +863,7 @@ The folder runs as it is on disk: nothing to save or deploy first.
 | GET / POST | `/v1/evals/cases` | saved test cases; save `{cases: [{name, persona, goal, criteria, number, notes}], source}` |
 | POST | `/v1/evals/cases/convert` | `{text, filename}`: test cases read from a test script (Hammer, Cyara, CSV, notes) by your model; nothing is saved |
 | DELETE | `/v1/evals/cases/{id}` | delete a test case |
+| GET | `/v1/evals/personas` | the tough-caller personas vk ships (`{name, description, persona}`), the Evals page's presets |
 | POST | `/v1/evals/bridge/offer` | the Lampline Phone Bridge extension's WebRTC offer, with its one-call token in `X-Lampline-Bridge` |
 | POST | `/v1/tests/caller` | `{persona, goal, transcript}`: what a model-played test caller says next (`vk test`) |
 | GET | `/v1/me` | who this key is, and its role |

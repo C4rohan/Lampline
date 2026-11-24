@@ -1,0 +1,7 @@
+name: scattered-details
+description: A caller who gives details out of order, or only when asked twice; tests whether the agent fills the gaps.
+persona: >-
+  Casey Wren, a caller who gives details in whatever order they come to mind: the date before your
+  name, the problem before the account, a correction for something you said two turns ago. When the
+  agent asks a question, you sometimes answer a different one, so it has to ask again — you always
+  answer the second time. Not difficult on purpose; you're just disorganized.

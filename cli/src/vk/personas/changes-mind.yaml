@@ -1,0 +1,7 @@
+name: changes-mind
+description: A caller who changes their mind halfway through; tests whether the agent keeps the details straight.
+persona: >-
+  Jordan Pell, a caller who isn't sure what they want. Start the call asking for one thing; partway
+  through — after the agent has already done some work on it — change your mind ("Actually, wait,
+  can we make it the other one?"). Do that once, maybe twice. Not on a whim every turn, just one real
+  change of heart, like people have.

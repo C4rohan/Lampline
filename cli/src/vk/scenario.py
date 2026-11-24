@@ -29,6 +29,10 @@ by line (the engine's own model plays it, so vk needs no key):
       reaches: Billing
       not_says: [card number]
 
+`persona` can also name a ready-made caller from the tough-caller pack vk ships
+(vk/personas/, listed in docs/EVALS.md): `persona: angry-wants-human` uses that
+persona's text. Anything else is used as written, like the example above.
+
 The caller is different every run, so keep expectations to what any good
 conversation must do, and run it a few times when you change the agent.
 
@@ -46,6 +50,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+from vk import personas
 
 CHECK_KEYS = ("reaches", "not_reaches", "calls_tool", "says", "not_says", "ends")
 
@@ -188,13 +194,18 @@ def _check_caller(caller: Any, rel: str) -> dict | None:
         raise TestFileError(f"{rel}: unknown caller key(s) {', '.join(unknown)} (allowed: persona, goal, opening, max_turns)")
     if not isinstance(caller.get("persona"), str) or len(caller["persona"].strip()) < 5:
         raise TestFileError(f"{rel}: caller.persona describes who is calling, like \"Sam, in a hurry, asking about a bill\"")
+    raw = caller["persona"].strip()
+    named = personas.lookup(raw)
+    if named is None and personas.looks_like_name(raw):
+        raise TestFileError(f"{rel}: no persona {raw!r} ships with vk (have: {', '.join(personas.names())}); "
+                            "to describe the caller yourself, use a few words")
     for key in ("goal", "opening"):
         if key in caller and not isinstance(caller[key], str):
             raise TestFileError(f"{rel}: caller.{key} must be text")
     turns = caller.get("max_turns", 8)
     if not isinstance(turns, int) or isinstance(turns, bool) or not 1 <= turns <= 30:
         raise TestFileError(f"{rel}: caller.max_turns must be a whole number from 1 to 30")
-    return {"persona": caller["persona"].strip(), "goal": str(caller.get("goal") or "").strip(),
+    return {"persona": (named or {}).get("persona") or raw, "goal": str(caller.get("goal") or "").strip(),
             "opening": str(caller.get("opening") or "").strip(), "max_turns": turns}
 
 

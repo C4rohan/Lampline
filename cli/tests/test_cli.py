@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from xml.etree import ElementTree
 
+import pytest
 import yaml
 
 from conftest import make_folder
@@ -60,6 +61,75 @@ def test_lint_folder_without_agents(run, tmp_path):
 def test_errors_are_friendly(run, tmp_path):
     code, _, err = run("lint", "does-not-exist")
     assert code == 1 and "agent.yaml not found" in err
+
+
+def test_graph_draws_appointment_scheduling_template(run):
+    assert run("templates", "install", "appointment-scheduling")[0] == 0
+    code, out, err = run("graph", "agents/appointment-scheduling")
+    assert code == 0 and not err
+    lines = out.splitlines()
+    assert lines[:12] == [
+        "flowchart TD",
+        '    s1["Greeting"]:::startStep',
+        '    s2["Collect details"]:::agentStep',
+        '    s3["Confirm"]:::agentStep',
+        '    s4["Request booked"]:::endStep',
+        '    s5["Not scheduling"]:::endStep',
+        '    s6["Persona"]:::globalStep',
+        '    s1 -->|"wants appointment"| s2',
+        '    s1 -->|"other request"| s5',
+        '    s2 -->|"details collected"| s3',
+        '    s3 -->|"details confirmed"| s4',
+        '    s3 -->|"details need changes"| s2',
+    ]
+    rules = [line.split() for line in lines[12:]]
+    assert len(rules) == 4
+    assert all(keyword == "classDef" for keyword, _, _ in rules)
+    assert {name for _, name, _ in rules} == {"startStep", "agentStep", "endStep", "globalStep"}
+    assert len({style for _, _, style in rules}) == 4
+
+
+def test_graph_escapes_names_and_route_labels(run, tmp_path):
+    name = '选择 "time" | [text] #34; <b>&</b> \\ ` %%{init}%%\r\nnext\rlast\nline'
+    escaped = (
+        "选择 #34;time#34; #124; #91;text#93; #35;34; #60;b#62;#38;#60;/b#62; "
+        "#92; #96; #37;#37;{init}#37;#37; next last line"
+    )
+    doc = {
+        "vk_format": 1,
+        "nodes": [{"id": "end", "type": "startCall", "data": {"name": name}},
+                  {"id": "a | b", "type": "customStep"}],
+        "edges": [{"source": "end", "target": "a | b", "data": {"label": name}},
+                  {"source": "end", "target": "a | b"}],
+    }
+    (tmp_path / "agent.yaml").write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    code, out, err = run("graph", ".")
+    assert code == 0 and not err
+    assert out.splitlines()[1:5] == [
+        f'    s1["{escaped}"]:::startStep',
+        '    s2["a #124; b"]',
+        f'    s1 -->|"{escaped}"| s2',
+        "    s1 --> s2",
+    ]
+
+
+def test_graph_reports_missing_folder(run):
+    code, out, err = run("graph", "does-not-exist")
+    assert code == 1 and not out
+    assert "agent.yaml not found" in err
+
+
+@pytest.mark.parametrize(("nodes", "edges", "error"), [
+    ([{"type": "startCall"}], [], "step 1 needs an ID"),
+    ([{"id": 1}, {"id": "1"}], [], "duplicate step ID '1'"),
+    ([{"id": "a"}], [{"source": "a", "target": "missing"}], "route 1 ('a' to 'missing')"),
+])
+def test_graph_rejects_invalid_step_ids(run, tmp_path, nodes, edges, error):
+    doc = {"vk_format": 1, "nodes": nodes, "edges": edges}
+    (tmp_path / "agent.yaml").write_text(yaml.safe_dump(doc), encoding="utf-8")
+    code, out, err = run("graph", ".")
+    assert code == 1 and not out
+    assert error in err
 
 
 def test_engine_unreachable_is_explained(run, tmp_path, monkeypatch):

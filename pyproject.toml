@@ -28,4 +28,4 @@ version = {attr = "vk.__version__"}
 where = ["cli/src"]
 
 [tool.setuptools.package-data]
-vk = ["skills/*/SKILL.md", "templates/*/agent.yaml", "templates/*/prompts/*.md", "templates/*/tests/*.yaml"]
+vk = ["skills/*/SKILL.md", "personas/*.yaml", "templates/*/agent.yaml", "templates/*/prompts/*.md", "templates/*/tests/*.yaml"]
