@@ -51,6 +51,10 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from vk import agentfs, importers
+try:
+    from vk import personas as vk_personas
+except ImportError:                                  # an older lampline, without the tough-caller pack
+    vk_personas = None
 
 from . import __version__
 from . import graph as graph_module
@@ -1439,6 +1443,12 @@ def create_app(engine: Engine) -> FastAPI:
         if not engine.evals.delete_case(cid):
             raise HTTPException(404, "no such test case")
         return {"deleted": cid}
+
+    @app.get("/v1/evals/personas", dependencies=auth)
+    async def eval_personas(request: Request):
+        """The tough-caller personas vk ships; the page offers them as presets for who is calling."""
+        _local_only(request)
+        return {"personas": vk_personas.all() if vk_personas else []}
 
     @app.post(BRIDGE_PATH)
     async def eval_bridge_offer(body: dict[str, Any], request: Request):

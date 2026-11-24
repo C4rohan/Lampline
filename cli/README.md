@@ -43,6 +43,7 @@ Two sections are notes for you and your tools, not part of the agent itself:
 | Command | What it does |
 |---|---|
 | `vk lint DIR... [--format json] [--strict]` | Offline checks; exit 1 on errors (`--strict`: on warnings too) |
+| `vk graph DIR` | Print a Mermaid flowchart of the agent's steps and routes, offline. See [Graph](#graph) |
 | `vk test DIR [-k TEXT] [--url URL] [--format FORMAT] [-v] [--live-tools] [--repeat N] [--allow-flaky]` | Run `tests/*.yaml` conversations on the engine, with the folder as it is on disk |
 | `vk test DIR --target dfcx\|ces\|engine,dfcx --agent RESOURCE` | Run the same tests against your live Dialogflow CX agent or CX Agent Studio app, or side by side with the engine |
 | `vk templates list` / `vk templates install NAME [--dir D] [--name N]` | Starter agents |
@@ -56,6 +57,36 @@ and promote dev → qa → prod ([docs/BRANCHES.md](https://github.com/C4rohan/L
 `vk lint` and `vk test` in CI.
 
 Exit codes: 0 ok, 1 failure (including lint errors), 2 bad usage.
+
+## Graph
+
+`vk graph DIR` prints a Mermaid flowchart you can paste into a `mermaid` code block
+on GitHub. Start, agent, end, and global steps have distinct styles. Each arrow
+shows its route label when present.
+
+```bash
+vk templates install appointment-scheduling
+vk graph agents/appointment-scheduling
+```
+
+```mermaid
+flowchart TD
+    s1["Greeting"]:::startStep
+    s2["Collect details"]:::agentStep
+    s3["Confirm"]:::agentStep
+    s4["Request booked"]:::endStep
+    s5["Not scheduling"]:::endStep
+    s6["Persona"]:::globalStep
+    s1 -->|"wants appointment"| s2
+    s1 -->|"other request"| s5
+    s2 -->|"details collected"| s3
+    s3 -->|"details confirmed"| s4
+    s3 -->|"details need changes"| s2
+    classDef startStep fill:#dcfce7,stroke:#15803d,color:#14241a
+    classDef agentStep fill:#dbeafe,stroke:#1d4ed8,color:#172554
+    classDef endStep fill:#fee2e2,stroke:#b91c1c,color:#450a0a
+    classDef globalStep fill:#f3e8ff,stroke:#7e22ce,color:#3b0764
+```
 
 ## Tests
 
@@ -112,6 +143,10 @@ steps:
       path: results.xml
 ```
 
+To publish the report as a check run instead — a failing scenario shows up next to
+the rest of the team's tests — swap the upload step for `dorny/test-reporter` with
+`reporter: java-junit` (the job needs `checks: write` permission).
+
 ### Let a model play the caller
 
 For conversations you don't want to script line by line, describe the caller
@@ -135,6 +170,12 @@ its goal is met, the agent says goodbye, or `max_turns` runs out. It says
 something different every run, so keep `expect` to what any good conversation
 must do, and run it a few times after changing the agent (`--repeat`, below).
 A file has either `turns` or a `caller`, not both.
+
+`persona` can also name a ready-made caller from the tough-caller pack vk
+ships — `persona: angry-wants-human` uses that persona's text; anything else
+is used as written. The pack (angry, elderly, rambling, English as a second
+language, changing their mind, scattered details) is listed in
+[docs/EVALS.md](https://github.com/C4rohan/Lampline/blob/prod/docs/EVALS.md#tough-caller-personas).
 
 ### Catch flaky tests
 
@@ -345,7 +386,7 @@ in the notes.
 | VK131 | error / warning | a rule that can't be read or uses a variable nothing provides; otherwise / no match from an LLM step; a rule on Start |
 | VK132 | warning | a scripted page that never moves on once its form is complete, or reads answers exactly but has transfers for the model |
 | VK133 | error / warning | a page's `on_entry` / `on_done` names a tool that doesn't exist, or one whose arguments no variable provides |
-| VK134 | error / warning | a transfer to a person: only on End call steps, to a phone number (E.164) or SIP address; details and variables it sends must exist; warns when the address comes from what the caller said |
+| VK134 | error / warning | a transfer to a person: only on End call steps, to a phone number (E.164) or SIP address; details and variables it sends must exist; `transfer_header_prefix` must start a valid SIP header name, and without a prefix a detail can't take a real SIP header's name; warns when the address comes from what the caller said |
 | VK201 / 202 / 206 | error | looks like an SSN, a Luhn-valid card number, a medical record or member ID |
 | VK203 / 204 / 205 | warning | full date, phone number, email |
 

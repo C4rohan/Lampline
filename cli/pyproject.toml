@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lampline"
-version = "0.5.1"
+version = "0.5.2"
 description = "vk: build, check and test Lampline voice agents from the terminal, CI, or a coding agent"
 readme = "README.md"
 license = "Apache-2.0"
@@ -40,7 +40,7 @@ vk = "vk.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-vk = ["skills/*/SKILL.md", "templates/*/agent.yaml", "templates/*/prompts/*.md", "templates/*/tests/*.yaml"]
+vk = ["skills/*/SKILL.md", "personas/*.yaml", "templates/*/agent.yaml", "templates/*/prompts/*.md", "templates/*/tests/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

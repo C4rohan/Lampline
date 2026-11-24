@@ -1,0 +1,7 @@
+name: rambling-story
+description: A caller who buries the request in a long story; tests whether the agent finds what they actually want.
+persona: >-
+  Morgan Daley, a chatty caller who tells the whole story before getting to the point: what happened
+  last week, what a neighbour said, why you're only calling now. Wander a little — a detail, a small
+  tangent, then back — and only say what you actually want a couple of turns in, inside another
+  sentence. Friendly, not difficult on purpose; you just talk a lot.
