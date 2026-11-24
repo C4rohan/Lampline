@@ -78,6 +78,7 @@ class Transcript:
     lines: list[tuple[str, str]] = field(default_factory=list)  # (speaker, text)
     errors: list[str] = field(default_factory=list)
     ended: bool = False
+    self_transitions: set[str] = field(default_factory=set)
 
     def add_turn(self, turn: dict) -> None:
         user = (turn.get("user_message") or {}).get("text")
@@ -88,6 +89,11 @@ class Transcript:
             kind, payload = event.get("type"), event.get("payload") or {}
             if kind == "node_transition":
                 node = {"id": str(payload.get("node_id")), "name": payload.get("node_name") or ""}
+                # The visit list keeps consecutive IDs deduplicated for reporting.
+                # Capture explicit self-transitions separately for route coverage.
+                source = payload.get("from_node_id")
+                if source is not None and payload.get("node_id") is not None and str(source) == node["id"]:
+                    self.self_transitions.add(node["id"])
                 if not self.nodes or self.nodes[-1]["id"] != node["id"]:
                     self.nodes.append(node)
                     self.lines.append(("step", node["name"] or node["id"]))
@@ -235,7 +241,8 @@ def coverage(definition: dict, transcripts: list[Transcript]) -> dict:
     pair from the folder's edges; several declared routes between the same
     two steps can't be told apart in a transcript, so they count once.
     Consecutive steps count as a route only inside one transcript — tests
-    and repeated runs are never stitched together.
+    and repeated runs are never stitched together. Explicit self-transitions
+    count even when consecutive visits to the same step are deduplicated.
     """
     from vk.lint import FLOW_TYPES
 
@@ -263,6 +270,7 @@ def coverage(definition: dict, transcripts: list[Transcript]) -> dict:
         ids = [str(n["id"]) for n in transcript.nodes]
         seen_steps.update(i for i in ids if i in step_set)
         seen_routes.update(p for p in zip(ids, ids[1:]) if p in route_set)
+        seen_routes.update((i, i) for i in transcript.self_transitions if (i, i) in route_set)
     return {
         "steps": {"covered": len(seen_steps), "total": len(steps),
                   "never_reached": [{"id": sid, "name": names.get(sid, sid)}

@@ -294,12 +294,12 @@ _MINI = {
 }
 
 
-def _mini_folder(tmp_path, tests):
+def _mini_folder(tmp_path, tests, definition=_MINI):
     """An agent folder from _MINI (every route is reachable by the keyword fake engine)."""
     from vk import agentfs
 
     folder = tmp_path / "agents" / "mini"
-    agentfs.write(agentfs.Agent(name="Mini", definition=_MINI, context_variables={}), folder)
+    agentfs.write(agentfs.Agent(name="Mini", definition=definition, context_variables={}), folder)
     (folder / "tests").mkdir(exist_ok=True)
     for test_name, doc in tests.items():
         (folder / "tests" / f"{test_name}.yaml").write_text(yaml.safe_dump(doc, sort_keys=False))
@@ -377,6 +377,25 @@ def test_coverage_aggregates_every_repeated_run(run, tmp_path, monkeypatch):
     # run 1 covers s->m and m->b (x isn't a declared step and breaks b->d); run 2 adds m->d
     assert code == 0 and "coverage: 4 of 4 steps, 3 of 5 routes" in out
     assert "Billing → Done" in out          # b-x-d in run 1 never counted as the b->d route
+
+
+def test_coverage_counts_self_routes_without_changing_reported_steps(run, tmp_path):
+    # A real engine reports from_node_id on transition events. A self-route
+    # should count, but revisiting a step must not duplicate the displayed visit.
+    loop = {"id": "m-m", "source": "m", "target": "m",
+            "data": {"label": "retry", "condition": "Caller retries."}}
+    definition = {**_MINI, "edges": [*_MINI["edges"], loop]}
+    folder = _mini_folder(tmp_path, {
+        "retry": {"name": "retry", "turns": [{"user": "retry"}, {"user": "done"}]},
+    }, definition)
+    code, out, _ = run("test", str(folder), "--format", "json")
+    assert code == 0
+    assert json.loads(out)[0]["steps"] == ["Greeting", "Menu", "Done"]
+    code, out, _ = run("test", str(folder), "--coverage", "--format", "json")
+    assert code == 0
+    cov = json.loads(out)["coverage"]["routes"]
+    assert cov["covered"] == 3 and cov["total"] == 6
+    assert not any(r["source"] == r["target"] == "m" for r in cov["never_taken"])
 
 
 def test_version_matches_the_version_file(capsys):

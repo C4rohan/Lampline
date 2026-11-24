@@ -92,9 +92,10 @@ class FakeEngine:
                 break
             tool = re.sub(r"[^a-z0-9]", "_", pick["data"]["label"].lower())
             events.append(self._ev("tool_call_started", function_name=tool, tool_call_id="t", arguments={}))
+            previous = sess["node"]
             sess["node"] = pick["target"]
             target = nodes[pick["target"]]
-            events.append(self._ev("node_transition", node_id=target["id"], node_name=target["data"]["name"]))
+            events.append(self._ev("node_transition", node_id=target["id"], node_name=target["data"]["name"], from_node_id=previous))
             if target["type"] == "endCall":
                 sess["ended"] = True
                 break
