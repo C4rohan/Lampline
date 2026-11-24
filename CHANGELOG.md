@@ -4,6 +4,9 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 
 ## Unreleased (on dev)
 
+### Shipping
+- Merging a contributor's pull request from a fork no longer leaves a failed `prune-branches` run on it: the workflow runs on `pull_request_target`, which needs no approval, and still never touches a fork's branch.
+
 ## v0.5.2
 
 The first release with work from outside contributors: thank you, @Golden007-prog, @sanketpatel32 and @ningsiyuan1024.
