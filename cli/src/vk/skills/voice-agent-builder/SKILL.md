@@ -77,6 +77,9 @@ caller:
 expect: {reaches: Billing, not_says: [card number]}
 ```
 
+`persona` can also name a ready-made tough caller that ships with vk, like
+`angry-wants-human` or `rambling-story` (the pack is listed in docs/EVALS.md).
+
 ## 3. Write the folder
 
 Start from a template (`vk templates list`, then

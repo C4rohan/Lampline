@@ -136,6 +136,12 @@ something different every run, so keep `expect` to what any good conversation
 must do, and run it a few times after changing the agent (`--repeat`, below).
 A file has either `turns` or a `caller`, not both.
 
+`persona` can also name a ready-made caller from the tough-caller pack vk
+ships — `persona: angry-wants-human` uses that persona's text; anything else
+is used as written. The pack (angry, elderly, rambling, English as a second
+language, changing their mind, scattered details) is listed in
+[docs/EVALS.md](https://github.com/C4rohan/Lampline/blob/prod/docs/EVALS.md#tough-caller-personas).
+
 ### Catch flaky tests
 
 Models answer differently from run to run, so one passing run proves little.

@@ -40,7 +40,7 @@ vk = "vk.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-vk = ["skills/*/SKILL.md", "templates/*/agent.yaml", "templates/*/prompts/*.md", "templates/*/tests/*.yaml"]
+vk = ["skills/*/SKILL.md", "personas/*.yaml", "templates/*/agent.yaml", "templates/*/prompts/*.md", "templates/*/tests/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

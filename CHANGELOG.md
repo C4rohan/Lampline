@@ -59,6 +59,9 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 ### Speech to speech
 - **Gemini Live** next to OpenAI Realtime (Integrations → Speech to speech → Gemini Live; `VPE_REALTIME_PROVIDER=gemini`, `VPE_GEMINI_LIVE_MODEL`, `VPE_GEMINI_LIVE_VOICE`), with your Gemini API key. Gemini Live can't change its instructions mid-call, so Lampline connects with the first step's instructions and every step's tools, and hands each new step's instructions to the model as a note from the call system (in the route's result when the model moved the call). Experimental: test an agent before real calls.
 
+### Tests
+- **Tough-caller personas:** six ready-made callers ship with vk (`cli/src/vk/personas/`): `angry-wants-human`, `elderly-repeats`, `rambling-story`, `english-second-language`, `changes-mind` and `scattered-details`. A test's `caller: {persona: <name>, goal: ...}` uses the named one's text (inline personas keep working), and on the Evals page they're presets for *Who is calling*, next to *Make the caller tougher* ([docs/EVALS.md](docs/EVALS.md#tough-caller-personas)).
+
 ## v0.3.0
 
 Test real phone calls, graded: an Evals tab, test scripts that turn into test cases, and Google agents side by side.
