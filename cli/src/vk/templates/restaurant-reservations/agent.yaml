@@ -1,0 +1,198 @@
+vk_format: 1
+name: Restaurant Reservations
+context_variables:
+  restaurant_name: The Copper Fig
+  restaurant_hours: Tuesday to Sunday, 5 PM to 10 PM, closed Mondays
+  restaurant_address: 200 Example Street, downtown
+  restaurant_phone: (312) 555-0168
+setup:
+  purpose: book, change and cancel table reservations, answer hours and location questions, and hand
+    large parties to a person
+  languages:
+  - en
+  structure: root agent + sub-agents
+  llm: claude
+  real_data: false
+lint:
+  ignore: []
+nodes:
+- id: '1'
+  type: startCall
+  position:
+    x: 460
+    y: 0
+  data:
+    name: Greeting
+    prompt:
+      file: prompts/greeting.md
+    greeting: Thanks for calling {{restaurant_name}}, this is Remy. How can I help you today?
+    greeting_type: text
+    add_global_prompt: true
+    allow_interrupt: true
+- id: '2'
+  type: agentNode
+  position:
+    x: 460
+    y: 300
+  data:
+    name: Router
+    prompt:
+      file: prompts/router.md
+    add_global_prompt: true
+    allow_interrupt: true
+- id: '3'
+  type: agentNode
+  position:
+    x: 0
+    y: 640
+  data:
+    name: Reservations
+    prompt:
+      file: prompts/reservations.md
+    extraction_enabled: true
+    extraction_prompt:
+      file: prompts/reservations.extraction.md
+    extraction_variables:
+    - name: reservation_action
+      type: string
+      prompt: book, change or cancel
+    - name: caller_name
+      type: string
+      prompt: the caller's first and last name
+    - name: party_size
+      type: integer
+      prompt: how many people the table is for
+    - name: booking_day
+      type: string
+      prompt: the day the caller wants, as they said it
+    - name: booking_time
+      type: string
+      prompt: the time the caller wants, as they said it
+    add_global_prompt: true
+    allow_interrupt: true
+- id: '4'
+  type: agentNode
+  position:
+    x: 460
+    y: 640
+  data:
+    name: Hours and location
+    prompt:
+      file: prompts/hours-and-location.md
+    add_global_prompt: true
+    allow_interrupt: true
+- id: '5'
+  type: endCall
+  position:
+    x: 920
+    y: 640
+  data:
+    name: Transfer to manager
+    prompt:
+      file: prompts/transfer-to-manager.md
+    transfer_to: "+13125550199"
+    transfer_details:
+    - caller_name
+    - party_size
+    - booking_day
+    - booking_time
+    add_global_prompt: true
+    allow_interrupt: true
+- id: '6'
+  type: endCall
+  position:
+    x: 230
+    y: 1000
+  data:
+    name: Goodbye
+    prompt:
+      file: prompts/goodbye.md
+    add_global_prompt: true
+    allow_interrupt: true
+- id: g
+  type: globalNode
+  position:
+    x: 1420
+    y: 0
+  data:
+    name: Persona
+    prompt:
+      file: prompts/persona.md
+edges:
+- id: 1-2
+  source: '1'
+  target: '2'
+  data:
+    label: caller said why
+    condition: The caller has said what they are calling about.
+- id: 2-3
+  source: '2'
+  target: '3'
+  data:
+    label: reservation
+    condition: The caller wants to book a table, or change or cancel a reservation they already
+      have.
+- id: 2-4
+  source: '2'
+  target: '4'
+  data:
+    label: hours or location
+    condition: The caller asks about opening hours, the address, parking or directions.
+- id: 2-5-large
+  source: '2'
+  target: '5'
+  data:
+    label: large party
+    condition: The caller wants a table for more than 8 people.
+    transition_speech: For a party that size our manager takes the booking personally. One moment.
+- id: 2-5
+  source: '2'
+  target: '5'
+  data:
+    label: wants a person
+    condition: The caller asks for a person, the manager or a specific staff member, or the request
+      is something you can't handle.
+    transition_speech: Of course, one moment.
+- id: 2-6
+  source: '2'
+  target: '6'
+  data:
+    label: nothing else
+    condition: The caller says they don't need anything else.
+- id: 3-5
+  source: '3'
+  target: '5'
+  data:
+    label: large party
+    condition: The caller's party turns out to be more than 8 people, a booking only the manager
+      handles.
+    transition_speech: For a party that size our manager takes the booking personally. One moment.
+- id: 3-6
+  source: '3'
+  target: '6'
+  data:
+    label: reservation taken care of
+    condition: The reservation is booked, changed or cancelled, and the caller needs nothing else.
+- id: 3-2
+  source: '3'
+  target: '2'
+  data:
+    label: other request after reservation
+    condition: The caller has a different request that isn't about this reservation.
+- id: 4-6
+  source: '4'
+  target: '6'
+  data:
+    label: hours answered
+    condition: The caller's question about hours or location is answered and they need nothing else.
+- id: 4-2
+  source: '4'
+  target: '2'
+  data:
+    label: other request after hours
+    condition: The caller has a different request.
+extra:
+  viewport:
+    x: 0
+    y: 0
+    zoom: 0.8
