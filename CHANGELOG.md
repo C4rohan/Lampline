@@ -4,11 +4,32 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 
 ## Unreleased (on dev)
 
+## v0.5.2
+
+The first release with work from outside contributors: thank you, @Golden007-prog, @sanketpatel32 and @ningsiyuan1024.
+
+### Tests
+- **`vk test --format junit`** writes a JUnit XML report: one test case per test, its failures, and the transcript, so CI tools show voice-agent tests next to the rest. Errors and skipped tests are counted for strict readers, and the vk README has a GitHub Actions example (#112, #124).
+- **Tough-caller personas:** six ready-made callers ship with vk (`cli/src/vk/personas/`): `angry-wants-human`, `elderly-repeats`, `rambling-story`, `english-second-language`, `changes-mind` and `scattered-details`. A test's `caller: {persona: <name>, goal: ...}` uses the named one's text (inline personas keep working), and on the Evals page they're presets for *Who is calling*, next to *Make the caller tougher* ([docs/EVALS.md](docs/EVALS.md#tough-caller-personas)). (#123)
+- **`vk graph`** prints an agent's steps and routes as a Mermaid flowchart, which GitHub renders in a README or pull request (#129).
+
+### Templates
+- **Restaurant reservations:** takes a booking, answers hours and location questions, changes a reservation, and hands a large party to a person (#122).
+
+### Phone systems
+- **SIP header prefix:** `transfer_header_prefix` on a transfer step chooses the prefix for the caller's details sent with a SIP transfer, or none. Without a prefix, a detail can't take the name of a standard SIP header (To, Via, Call-ID, ...), and `vk lint` reports it (VK134) (#125).
+
 ### Engine
-- **Pipecat 1.16.** Speech to speech on Gemini Live keeps its step instructions: Pipecat 1.16 builds the system instruction itself (adding its own guidance for tools that keep running), and the step's prompt and how steps work are now its base. A step change keeps that guidance for a reconnect too. `soxr`, which resamples call audio for Whisper and Parakeet, is now a direct dependency, since Pipecat no longer brings it.
+- **Pipecat 1.16.** Speech to speech on Gemini Live keeps its step instructions: Pipecat 1.16 builds the system instruction itself (adding its own guidance for tools that keep running), and the step's prompt and how steps work are now its base. A step change keeps that guidance for a reconnect too. 
+- `soxr` is a direct dependency now; Pipecat 1.16 no longer installs it.
+
+### Docs
+- **Windows:** the README's quick start covers WSL 2 (#128).
 
 ### Shipping
 - The release workflow publishes to PyPI whenever the current version isn't there yet, so a publish that failed or was skipped is retried by the next run instead of being lost once the GitHub release exists.
+
+## v0.4.0 – v0.5.1
 
 ### Docs
 - **[Test a Dialogflow CX agent in 10 minutes](docs/TEST-DIALOGFLOW.md):** a step-by-step guide from install to a failing test explained, with no Docker needed for scripted tests.
@@ -58,9 +79,6 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 
 ### Speech to speech
 - **Gemini Live** next to OpenAI Realtime (Integrations → Speech to speech → Gemini Live; `VPE_REALTIME_PROVIDER=gemini`, `VPE_GEMINI_LIVE_MODEL`, `VPE_GEMINI_LIVE_VOICE`), with your Gemini API key. Gemini Live can't change its instructions mid-call, so Lampline connects with the first step's instructions and every step's tools, and hands each new step's instructions to the model as a note from the call system (in the route's result when the model moved the call). Experimental: test an agent before real calls.
-
-### Tests
-- **Tough-caller personas:** six ready-made callers ship with vk (`cli/src/vk/personas/`): `angry-wants-human`, `elderly-repeats`, `rambling-story`, `english-second-language`, `changes-mind` and `scattered-details`. A test's `caller: {persona: <name>, goal: ...}` uses the named one's text (inline personas keep working), and on the Evals page they're presets for *Who is calling*, next to *Make the caller tougher* ([docs/EVALS.md](docs/EVALS.md#tough-caller-personas)).
 
 ## v0.3.0
 
