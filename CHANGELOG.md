@@ -10,6 +10,9 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 ### Shipping
 - Merging a contributor's pull request from a fork no longer leaves a failed `prune-branches` run on it: the workflow runs on `pull_request_target`, which needs no approval, and still never touches a fork's branch.
 
+### CLI
+- **pre-commit hook:** a `.pre-commit-hooks.yaml` adds a `vk-lint` hook for [pre-commit](https://pre-commit.com/), so a broken agent folder — or real-looking personal data the VK2xx rules flag — is caught before it's committed. The hook uses `vk lint --strict` by default so warnings block too; consumers can intentionally opt back into warning-only behavior by overriding `args`. `vk lint` also takes a folder of agent folders now (`vk lint agents` lints every agent in `agents/`).
+
 ## v0.5.2
 
 The first release with work from outside contributors: thank you, @Golden007-prog, @sanketpatel32 and @ningsiyuan1024.
