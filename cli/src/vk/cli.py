@@ -56,12 +56,31 @@ def _print_findings(findings, fmt: str) -> None:
 
 # --- commands --------------------------------------------------------------------
 
+def _agent_folders(dirs: list[str]) -> list[Path]:
+    """Each DIR is an agent folder, or a folder of agent folders like agents/: lint them all."""
+    folders = []
+    for arg in dirs:
+        p = Path(arg)
+        if (p / agentfs.AGENT_FILE).is_file():
+            folders.append(p)
+            continue
+        if p.is_dir():
+            nested = sorted(f.parent for f in p.glob(f"*/{agentfs.AGENT_FILE}"))
+            if nested:
+                folders.extend(nested)
+                continue
+            raise agentfs.FolderError(f"{p}: no {agentfs.AGENT_FILE} here or in a folder directly inside")
+        raise agentfs.FolderError(f"{p / agentfs.AGENT_FILE} not found (is this an agent folder?)")
+    return folders
+
+
 def cmd_lint(args) -> int:
     worst = 0
-    for folder in args.dirs:
+    folders = _agent_folders(args.dirs)
+    for folder in folders:
         agent = _load_folder(folder)
         findings = lint(agent, folder)
-        if len(args.dirs) > 1 and args.format == "text":
+        if len(folders) > 1 and args.format == "text":
             _out(f"== {folder}")
         _print_findings(findings, args.format)
         if has_errors(findings) or (args.strict and findings):
@@ -276,15 +295,19 @@ def cmd_export(args) -> int:
     return 0
 
 
-def _run_repeated(client, sc, context, repeat: int, label: str) -> scenario.Result:
+def _run_repeated(client, sc, context, repeat: int, label: str, sink: list | None = None) -> scenario.Result:
     """Run one test `repeat` times. It passes only if every run passed; when some runs fail, the first failing
-    run's transcript and reasons are kept, since that's the one worth reading."""
+    run's transcript and reasons are kept, since that's the one worth reading. Every run's transcript goes
+    to `sink`, for --coverage."""
     results = []
     for _ in range(max(1, repeat)):
         try:
-            results.append(scenario.run(client, sc, context))
+            result = scenario.run(client, sc, context)
         except ApiError as exc:
-            results.append(scenario.Result(sc, scenario.Transcript(), [f"{label} error: {exc}"], 0.0))
+            result = scenario.Result(sc, scenario.Transcript(), [f"{label} error: {exc}"], 0.0)
+        if sink is not None:
+            sink.append(result.transcript)
+        results.append(result)
     if repeat <= 1:
         return results[0]
     shown = next((r for r in results if not r.passed), results[-1])
@@ -332,6 +355,13 @@ def cmd_test(args) -> int:
     if bad or not targets:
         _err(f"error: --target is engine, dfcx or ces (or several, comma-separated); got {', '.join(bad) or 'nothing'}")
         return 1
+    if args.coverage:
+        if targets != ["engine"]:
+            _err("error: --coverage only measures the engine target (not dfcx or ces)")
+            return 1
+        if args.format == "junit":
+            _err("error: --coverage works with --format text or json, not junit")
+            return 1
     if targets == ["engine"]:
         return _test_on_engine(args, agent, folder, scenarios, url.rstrip("/"))
     return _test_targets(args, agent, folder, scenarios, url.rstrip("/"), targets)
@@ -385,13 +415,26 @@ def _print_junit(args, by_target: dict[str, list[scenario.Result]]) -> None:
     _out(ElementTree.tostring(report, encoding="us-ascii", xml_declaration=True).decode("ascii"))
 
 
-def _report(args, results) -> int:
+def _print_coverage(cov: dict) -> None:
+    steps, routes = cov["steps"], cov["routes"]
+    _out(f"coverage: {steps['covered']} of {steps['total']} steps, {routes['covered']} of {routes['total']} routes")
+    if steps["never_reached"]:
+        _out("  never reached: " + ", ".join(s["name"] for s in steps["never_reached"]))
+    if routes["never_taken"]:
+        _out("  routes not taken: " + ", ".join(r["text"] for r in routes["never_taken"]))
+
+
+def _report(args, results, cov: dict | None = None) -> int:
     if args.format == "json":
-        _out(json.dumps([r.as_dict() for r in results], indent=2, ensure_ascii=False))
+        payload = [r.as_dict() for r in results]
+        _out(json.dumps({"results": payload, "coverage": cov} if cov is not None else payload,
+                        indent=2, ensure_ascii=False))
     elif args.format == "junit":
         _print_junit(args, {"engine": results})
     else:
         _out("\n" + _summary(results))
+        if cov is not None:
+            _print_coverage(cov)
     return _code(args, results)
 
 
@@ -412,13 +455,15 @@ def _test_on_engine(args, agent, folder: Path, scenarios, url: str) -> int:
         if args.format == "text":
             cfg = info.get("config") or {}
             _out(f"engine {url}: {cfg.get('llm')} {cfg.get('model')}\n")
+        transcripts: list | None = [] if args.coverage else None
         results = []
         for sc in scenarios:
-            result = _run_repeated(c, sc, agent.context_variables, args.repeat, "engine")
+            result = _run_repeated(c, sc, agent.context_variables, args.repeat, "engine", transcripts)
             results.append(result)
             if args.format == "text":
                 _print_result(result, args.verbose)
-    return _report(args, results)
+    cov = scenario.coverage(agent.definition, transcripts) if transcripts is not None else None
+    return _report(args, results, cov)
 
 
 def _test_targets(args, agent, folder: Path, scenarios, url: str, targets: list[str]) -> int:
@@ -498,7 +543,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="command", required=True)
 
     s = sub.add_parser("lint", help="check agent folders offline")
-    s.add_argument("dirs", nargs="+")
+    s.add_argument("dirs", nargs="+", metavar="DIR",
+                   help="agent folders, or folders of agent folders (agents/ lints every agent in it)")
     s.add_argument("--format", choices=["text", "json"], default="text")
     s.add_argument("--strict", action="store_true", help="fail on warnings too")
     s.set_defaults(func=cmd_lint)
@@ -517,6 +563,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--repeat", type=int, default=1, metavar="N",
                    help="run every test N times (1-10); a test that passes only some of the time is reported as flaky")
     s.add_argument("--allow-flaky", action="store_true", help="with --repeat: flaky tests don't fail the run")
+    s.add_argument("--coverage", action="store_true",
+                   help="after the run, list the steps and routes no test went through (engine target only)")
     s.add_argument("--live-tools", action="store_true",
                    help="call tools' real services instead of their mock responses")
     s.add_argument("--target", default="engine", metavar="TARGETS",

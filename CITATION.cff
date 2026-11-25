@@ -12,7 +12,7 @@ authors:
     given-names: Rohan
 repository-code: "https://github.com/C4rohan/lampline"
 license: Apache-2.0
-version: 0.5.2
+version: 0.5.3
 date-released: 2026-11-24
 keywords:
   - voice agents

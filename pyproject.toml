@@ -1,0 +1,31 @@
+# Packaging shim for the pre-commit hook in .pre-commit-hooks.yaml: pre-commit's
+# `language: python` runs `pip install .` at the repo root, while the real
+# package lives in cli/. This installs the same `lampline` package (the `vk`
+# command) from cli/src. Keep [project.dependencies] and
+# [tool.setuptools.package-data] in step with cli/pyproject.toml —
+# cli/tests/test_packaging.py fails when they drift.
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lampline"
+description = "vk: build, check and test Lampline voice agents from the terminal, CI, or a coding agent"
+requires-python = ">=3.10"
+dynamic = ["version"]
+dependencies = [
+  "httpx>=0.27",
+  "PyYAML>=6.0",
+]
+
+[project.scripts]
+vk = "vk.cli:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "vk.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["cli/src"]
+
+[tool.setuptools.package-data]
+vk = ["skills/*/SKILL.md", "personas/*.yaml", "templates/*/agent.yaml", "templates/*/prompts/*.md", "templates/*/tests/*.yaml"]
