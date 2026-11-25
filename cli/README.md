@@ -410,25 +410,30 @@ repo that holds your `agents/` folder, add to `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/C4rohan/lampline
-    rev: v0.5.1                          # a release tag or branch
+    rev: v0.5.3                          # a release tag or branch
     hooks:
       - id: vk-lint
 ```
 
-When anything under `agents/` is staged, the hook runs `vk lint agents` —
-every agent folder in `agents/` — and blocks the commit on lint errors. Agents
-somewhere else, or extra flags? `files`, `args` and `stages` work like any
-pre-commit hook:
+When anything under `agents/` is staged, the hook runs `vk lint agents --strict`
+— every agent folder in `agents/` — and blocks the commit on lint errors and
+warnings, including the warning-only VK2xx date, phone number and email findings.
+Agents somewhere else, or extra flags? `files`, `args` and `stages` work like any
+pre-commit hook. Setting `args` replaces the default, so keep `--strict` unless
+you mean to opt out of it:
 
 ```yaml
       - id: vk-lint
         files: ^voice-agents/         # run when these files change
-        args: [voice-agents]          # and lint this folder of agent folders
+        args: [voice-agents, --strict]  # and lint this folder of agent folders
 ```
+
+To intentionally allow warnings, use warning-only mode by replacing the default
+arguments with just the folder (lint errors still block the commit):
 
 ```yaml
       - id: vk-lint
-        args: [agents, --strict]      # fail on warnings too (args replaces the default)
+        args: [agents]                # warning-only opt-out: warnings don't fail
 ```
 
 ## Skills for coding agents

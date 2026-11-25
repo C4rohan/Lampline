@@ -2,7 +2,7 @@
 # In that repo's .pre-commit-config.yaml:
 #   repos:
 #     - repo: https://github.com/C4rohan/lampline
-#       rev: v0.5.1
+#       rev: v0.5.3
 #       hooks:
 #         - id: vk-lint
 - id: vk-lint
@@ -13,5 +13,5 @@
   entry: vk lint
   language: python
   files: ^agents/
-  args: [agents]
+  args: [agents, --strict]
   pass_filenames: false

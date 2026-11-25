@@ -5,6 +5,8 @@ dependencies and package-data must stay in step with cli/pyproject.toml."""
 import tomllib
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -21,3 +23,9 @@ def test_root_pyproject_matches_cli():
     cli = _load(ROOT / "cli" / "pyproject.toml")
     assert sorted(root["project"]["dependencies"]) == sorted(cli["project"]["dependencies"])
     assert _package_data(root) == _package_data(cli)
+
+
+def test_pre_commit_hook_is_strict_by_default():
+    hooks = yaml.safe_load((ROOT / ".pre-commit-hooks.yaml").read_text())
+    [hook] = [h for h in hooks if h["id"] == "vk-lint"]
+    assert hook["args"] == ["agents", "--strict"]
