@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lampline"
-version = "0.5.2"
+version = "0.5.3"
 description = "vk: build, check and test Lampline voice agents from the terminal, CI, or a coding agent"
 readme = "README.md"
 license = "Apache-2.0"

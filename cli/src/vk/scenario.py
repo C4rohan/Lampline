@@ -78,6 +78,7 @@ class Transcript:
     lines: list[tuple[str, str]] = field(default_factory=list)  # (speaker, text)
     errors: list[str] = field(default_factory=list)
     ended: bool = False
+    self_transitions: set[str] = field(default_factory=set)
 
     def add_turn(self, turn: dict) -> None:
         user = (turn.get("user_message") or {}).get("text")
@@ -88,6 +89,11 @@ class Transcript:
             kind, payload = event.get("type"), event.get("payload") or {}
             if kind == "node_transition":
                 node = {"id": str(payload.get("node_id")), "name": payload.get("node_name") or ""}
+                # The visit list keeps consecutive IDs deduplicated for reporting.
+                # Capture explicit self-transitions separately for route coverage.
+                source = payload.get("from_node_id")
+                if source is not None and payload.get("node_id") is not None and str(source) == node["id"]:
+                    self.self_transitions.add(node["id"])
                 if not self.nodes or self.nodes[-1]["id"] != node["id"]:
                     self.nodes.append(node)
                     self.lines.append(("step", node["name"] or node["id"]))
@@ -224,6 +230,56 @@ def node_refs(scenario: Scenario) -> list[tuple[str, str]]:
         for key in ("reaches", "not_reaches"):
             refs += [(f"{where}.{key}", str(r)) for r in _as_list(block.get(key))]
     return refs
+
+
+def coverage(definition: dict, transcripts: list[Transcript]) -> dict:
+    """Which declared steps and routes the transcripts did and didn't go through.
+
+    A step counts when a call can ever reach it: its type is a flow step
+    (the detached types — persona, trigger, webhook, qa — can't appear in a
+    transcript and aren't counted). A route is a (source, target) step-id
+    pair from the folder's edges; several declared routes between the same
+    two steps can't be told apart in a transcript, so they count once.
+    Consecutive steps count as a route only inside one transcript — tests
+    and repeated runs are never stitched together. Explicit self-transitions
+    count even when consecutive visits to the same step are deduplicated.
+    """
+    from vk.lint import FLOW_TYPES
+
+    names: dict[str, str] = {}
+    steps: list[str] = []               # declared flow steps, in folder order
+    for node in definition.get("nodes") or []:
+        if node.get("id") is None:
+            continue
+        sid = str(node["id"])
+        names.setdefault(sid, str((node.get("data") or {}).get("name") or node["id"]))
+        if node.get("type") in FLOW_TYPES and sid not in steps:
+            steps.append(sid)
+    routes, route_set = [], set()
+    for edge in definition.get("edges") or []:
+        if not isinstance(edge, dict):
+            continue
+        pair = (str(edge.get("source")), str(edge.get("target")))
+        if pair not in route_set:
+            route_set.add(pair)
+            routes.append(pair)
+    step_set = set(steps)
+    seen_steps: set[str] = set()
+    seen_routes: set[tuple[str, str]] = set()
+    for transcript in transcripts:
+        ids = [str(n["id"]) for n in transcript.nodes]
+        seen_steps.update(i for i in ids if i in step_set)
+        seen_routes.update(p for p in zip(ids, ids[1:]) if p in route_set)
+        seen_routes.update((i, i) for i in transcript.self_transitions if (i, i) in route_set)
+    return {
+        "steps": {"covered": len(seen_steps), "total": len(steps),
+                  "never_reached": [{"id": sid, "name": names.get(sid, sid)}
+                                    for sid in steps if sid not in seen_steps]},
+        "routes": {"covered": len(seen_routes), "total": len(routes),
+                   "never_taken": [{"source": s, "target": t,
+                                    "text": f"{names.get(s, s)} → {names.get(t, t)}"}
+                                   for s, t in routes if (s, t) not in seen_routes]},
+    }
 
 
 # --- checking --------------------------------------------------------------------
