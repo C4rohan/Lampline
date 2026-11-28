@@ -408,6 +408,8 @@ vk import dfcx export.zip           # bring an agent over from Dialogflow CX or 
 vk skills install --target claude   # the four coding-agent skills (or install the Claude Code plugin, above)
 ```
 
+To check every pull request, the repo's [GitHub Action](cli/README.md#check-every-pull-request-github-action) lints your agent folders and runs their tests in CI.
+
 Details in [cli/README.md](cli/README.md). The engine itself, its builder,
 tools, data and knowledge: [engine/README.md](engine/README.md).
 

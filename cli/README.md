@@ -54,7 +54,7 @@ Two sections are notes for you and your tools, not part of the agent itself:
 
 Changes reach real callers when the folder does: review them as pull requests
 and promote dev → qa → prod ([docs/BRANCHES.md](https://github.com/C4rohan/Lampline/blob/prod/docs/BRANCHES.md)), with
-`vk lint` and `vk test` in CI.
+`vk lint` and `vk test` in CI ([the GitHub Action](#check-every-pull-request-github-action)).
 
 Exit codes: 0 ok, 1 failure (including lint errors), 2 bad usage.
 
@@ -465,6 +465,97 @@ arguments with just the folder (lint errors still block the commit):
       - id: vk-lint
         args: [agents]                # warning-only opt-out: warnings don't fail
 ```
+
+## Check every pull request (GitHub Action)
+
+The repo's GitHub Action installs `vk` (the same version as the tag you pin), lints
+every agent folder and can run their tests, so a change that breaks an agent gets
+a red check on its pull request. Lint findings appear as annotations on the
+agent's `agent.yaml`, and the job summary has a table of every agent.
+
+**Lint only** takes seconds and needs no keys:
+
+```yaml
+name: agents
+on: pull_request
+jobs:
+  vk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: C4rohan/lampline/.github/actions/vk@v0.5.4
+        with:
+          agents: agents/*          # agent folders, or a folder of them; globs work
+```
+
+**Test your live Dialogflow CX agent.** Scripted `turns:` tests need no engine. Sign
+in to Google with [`google-github-actions/auth`](https://github.com/google-github-actions/auth)
+and pass its access token:
+
+```yaml
+    permissions:
+      contents: read
+      id-token: write               # for Workload Identity Federation
+    steps:
+      - uses: actions/checkout@v7
+      - id: google
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+      - uses: C4rohan/lampline/.github/actions/vk@v0.5.4
+        env:
+          VK_GOOGLE_TOKEN: ${{ steps.google.outputs.access_token }}
+        with:
+          agents: agents/my-agent   # one folder per Google agent
+          test: true
+          target: dfcx              # or ces, with a .../apps/ID agent
+          google-agent: projects/my-project/locations/global/agents/AGENT_ID
+          junit: test-results
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-test-results
+          path: test-results
+```
+
+**Test on Lampline.** Either point at an engine you run, such as a staging engine
+(`engine-url`, with its key in `engine-key` from a secret), or start one in the job
+with the model your agents use:
+
+```yaml
+      - uses: C4rohan/lampline/.github/actions/vk@v0.5.4
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        with:
+          test: true
+          start-engine: true
+          model: anthropic:claude-haiku-5-5   # or openai:..., google:... (GEMINI_API_KEY)
+          coverage: true
+```
+
+The engine runs on the job's own machine, listening on 127.0.0.1 only, with a fresh
+key. `model: ollama:qwen3:4b` needs no key, but a standard runner has no GPU, so a
+single reply can take minutes: fine for a nightly run of a few tests on a larger
+runner, too slow for every pull request. Model-played `caller:` tests always need an
+engine, because its model plays the caller.
+
+| Input | Default | What it does |
+|---|---|---|
+| `agents` | `agents/*` | Agent folders, or folders of them; globs and several entries work |
+| `lint` / `strict` | `true` / `true` | Run `vk lint`; with `strict`, warnings (such as the VK2xx personal-data checks) fail too |
+| `test` | `false` | Run `vk test` on every folder that has `tests/*.yaml` |
+| `target`, `google-agent` | `engine` | As `vk test --target` and `--agent`; needs `VK_GOOGLE_TOKEN` for `dfcx` or `ces` |
+| `engine-url`, `engine-key` | | An engine to test on, and its key |
+| `start-engine`, `model` | `false` | Start an engine in the job, with `provider:model` |
+| `repeat`, `coverage` | `1`, `false` | As `vk test --repeat` and `--coverage` |
+| `junit` | | A folder for one JUnit XML report per agent (not with `coverage`) |
+| `args` | | Extra `vk test` arguments, such as `-k booking` or `--environment ID` |
+
+Pull requests from forks don't get your repository's secrets, so on those only
+lint (and tests that need no key) can run. Use made-up data in tests: anyone who
+can read the job log or the report can read the transcripts.
 
 ## Skills for coding agents
 
