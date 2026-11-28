@@ -4,6 +4,17 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 
 ## Unreleased (on dev)
 
+### CI
+- **GitHub Action fixes, from an independent review of v0.5.4:**
+  - A folder whose name has a space was skipped, and the check stayed green. Globs now match such folders, and an entry per line names one.
+  - The action no longer changes the job's own `python` and `pip`: vk gets its own environment, only the `vk` command goes on `PATH`, and `actions/setup-python` runs only when `python-version` is set. The Python version is checked first (3.10+, or 3.11+ with `start-engine`).
+  - `true`/`false` inputs take only those values (`lint: yes` was quietly off), and `test: true` with no tests anywhere is an error.
+  - `start-engine` makes one real request to the model, so a wrong key fails at the start with the provider's message, not as tests that "didn't reach" a step. Its engine ignores settings saved on the machine.
+  - On a pull request from a fork, tests that need a secret the pull request doesn't get (a model key, a Google token or `engine-key`) are skipped with a warning, for that use of the action only; lint still runs. A failed engine start stops the engine it started.
+  - JUnit reports are named after the folder's path (two `desk` folders no longer overwrite each other), no empty report is left when tests can't run, and the script runs on bash 3.2 (macOS runners).
+  - A new CI job runs the action's test path end to end.
+- **`vk test --format junit`** reports a model, key or engine problem as a JUnit `error`, and a failed check as a `failure`, each with a `message`.
+
 ## v0.5.4
 
 ### CI
