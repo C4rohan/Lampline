@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: shellcheck
-        run: shellcheck -S warning scripts/*.sh
+        run: shellcheck -S warning scripts/*.sh .github/actions/vk/*.sh
       - name: Every copy of the version matches VERSION
         run: scripts/version.sh check
 
@@ -50,6 +50,16 @@ jobs:
         run: pip install -e "cli[dev]"
       - name: Unit tests
         run: pytest -q cli/tests
+
+  # The vk GitHub Action (.github/actions/vk), used the way other repos use it: lint every
+  # starter template, strict, so a template with a problem or real-looking data fails here.
+  templates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/vk
+        with:
+          agents: cli/src/vk/templates/*
 
   engine:
     runs-on: ubuntu-latest
