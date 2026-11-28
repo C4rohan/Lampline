@@ -30,8 +30,11 @@ fork_pr() {
   [ -f "${GITHUB_EVENT_PATH:-}" ] || return 1
   "$py" - "$GITHUB_EVENT_PATH" "${GITHUB_REPOSITORY:-}" <<'PY'
 import json, sys
-event = json.load(open(sys.argv[1]))
-head = ((event.get("pull_request") or {}).get("head") or {}).get("repo") or {}
+try:
+    event = json.load(open(sys.argv[1]))
+    head = ((event.get("pull_request") or {}).get("head") or {}).get("repo") or {}
+except (OSError, ValueError, AttributeError):
+    sys.exit(1)
 sys.exit(0 if head.get("full_name") and head["full_name"] != sys.argv[2] else 1)
 PY
 }
@@ -81,8 +84,8 @@ if [ "$test" = true ]; then
   with_tests=0
   for f in "${folders[@]}"; do compgen -G "$f/tests/*.yaml" >/dev/null && with_tests=$((with_tests + 1)); done
   [ $with_tests -gt 0 ] || error "test is on, but none of the agent folders has tests/*.yaml"
-  if [ -n "${LAMPLINE_SKIP_TESTS:-}" ]; then
-    skip_tests="$LAMPLINE_SKIP_TESTS"
+  if [ -n "${LAMPLINE_ACTION_SKIP_TESTS:-}" ]; then
+    skip_tests="$LAMPLINE_ACTION_SKIP_TESTS"
   else
     case ",${INPUT_TARGET:-engine}," in
       *,dfcx,*|*,ces,*)
@@ -90,9 +93,17 @@ if [ "$test" = true ]; then
           skip_tests="a pull request from a fork has no Google token"
         fi ;;
     esac
+    case ",${INPUT_TARGET:-engine}," in
+      *,engine,*)
+        if [ -z "$skip_tests" ] && [ -n "${INPUT_ENGINE_URL:-}" ] && [ -z "${VK_ENGINE_KEY:-}" ] && fork_pr; then
+          skip_tests="a pull request from a fork has no engine-key"
+        fi ;;
+    esac
   fi
   [ -n "$skip_tests" ] && echo "::warning::not running tests: $skip_tests. Lint still runs."
 fi
+# The engine step's skip is for this use of the action only, not for later steps of the job.
+[ -n "${LAMPLINE_ACTION_SKIP_TESTS:-}" ] && [ -n "${GITHUB_ENV:-}" ] && echo "LAMPLINE_ACTION_SKIP_TESTS=" >> "$GITHUB_ENV"
 
 failed=0
 { echo "### Lampline agents"; echo; echo "| Agent | Lint | Tests |"; echo "|---|---|---|"; } >> "$summary"

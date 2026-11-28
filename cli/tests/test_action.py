@@ -165,7 +165,7 @@ def test_model_errors_are_reported_as_engine_errors(repo, served):
 
 
 def test_skipped_tests_say_why_and_lint_still_runs(repo):
-    code, out, summary = action(repo, extra_env={"LAMPLINE_SKIP_TESTS": "a pull request from a fork has no ANTHROPIC_API_KEY"},
+    code, out, summary = action(repo, extra_env={"LAMPLINE_ACTION_SKIP_TESTS": "a pull request from a fork has no ANTHROPIC_API_KEY"},
                                 agents="agents/desk", test="true")
     assert code == 0
     assert "::warning::not running tests: a pull request from a fork has no ANTHROPIC_API_KEY" in out
@@ -200,4 +200,26 @@ def test_engine_step_skips_tests_on_a_fork_pull_request_without_the_key(repo):
     code, out, _ = action(repo, script=ACTION / "engine.sh", extra_env=env,
                           start_engine="true", model="anthropic:claude-haiku-5-5")
     assert code == 0 and "::warning::" in out
-    assert genv.read_text().startswith("LAMPLINE_SKIP_TESTS=a pull request from a fork has no ANTHROPIC_API_KEY")
+    assert genv.read_text().startswith("LAMPLINE_ACTION_SKIP_TESTS=a pull request from a fork has no ANTHROPIC_API_KEY")
+
+
+def test_a_fork_pull_request_testing_on_an_engine_url_without_its_key_skips(repo):
+    code, out, summary = action(repo, extra_env=fork_event(repo), agents="agents/desk", test="true",
+                                engine_url="http://127.0.0.1:9")
+    assert code == 0 and "has no engine-key" in summary
+
+
+def test_the_engine_steps_skip_is_cleared_for_later_steps(repo):
+    genv = repo / "github_env"
+    code, _, _ = action(repo, extra_env={"LAMPLINE_ACTION_SKIP_TESTS": "a pull request from a fork has no X",
+                                         "GITHUB_ENV": str(genv)}, agents="agents/desk", test="true")
+    assert code == 0 and genv.read_text() == "LAMPLINE_ACTION_SKIP_TESTS=\n"
+
+
+def test_a_malformed_event_file_is_not_a_fork_and_prints_no_traceback(repo):
+    bad = repo / "event.json"
+    bad.write_text("not json")
+    env = {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(bad), "GITHUB_REPOSITORY": "C4rohan/Lampline"}
+    code, out, _ = action(repo, extra_env=env, agents="agents/desk", test="true", target="dfcx",
+                          google_agent="projects/p/locations/global/agents/a")
+    assert "Traceback" not in out and "has no Google token" not in out

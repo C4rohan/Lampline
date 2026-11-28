@@ -33,8 +33,11 @@ fork_pr() {
   [ -f "${GITHUB_EVENT_PATH:-}" ] || return 1
   "$py" - "$GITHUB_EVENT_PATH" "${GITHUB_REPOSITORY:-}" <<'PY'
 import json, sys
-event = json.load(open(sys.argv[1]))
-head = ((event.get("pull_request") or {}).get("head") or {}).get("repo") or {}
+try:
+    event = json.load(open(sys.argv[1]))
+    head = ((event.get("pull_request") or {}).get("head") or {}).get("repo") or {}
+except (OSError, ValueError, AttributeError):
+    sys.exit(1)
 sys.exit(0 if head.get("full_name") and head["full_name"] != sys.argv[2] else 1)
 PY
 }
@@ -42,7 +45,7 @@ need_key() {  # need_key VARIABLE
   [ -n "${!1:-}" ] && return 0
   if fork_pr; then
     echo "::warning::model $model needs $1, which pull requests from forks don't get; the tests are skipped"
-    echo "LAMPLINE_SKIP_TESTS=a pull request from a fork has no $1" >> "${GITHUB_ENV:-/dev/null}"
+    echo "LAMPLINE_ACTION_SKIP_TESTS=a pull request from a fork has no $1" >> "${GITHUB_ENV:-/dev/null}"
     exit 0
   fi
   echo "::error::model $model needs $1 in env"
@@ -74,6 +77,8 @@ mkdir -p "$tmp/lampline-agents" "$tmp/lampline-data"
 VPE_API_KEY="$key" VPE_LLM="$provider" VPE_LLM_MODEL="$name" VPE_DATA_DIR="$tmp/lampline-data" \
 VPE_SETTINGS_FILE="$tmp/lampline-settings.json" \
   nohup "$vpengine" --agents "$tmp/lampline-agents" --host 127.0.0.1 --port "$port" > "$tmp/lampline-engine.log" 2>&1 &
+engine_pid=$!
+fail() { echo "::error::$*"; kill "$engine_pid" 2>/dev/null || true; exit 1; }
 
 up=""
 for _ in $(seq 1 90); do
@@ -81,7 +86,7 @@ for _ in $(seq 1 90); do
   sleep 1
 done
 if [ -z "$up" ]; then
-  echo "::error::the engine didn't start; its log:"; cat "$tmp/lampline-engine.log"; exit 1
+  cat "$tmp/lampline-engine.log"; fail "the engine didn't start; its log is above"
 fi
 
 # One small real request: the engine's model playing a caller who says hello.
@@ -94,8 +99,7 @@ if [ "$status" != 200 ]; then
   detail="$("$py" -c 'import json,sys
 try: print(json.load(open(sys.argv[1])).get("detail", ""))
 except Exception: print("")' "$tmp/lampline-model-check.json" 2>/dev/null || true)"
-  echo "::error::the engine started, but its model ($model) didn't answer (HTTP $status): ${detail:-no reply}. Check the key and the model name."
-  exit 1
+  fail "the engine started, but its model ($model) didn't answer (HTTP $status): ${detail:-no reply}. Check the key and the model name."
 fi
 echo "Engine ready on 127.0.0.1:$port with $model"
 { echo "VK_ENGINE_URL=http://127.0.0.1:$port"; echo "VK_ENGINE_KEY=$key"; } >> "${GITHUB_ENV:-/dev/null}"
