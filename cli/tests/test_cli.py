@@ -197,7 +197,26 @@ def test_junit_report_records_pass_and_failure_with_transcripts(run, tmp_path):
     assert passed.find("failure") is None
     assert "caller: café & <hello>�" in passed.findtext("system-out")
     assert "<never & now>" in cases["missing answer"].findtext("failure")
+    assert "<never & now>" in cases["missing answer"].find("failure").attrib["message"]
     assert "caller: hello" in cases["missing answer"].findtext("system-out")
+
+
+def test_junit_reports_an_engine_or_model_error_as_an_error_not_a_failure(run, tmp_path):
+    """A bad model key isn't the agent's fault: report tools show it apart from failed checks."""
+    folder = make_folder(tmp_path, {
+        "broken": {"name": "the model fails", "turns": [{"user": "boom"}]},
+        "fine": {"name": "greets", "turns": [{"user": "hello"}]},
+    })
+    code, out, _ = run("test", str(folder), "--format", "junit")
+    assert code == 1
+    report = ElementTree.fromstring(out)
+    assert (report.attrib["tests"], report.attrib["failures"], report.attrib["errors"]) == ("2", "0", "1")
+    suite = report.find("testsuite")
+    assert (suite.attrib["failures"], suite.attrib["errors"]) == ("0", "1")
+    cases = {case.attrib["name"]: case for case in suite.findall("testcase")}
+    error = cases["the model fails"].find("error")
+    assert error is not None and cases["the model fails"].find("failure") is None
+    assert "LLM provider returned 400" in error.attrib["message"]
 
 
 def test_template_then_test(run, tmp_path):

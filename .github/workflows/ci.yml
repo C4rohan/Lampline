@@ -61,6 +61,36 @@ jobs:
         with:
           agents: cli/src/vk/templates/*
 
+  # The action's test path, end to end: a stand-in engine (the CLI tests' FakeEngine) on a real
+  # port, two agents with tests (one with a space in its name), JUnit reports, and a check that
+  # the job's own Python is untouched.
+  action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: A stand-in engine and two agents
+        run: |
+          pip install -e "cli[dev]"
+          python cli/tests/fake_engine_http.py --port 7899 --agents "$RUNNER_TEMP/agents" &
+          for _ in $(seq 1 30); do curl -fsS -H 'X-API-Key: test-key' http://127.0.0.1:7899/v1/health && break; sleep 1; done
+          echo "PYTHON_BEFORE=$(command -v python)" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/vk
+        with:
+          agents: ${{ runner.temp }}/agents/*
+          test: true
+          engine-url: http://127.0.0.1:7899
+          engine-key: test-key
+          junit: test-results
+      - name: Two reports, and the job's python is still its own
+        run: |
+          ls test-results
+          test "$(find test-results -name '*.xml' -size +0 | wc -l)" = 2
+          test "$(command -v python)" = "$PYTHON_BEFORE"
+          test "$(command -v vk)" = "$RUNNER_TEMP/lampline-bin/vk"
+
   engine:
     runs-on: ubuntu-latest
     steps:
@@ -99,7 +129,7 @@ jobs:
           mkdir -p ci-agents ci-data && chmod 777 ci-agents ci-data
           docker run -d --name vpe -p 127.0.0.1:7860:7860 -e VPE_API_KEY=ci-key \
             -v "$PWD/ci-agents:/agents" -v "$PWD/ci-data:/data" lampline:ci
-          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:7860/v1/health && break; sleep 2; done
+          for _ in $(seq 1 60); do curl -fsS http://127.0.0.1:7860/v1/health && break; sleep 2; done
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:7860/v1/agents)" = 401
           curl -fsS -H 'X-API-Key: ci-key' http://127.0.0.1:7860/v1/agents | grep -q front-desk
           curl -fsS -H 'X-API-Key: ci-key' http://127.0.0.1:7860/v1/data | grep -q collections
