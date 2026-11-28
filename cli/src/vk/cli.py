@@ -385,16 +385,24 @@ def _code(args, results) -> int:
 _XML_INVALID = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff\ufffe\uffff]")
 
 
+def _engine_error(result: scenario.Result) -> bool:
+    """The run broke on the engine's side (a model, key or connection error), so the agent wasn't really tested."""
+    return any(f.startswith("engine error:") for f in result.failures)
+
+
 def _print_junit(args, by_target: dict[str, list[scenario.Result]]) -> None:
     """Write one XML test suite per target and a test case per scenario file."""
     report = ElementTree.Element("testsuites")
-    total_tests = total_failures = 0
+    total_tests = total_failures = total_errors = 0
     for target, results in by_target.items():
-        failures = sum(_test_failed(args, result) for result in results)
+        broken = [r for r in results if _test_failed(args, r)]
+        errors = sum(_engine_error(r) for r in broken)       # the engine or model failed, not the agent
+        failures = len(broken) - errors
         total_tests += len(results)
         total_failures += failures
+        total_errors += errors
         suite = ElementTree.SubElement(report, "testsuite", name=target, tests=str(len(results)),
-                                       failures=str(failures), errors="0", skipped="0",
+                                       failures=str(failures), errors=str(errors), skipped="0",
                                        time=f"{sum(r.seconds for r in results):.3f}")
         for result in results:
             test_file = _XML_INVALID.sub("\ufffd", Path(result.scenario.path).name)
@@ -404,13 +412,15 @@ def _print_junit(args, by_target: dict[str, list[scenario.Result]]) -> None:
             transcript = [f"{who}: {text}" for who, text in result.transcript.lines]
             failure_text = _XML_INVALID.sub("\ufffd", "\n".join(result.failures))
             if _test_failed(args, result):
-                ElementTree.SubElement(case, "failure").text = failure_text
+                kind = "error" if _engine_error(result) else "failure"
+                first = _XML_INVALID.sub("\ufffd", (result.failures or [""])[0])[:500]
+                ElementTree.SubElement(case, kind, message=first).text = failure_text
             elif result.flaky:
                 transcript.append(f"Flaky (allowed): {result.passes} of {result.runs} runs passed\n{failure_text}")
             ElementTree.SubElement(case, "system-out").text = _XML_INVALID.sub("\ufffd", "\n".join(transcript))
     report.set("tests", str(total_tests))
     report.set("failures", str(total_failures))
-    report.set("errors", "0")
+    report.set("errors", str(total_errors))
     report.set("skipped", "0")
     _out(ElementTree.tostring(report, encoding="us-ascii", xml_declaration=True).decode("ascii"))
 

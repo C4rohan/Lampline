@@ -123,8 +123,9 @@ FAIL  caller asks about Saturday hours  (1 turn(s), 1.9s)  Greeting → Router
 ### Publish a JUnit report
 
 Run `vk test agents/front-desk --format junit > results.xml` to write one test case
-per scenario file in each target's suite. Failures include the unmet expectations,
-and each test case includes its transcript in `system-out`. The command keeps the
+per scenario file in each target's suite. Failures include the unmet expectations;
+a model, key or engine problem is reported as an `error` instead, since the agent
+wasn't really tested. Each test case includes its transcript in `system-out`. The command keeps the
 usual failure exit code and honors `--allow-flaky`.
 
 In a GitHub Actions job that already has `vk` installed and the test engine running,
@@ -536,26 +537,36 @@ with the model your agents use:
 ```
 
 The engine runs on the job's own machine, listening on 127.0.0.1 only, with a fresh
-key. `model: ollama:qwen3:4b` needs no key, but a standard runner has no GPU, so a
-single reply can take minutes: fine for a nightly run of a few tests on a larger
-runner, too slow for every pull request. Model-played `caller:` tests always need an
-engine, because its model plays the caller.
+key and its own settings file, so nothing saved on a self-hosted runner changes the
+model. It makes one small request to the model before the tests, so a wrong key or
+model name fails right there, with the provider's own error. `model: ollama:qwen3:4b`
+needs no key, but a standard runner has no GPU, so a single reply can take minutes:
+fine for a nightly run of a few tests on a larger runner, too slow for every pull
+request. Model-played `caller:` tests always need an engine, because its model plays
+the caller.
 
 | Input | Default | What it does |
 |---|---|---|
-| `agents` | `agents/*` | Agent folders, or folders of them; globs and several entries work |
+| `agents` | `agents/*` | Agent folders, or folders of them. Globs work; separate entries with spaces, or one per line for a folder whose name has a space |
 | `lint` / `strict` | `true` / `true` | Run `vk lint`; with `strict`, warnings (such as the VK2xx personal-data checks) fail too |
-| `test` | `false` | Run `vk test` on every folder that has `tests/*.yaml` |
+| `test` | `false` | Run `vk test` on every folder that has `tests/*.yaml` (at least one must) |
 | `target`, `google-agent` | `engine` | As `vk test --target` and `--agent`; needs `VK_GOOGLE_TOKEN` for `dfcx` or `ces` |
 | `engine-url`, `engine-key` | | An engine to test on, and its key |
-| `start-engine`, `model` | `false` | Start an engine in the job, with `provider:model` |
+| `start-engine`, `model` | `false` | Start an engine in the job, with `provider:model` (required then) |
 | `repeat`, `coverage` | `1`, `false` | As `vk test --repeat` and `--coverage` |
-| `junit` | | A folder for one JUnit XML report per agent (not with `coverage`) |
+| `junit` | | A folder for one JUnit XML report per agent, named after its path (not with `coverage`). A broken model or engine is reported as an `error`, a failed check as a `failure` |
 | `args` | | Extra `vk test` arguments, such as `-k booking` or `--environment ID` |
+| `python-version` | the runner's `python3` | Install this Python with `actions/setup-python` (which also becomes the job's Python). vk needs 3.10+, and 3.11+ with `start-engine` |
 
-Pull requests from forks don't get your repository's secrets, so on those only
-lint (and tests that need no key) can run. Use made-up data in tests: anyone who
-can read the job log or the report can read the transcripts.
+`true`/`false` inputs take only those two values; anything else stops with an error
+rather than quietly turning a check off. vk gets its own virtual environment, and
+only the `vk` command is added to the job's `PATH`.
+
+Pull requests from forks don't get your repository's secrets. On those, lint runs as
+usual, and tests that need a key the pull request doesn't have are skipped with a
+warning (the summary says why), so outside contributors don't get a red check for
+something they can't fix. Use made-up data in tests: anyone who can read the job log
+or the report can read the transcripts.
 
 ## Skills for coding agents
 

@@ -2,48 +2,31 @@
 real `vk` commands against the fake engine served over HTTP."""
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
-import threading
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-import httpx
 import pytest
 
-from conftest import API_KEY, FakeEngine, make_folder
+from conftest import API_KEY, make_folder
+from fake_engine_http import serve_in_background
 
-RUN = Path(__file__).resolve().parents[2] / ".github" / "actions" / "vk" / "run.sh"
+ACTION = Path(__file__).resolve().parents[2] / ".github" / "actions" / "vk"
+RUN = ACTION / "run.sh"
 VK = shutil.which("vk")
+if VK is None and os.environ.get("CI"):        # in CI these must run, not skip quietly
+    raise RuntimeError("test_action.py needs the vk command on PATH (pip install -e cli)")
 pytestmark = pytest.mark.skipif(VK is None or shutil.which("bash") is None, reason="needs bash and the vk command")
 
 
 @pytest.fixture
 def served():
     """The fake engine on a real port, as the action's script needs one."""
-    fake = FakeEngine()
-
-    class Handler(BaseHTTPRequestHandler):
-        def _go(self):
-            n = int(self.headers.get("Content-Length") or 0)
-            request = httpx.Request(self.command, "http://engine" + self.path, headers=dict(self.headers),
-                                    content=self.rfile.read(n) if n else b"")
-            reply = fake.handler(request)
-            self.send_response(reply.status_code)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(reply.content)
-
-        do_GET = do_POST = _go
-
-        def log_message(self, *args):
-            pass
-
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    yield f"http://127.0.0.1:{server.server_address[1]}"
-    server.shutdown()
+    httpd, url = serve_in_background()
+    yield url
+    httpd.shutdown()
 
 
 @pytest.fixture
@@ -56,18 +39,27 @@ def repo(tmp_path):
     return tmp_path
 
 
-def action(repo: Path, **inputs: str):
+def action(repo: Path, script: Path = RUN, extra_env: dict | None = None, **inputs: str):
     summary = repo / "summary.md"
-    env = {k: v for k, v in os.environ.items() if not k.startswith(("INPUT_", "VK_ENGINE"))}
-    env.update({f"INPUT_{k.upper()}": v for k, v in inputs.items()}, GITHUB_STEP_SUMMARY=str(summary), VK=VK)
-    p = subprocess.run(["bash", str(RUN)], cwd=repo, env=env, capture_output=True, text=True, timeout=120)
+    summary.unlink(missing_ok=True)
+    env = {k: v for k, v in os.environ.items()
+           if not k.startswith(("INPUT_", "VK_ENGINE", "GITHUB_", "LAMPLINE_"))}
+    env.update({f"INPUT_{k.upper()}": v for k, v in inputs.items()}, GITHUB_STEP_SUMMARY=str(summary), VK=VK,
+               **(extra_env or {}))
+    p = subprocess.run(["bash", str(script)], cwd=repo, env=env, capture_output=True, text=True, timeout=120)
     return p.returncode, p.stdout + p.stderr, summary.read_text() if summary.exists() else ""
+
+
+def fork_event(repo: Path, head: str = "someone/Lampline") -> dict:
+    event = repo / "event.json"
+    event.write_text(json.dumps({"pull_request": {"head": {"repo": {"full_name": head}}}}))
+    return {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(event), "GITHUB_REPOSITORY": "C4rohan/Lampline"}
 
 
 def test_lint_only_finds_every_agent_folder(repo):
     code, out, summary = action(repo)
     assert code == 0, out
-    assert "Agent folders: agents/broken agents/desk agents/no-tests" in out
+    assert "Agent folders:\n  agents/broken\n  agents/desk\n  agents/no-tests\n" in out
     assert summary.count("✅ clean") == 3
 
 
@@ -99,8 +91,8 @@ def test_junit_reports_one_file_per_agent_and_prints_why(repo, served):
     code, out, summary = action(repo, agents="agents/broken agents/desk", test="true", junit="reports",
                                 engine_url=served, engine_key=API_KEY)
     assert code == 1
-    assert sorted(p.name for p in (repo / "reports").iterdir()) == ["broken.xml", "desk.xml"]
-    assert "FAIL  wants reschedule: expected to reach 'Reschedule'" in out
+    assert sorted(p.name for p in (repo / "reports").iterdir()) == ["agents_broken.xml", "agents_desk.xml"]
+    assert "FAILURE wants reschedule: expected to reach 'Reschedule'" in out
     assert "✅ 1 of 1 passed" in summary
 
 
@@ -119,3 +111,93 @@ def test_coverage_and_extra_args(repo, served):
 def test_bad_inputs_stop_with_a_clear_error(repo, inputs, message):
     code, out, _ = action(repo, **inputs)
     assert code == 2 and "::error::" in out and message in out
+
+
+# --- found in review: each of these used to pass quietly ---------------------------------
+
+def test_a_folder_with_a_space_is_checked_not_skipped(repo):
+    make_folder(repo, None, name="my agent")
+    prompt = next((repo / "agents" / "my agent" / "prompts").glob("*.md"))
+    prompt.write_text(prompt.read_text() + "\nCall Jane at 410-555-2368.\n")
+    code, out, summary = action(repo)                      # the default agents/* glob
+    assert code == 1
+    assert "  agents/my agent\n" in out and "| `agents/my agent` | ❌ problems |" in summary
+    code, out, summary = action(repo, agents="agents/desk\nagents/my agent")   # one entry per line
+    assert code == 1 and "| `agents/my agent` | ❌ problems |" in summary and "agents/desk" in summary
+
+
+def test_true_or_false_inputs_reject_anything_else(repo):
+    code, out, _ = action(repo, lint="yes")
+    assert code == 2 and "input lint is true or false; got 'yes'" in out
+    code, out, summary = action(repo, lint="True")         # any case of true/false is fine
+    assert code == 0 and summary.count("✅ clean") == 3
+
+
+def test_tests_on_with_no_tests_anywhere_is_an_error(repo):
+    code, out, _ = action(repo, agents="agents/no-tests", test="true")
+    assert code == 2 and "none of the agent folders has tests/*.yaml" in out
+
+
+def test_same_named_folders_get_their_own_junit_report(repo, served):
+    make_folder(repo / "other", {"t": {"name": "billing question", "turns": [{"user": "hi"}, {"user": "billing"}],
+                                       "expect": {"reaches": ["Billing"]}}}, name="desk")
+    code, out, _ = action(repo, agents="agents/desk other/agents/desk", test="true", junit="reports",
+                          engine_url=served, engine_key=API_KEY)
+    assert code == 0, out
+    assert sorted(p.name for p in (repo / "reports").iterdir()) == ["agents_desk.xml", "other_agents_desk.xml"]
+
+
+def test_an_unreachable_engine_leaves_no_empty_report(repo):
+    code, out, summary = action(repo, agents="agents/desk", test="true", junit="reports",
+                                engine_url="http://127.0.0.1:9", engine_key=API_KEY)
+    assert code == 1
+    assert not list((repo / "reports").glob("*.xml"))
+    assert "no report: the tests didn't run" in summary
+
+
+def test_model_errors_are_reported_as_engine_errors(repo, served):
+    (repo / "agents" / "desk" / "tests" / "boom.yaml").write_text("name: model breaks\nturns:\n  - user: boom\n")
+    code, out, summary = action(repo, agents="agents/desk", test="true", junit="reports",
+                                engine_url=served, engine_key=API_KEY)
+    assert code == 1
+    assert "ERROR   model breaks: engine error: LLM provider returned 400" in out
+    assert "1 of 2 passed, 1 engine error(s)" in summary
+
+
+def test_skipped_tests_say_why_and_lint_still_runs(repo):
+    code, out, summary = action(repo, extra_env={"LAMPLINE_SKIP_TESTS": "a pull request from a fork has no ANTHROPIC_API_KEY"},
+                                agents="agents/desk", test="true")
+    assert code == 0
+    assert "::warning::not running tests: a pull request from a fork has no ANTHROPIC_API_KEY" in out
+    assert "| `agents/desk` | ✅ clean | ⚠️ skipped (a pull request from a fork has no ANTHROPIC_API_KEY) |" in summary
+
+
+def test_a_fork_pull_request_without_a_google_token_skips_google_tests(repo):
+    code, out, summary = action(repo, extra_env=fork_event(repo), agents="agents/desk", test="true",
+                                target="dfcx", google_agent="projects/p/locations/global/agents/a")
+    assert code == 0 and "has no Google token" in summary
+
+
+# --- the engine step's own checks (no engine is started in these) --------------------------
+
+@pytest.mark.parametrize("inputs, code, message", [
+    ({"start_engine": "false"}, 0, ""),
+    ({"start_engine": "yes", "model": "anthropic:x"}, 2, "input start-engine is true or false"),
+    ({"start_engine": "true"}, 2, "start-engine needs a model"),
+    ({"start_engine": "true", "model": "qwen3"}, 2, "model is provider:model"),
+    ({"start_engine": "true", "model": "mistral:large"}, 2, "model provider is ollama, anthropic, openai or google"),
+    ({"start_engine": "true", "model": "anthropic:claude-haiku-5-5"}, 2, "needs ANTHROPIC_API_KEY in env"),
+])
+def test_engine_step_checks_its_inputs(repo, inputs, code, message):
+    env = {"ANTHROPIC_API_KEY": "", "PY": shutil.which("python3") or "python3"}
+    got, out, _ = action(repo, script=ACTION / "engine.sh", extra_env=env, **inputs)
+    assert got == code and message in out
+
+
+def test_engine_step_skips_tests_on_a_fork_pull_request_without_the_key(repo):
+    genv = repo / "github_env"
+    env = {**fork_event(repo), "GITHUB_ENV": str(genv), "ANTHROPIC_API_KEY": "", "PY": shutil.which("python3") or "python3"}
+    code, out, _ = action(repo, script=ACTION / "engine.sh", extra_env=env,
+                          start_engine="true", model="anthropic:claude-haiku-5-5")
+    assert code == 0 and "::warning::" in out
+    assert genv.read_text().startswith("LAMPLINE_SKIP_TESTS=a pull request from a fork has no ANTHROPIC_API_KEY")

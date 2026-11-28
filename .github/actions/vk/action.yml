@@ -7,7 +7,7 @@ branding:
 
 # Use it from another repo, pinned to a release:
 #
-#   - uses: actions/checkout@v5
+#   - uses: actions/checkout@v7
 #   - uses: C4rohan/lampline/.github/actions/vk@v0.5.4
 #     with:
 #       agents: agents/*
@@ -59,36 +59,50 @@ inputs:
     description: Extra arguments for `vk test`, such as `-k booking` or `--environment ID`.
     default: ""
   python-version:
-    description: The Python that runs vk.
-    default: "3.12"
+    description: "A Python to install for vk with actions/setup-python, which also becomes the job's Python. Empty (default): use the runner's python3 (3.10+, or 3.11+ with start-engine)."
+    default: ""
 
 runs:
   using: composite
   steps:
-    - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+    - if: inputs.python-version != ''
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
       with:
         python-version: ${{ inputs.python-version }}
 
+    # vk lives in its own virtual environment, and only the vk command goes on the job's PATH,
+    # so the job's own python and pip are left as they were.
     - name: Install vk
       shell: bash
       env:
         START_ENGINE: ${{ inputs.start-engine }}
+        PYTHON_VERSION: ${{ inputs.python-version }}
       run: |
         root="$(cd "$GITHUB_ACTION_PATH/../../.." && pwd)"
+        python=python3; [ -n "$PYTHON_VERSION" ] && python=python
+        need=10; [ "$(printf '%s' "$START_ENGINE" | tr '[:upper:]' '[:lower:]')" = true ] && need=11
+        "$python" -c "import sys; sys.exit(sys.version_info < (3, $need))" || {
+          echo "::error::vk needs Python 3.$need or later ($("$python" --version 2>&1)); set the python-version input, like 3.12"
+          exit 2
+        }
         venv="$RUNNER_TEMP/lampline-vk"
-        python -m venv "$venv"
+        "$python" -m venv "$venv"
         "$venv/bin/pip" install --quiet --disable-pip-version-check "$root/cli"
-        if [ "$START_ENGINE" = "true" ]; then
+        if [ "$need" = 11 ]; then
           "$venv/bin/pip" install --quiet --disable-pip-version-check "$root/engine"
         fi
-        echo "$venv/bin" >> "$GITHUB_PATH"
+        mkdir -p "$RUNNER_TEMP/lampline-bin"
+        ln -sf "$venv/bin/vk" "$RUNNER_TEMP/lampline-bin/vk"
+        echo "$RUNNER_TEMP/lampline-bin" >> "$GITHUB_PATH"
         "$venv/bin/vk" --version
 
     - name: Start an engine for the tests
-      if: inputs.start-engine == 'true'
       shell: bash
       env:
+        INPUT_START_ENGINE: ${{ inputs.start-engine }}
         INPUT_MODEL: ${{ inputs.model }}
+        PY: ${{ runner.temp }}/lampline-vk/bin/python
+        VPENGINE: ${{ runner.temp }}/lampline-vk/bin/vpengine
       run: bash "$GITHUB_ACTION_PATH/engine.sh"
 
     - name: Lint and test
@@ -106,4 +120,6 @@ runs:
         INPUT_COVERAGE: ${{ inputs.coverage }}
         INPUT_JUNIT: ${{ inputs.junit }}
         INPUT_ARGS: ${{ inputs.args }}
+        VK: ${{ runner.temp }}/lampline-vk/bin/vk
+        PY: ${{ runner.temp }}/lampline-vk/bin/python
       run: bash "$GITHUB_ACTION_PATH/run.sh"
