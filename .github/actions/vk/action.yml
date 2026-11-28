@@ -1,0 +1,109 @@
+name: Lampline vk
+description: Lint and test Lampline voice-agent folders (agent.yaml, prompts, tests) on every pull request.
+author: Rohan Salvi
+branding:
+  icon: phone-call
+  color: orange
+
+# Use it from another repo, pinned to a release:
+#
+#   - uses: actions/checkout@v5
+#   - uses: C4rohan/lampline/.github/actions/vk@v0.5.4
+#     with:
+#       agents: agents/*
+#
+# vk is installed from this action's own copy of the repo, so the version always matches the tag.
+# Every input reaches the scripts as an environment variable, never pasted into shell code.
+
+inputs:
+  agents:
+    description: Agent folders to check, or folders of agent folders. Globs and several entries (space or newline separated) work.
+    default: agents/*
+  lint:
+    description: Run `vk lint` on every folder.
+    default: "true"
+  strict:
+    description: Fail on lint warnings too, such as the VK2xx real-looking personal data checks.
+    default: "true"
+  test:
+    description: Run `vk test` on every folder that has tests/*.yaml.
+    default: "false"
+  target:
+    description: Where tests run, as for `vk test --target`. engine (default), dfcx, ces, or several like engine,dfcx.
+    default: engine
+  google-agent:
+    description: "For dfcx or ces: the agent, projects/P/locations/L/agents/ID (or .../apps/ID). Needs VK_GOOGLE_TOKEN in env. One agent folder only."
+    default: ""
+  engine-url:
+    description: An engine to run tests on, such as a staging engine. Its API key goes in engine-key.
+    default: ""
+  engine-key:
+    description: The engine's API key (pass a secret).
+    default: ""
+  start-engine:
+    description: Start an engine inside the job for the tests, with the model in `model`.
+    default: "false"
+  model:
+    description: "With start-engine (required then): provider:model. anthropic:..., openai:... or google:... need ANTHROPIC_API_KEY, OPENAI_API_KEY or GEMINI_API_KEY in env. ollama:qwen3:4b is free and runs in the job, but on a standard runner's CPU a reply can take minutes."
+    default: ""
+  repeat:
+    description: Run every test this many times (1-10); a test that passes only sometimes fails as flaky.
+    default: "1"
+  coverage:
+    description: After the tests, list the steps and routes no test went through (engine target; not with junit).
+    default: "false"
+  junit:
+    description: A folder to write one JUnit XML report per agent into, for test-report tools and artifacts.
+    default: ""
+  args:
+    description: Extra arguments for `vk test`, such as `-k booking` or `--environment ID`.
+    default: ""
+  python-version:
+    description: The Python that runs vk.
+    default: "3.12"
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install vk
+      shell: bash
+      env:
+        START_ENGINE: ${{ inputs.start-engine }}
+      run: |
+        root="$(cd "$GITHUB_ACTION_PATH/../../.." && pwd)"
+        venv="$RUNNER_TEMP/lampline-vk"
+        python -m venv "$venv"
+        "$venv/bin/pip" install --quiet --disable-pip-version-check "$root/cli"
+        if [ "$START_ENGINE" = "true" ]; then
+          "$venv/bin/pip" install --quiet --disable-pip-version-check "$root/engine"
+        fi
+        echo "$venv/bin" >> "$GITHUB_PATH"
+        "$venv/bin/vk" --version
+
+    - name: Start an engine for the tests
+      if: inputs.start-engine == 'true'
+      shell: bash
+      env:
+        INPUT_MODEL: ${{ inputs.model }}
+      run: bash "$GITHUB_ACTION_PATH/engine.sh"
+
+    - name: Lint and test
+      shell: bash
+      env:
+        INPUT_AGENTS: ${{ inputs.agents }}
+        INPUT_LINT: ${{ inputs.lint }}
+        INPUT_STRICT: ${{ inputs.strict }}
+        INPUT_TEST: ${{ inputs.test }}
+        INPUT_TARGET: ${{ inputs.target }}
+        INPUT_GOOGLE_AGENT: ${{ inputs.google-agent }}
+        INPUT_ENGINE_URL: ${{ inputs.engine-url }}
+        INPUT_ENGINE_KEY: ${{ inputs.engine-key }}
+        INPUT_REPEAT: ${{ inputs.repeat }}
+        INPUT_COVERAGE: ${{ inputs.coverage }}
+        INPUT_JUNIT: ${{ inputs.junit }}
+        INPUT_ARGS: ${{ inputs.args }}
+      run: bash "$GITHUB_ACTION_PATH/run.sh"

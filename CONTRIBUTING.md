@@ -21,7 +21,7 @@ Thanks for helping. The most valuable contributions right now:
 Run the same checks CI runs:
 
 ```bash
-shellcheck -S warning scripts/*.sh
+shellcheck -S warning scripts/*.sh .github/actions/vk/*.sh
 pip install -e "cli[dev]" -e "engine[dev,moonshine]" && pytest -q cli/tests engine/tests
 (cd engine/ui && npm ci && npm run build)       # commit the rebuilt engine/src/vpengine/static
 python3 costs/cost_model.py > costs/COSTS.md   # commit the regenerated file if you changed prices or assumptions
