@@ -4,6 +4,9 @@ Releases are tagged on `prod` ([docs/BRANCHES.md](docs/BRANCHES.md)).
 
 ## Unreleased (on dev)
 
+### CI
+- **GitHub Action:** `uses: C4rohan/lampline/.github/actions/vk@<tag>` lints every agent folder (strict by default, with each finding as an annotation on the pull request) and can run their tests: against a live Dialogflow CX or CX Agent Studio agent, an engine you run, or one it starts in the job with the model you choose. JUnit reports, coverage and `--repeat` work as in `vk test`, and the job summary has a table of every agent. This repo's CI lints the starter templates with it (#108).
+
 ## v0.5.3
 
 Thanks again, @sanketpatel32, for both features in this release.

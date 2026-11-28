@@ -157,8 +157,10 @@ Then ask: *"Write regression tests for my Dialogflow CX agent"*.
 
 ## Where to go next
 
-- **Run the tests in CI** on every change to the agent, with `VK_GOOGLE_TOKEN`
-  from your CI's Google sign-in.
+- **Run the tests in CI** on every change to the agent. On GitHub, [the vk
+  action](../cli/README.md#check-every-pull-request-github-action) lints the
+  folder, runs these tests against your agent with `VK_GOOGLE_TOKEN` from
+  your CI's Google sign-in, and writes a JUnit report.
 - **Thinking of moving off Dialogflow?** The folder from step 2 runs on
   Lampline as it is. `--target engine,dfcx` runs every test on both and prints
   a side-by-side table, so you can see exactly where the two differ.

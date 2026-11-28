@@ -58,7 +58,7 @@ lint and test commands, plus reading and changing one step's prompt
 Open pull requests against `dev`. Before pushing, run what CI runs:
 
 ```bash
-shellcheck -S warning scripts/*.sh
+shellcheck -S warning scripts/*.sh .github/actions/vk/*.sh
 pip install -e "cli[dev]" -e "engine[dev,moonshine]"
 pytest -q cli/tests
 pytest -q engine/tests                      # run the two suites separately
