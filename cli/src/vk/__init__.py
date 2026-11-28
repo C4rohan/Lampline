@@ -1,3 +1,3 @@
 """vk: build, check and test Lampline voice agents from the terminal, CI, or a coding agent."""
 
-__version__ = "0.5.3"
+__version__ = "0.5.4"
